@@ -1,4 +1,4 @@
-# CareerOS Database Design
+# DaliJob Database Design
 
 ## 1. Design Principles
 

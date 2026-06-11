@@ -1,9 +1,9 @@
-# CareerOS Folder Structure
+# DaliJob Folder Structure
 
 ## Recommended Repository Layout
 
 ```text
-career-os/
+dali-job/
   server/
     app/
       main.py

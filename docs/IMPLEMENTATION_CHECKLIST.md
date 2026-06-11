@@ -1,4 +1,4 @@
-# CareerOS Implementation Checklist
+# DaliJob Implementation Checklist
 
 ## Phase 0: Project Foundation
 

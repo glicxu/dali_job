@@ -1,4 +1,4 @@
-# CareerOS API Specification
+# DaliJob API Specification
 
 ## 1. API Conventions
 

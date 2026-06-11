@@ -1,4 +1,4 @@
-# CareerOS Deployment Guide
+# DaliJob Deployment Guide
 
 ## 1. Environments
 

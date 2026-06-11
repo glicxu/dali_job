@@ -1,4 +1,4 @@
-# CareerOS Testing Strategy
+# DaliJob Testing Strategy
 
 ## 1. Testing Goals
 

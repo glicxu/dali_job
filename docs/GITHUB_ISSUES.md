@@ -1,4 +1,4 @@
-# CareerOS GitHub Issues
+# DaliJob GitHub Issues
 
 These starter issues are grouped by milestone and can be copied into GitHub.
 

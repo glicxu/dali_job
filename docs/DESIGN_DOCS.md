@@ -1,8 +1,8 @@
-# CareerOS Design Documents
+# DaliJob Design Documents
 
-This folder contains the project design package for CareerOS, an AI-assisted career management platform.
+This folder contains the project design package for DaliJob, an AI-assisted career management platform.
 
-CareerOS is designed as a long-term career operating system, not a job board and not only a resume builder. The application should remain useful without AI enabled, while AI adds resume tailoring, cover letters, job analysis, interview preparation, email classification, and career intelligence.
+DaliJob is designed as a long-term career operating system, not a job board and not only a resume builder. The application should remain useful without AI enabled, while AI adds resume tailoring, cover letters, job analysis, interview preparation, email classification, and career intelligence.
 
 ## Documents
 
@@ -34,6 +34,6 @@ CareerOS is designed as a long-term career operating system, not a job board and
 
 ## Client And Server Separation
 
-CareerOS should use a clear client/server split. All server-side code belongs in a top-level `server/` folder, and all client-side code belongs in a top-level `client/` folder.
+DaliJob should use a clear client/server split. All server-side code belongs in a top-level `server/` folder, and all client-side code belongs in a top-level `client/` folder.
 
 The client and server communicate only through documented API contracts. The client must not import server modules, read server configuration, access the database directly, or depend on server implementation details. This allows either side to be changed, deployed, tested, or replaced independently as long as the API contract remains compatible.

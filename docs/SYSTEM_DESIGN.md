@@ -1,10 +1,10 @@
-# CareerOS System Design
+# DaliJob System Design
 
 ## 1. Executive Summary
 
-CareerOS is an AI-assisted career management platform that acts as the single source of truth for a user's career search. It helps users import opportunities, analyze roles, tailor documents, track applications, prepare for interviews, record outcomes, and learn from historical data.
+DaliJob is an AI-assisted career management platform that acts as the single source of truth for a user's career search. It helps users import opportunities, analyze roles, tailor documents, track applications, prepare for interviews, record outcomes, and learn from historical data.
 
-CareerOS is not a job board and not simply a resume builder. Job aggregation is optional. AI is a supporting system, not the core product. The app must continue to work when AI providers, email integrations, calendar integrations, or job-source plugins are unavailable.
+DaliJob is not a job board and not simply a resume builder. Job aggregation is optional. AI is a supporting system, not the core product. The app must continue to work when AI providers, email integrations, calendar integrations, or job-source plugins are unavailable.
 
 ## 2. Product Principles
 
@@ -73,7 +73,7 @@ Knowledge base contents:
 
 ### 4.3 Job Import Module
 
-Job aggregation is optional. CareerOS must support manual import without any aggregator.
+Job aggregation is optional. DaliJob must support manual import without any aggregator.
 
 Supported import methods:
 

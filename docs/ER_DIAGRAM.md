@@ -1,4 +1,4 @@
-# CareerOS ER Diagram
+# DaliJob ER Diagram
 
 ## Mermaid Diagram
 

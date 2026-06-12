@@ -5,7 +5,7 @@
 - Base path: `/api/v1`.
 - Request and response format: JSON unless uploading files.
 - Authentication: session cookie or bearer token.
-- Authorization: every request is scoped to the authenticated user's workspace membership.
+- Authorization: every request is scoped to a private workspace owned by the authenticated user.
 - IDs: UUID strings.
 - Errors: return structured error bodies.
 
@@ -33,11 +33,11 @@ Updates display name, timezone, and preferences.
 
 ### `GET /workspaces`
 
-Lists workspaces visible to the user.
+Lists workspaces owned by the user.
 
 ### `POST /workspaces`
 
-Creates a workspace.
+Creates a private workspace owned by the current user.
 
 Required body:
 
@@ -144,7 +144,7 @@ Query params:
 
 ### `POST /jobs`
 
-Creates a job from manual input.
+Creates a job from manual input. This is a core workflow and must not depend on job board APIs, plugins, or URL extraction.
 
 Body:
 
@@ -154,13 +154,45 @@ Body:
   "company_name": "Example Co",
   "source_url": "https://example.com/jobs/123",
   "description_raw": "Full job description...",
-  "location": "Remote"
+  "location": "Remote",
+  "remote_policy": "remote",
+  "employment_type": "full_time",
+  "seniority": "mid_level",
+  "posting_date": "2026-06-01",
+  "closing_date": "2026-07-01",
+  "compensation_min": 90000,
+  "compensation_max": 125000,
+  "compensation_currency": "USD",
+  "notes": "Found on company careers page."
 }
 ```
 
 ### `POST /jobs/import-url`
 
-Imports a job from a pasted URL.
+Attempts to import a job from a pasted URL. The server may fetch the page, extract structured job posting data, parse visible text, and return a draft job for user review.
+
+Body:
+
+```json
+{
+  "url": "https://example.com/careers/software-engineer",
+  "create_application": false
+}
+```
+
+Response:
+
+```json
+{
+  "job_id": "uuid",
+  "import_status": "needs_review",
+  "fields_extracted": ["title", "company_name", "description_raw", "location"],
+  "fields_missing": ["closing_date", "compensation_min", "compensation_max"],
+  "message": "Review extracted fields before saving."
+}
+```
+
+If extraction fails, the API should return a draft with the URL preserved and instructions for manual completion rather than blocking the user from creating the job.
 
 ### `POST /jobs/import-file`
 

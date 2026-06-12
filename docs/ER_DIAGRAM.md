@@ -4,8 +4,7 @@
 
 ```mermaid
 erDiagram
-    users ||--o{ workspace_members : belongs_to
-    workspaces ||--o{ workspace_members : has
+    users ||--o{ workspaces : owns
     workspaces ||--o{ profiles : owns
     workspaces ||--o{ companies : owns
     workspaces ||--o{ jobs : owns
@@ -67,9 +66,11 @@ erDiagram
 
 ## Relationship Notes
 
+- In the MVP, each `workspace` is private and has exactly one owning `user`.
 - `profiles` hold source career facts. Generated documents should reference profile-derived versions instead of duplicating facts without traceability.
 - `resume_versions`, `cover_letter_versions`, and `document_versions` are immutable.
 - `applications` connect jobs, companies, submitted documents, interviews, notes, tasks, offers, email messages, and calendar events.
 - `application_status_history` stores status transitions; `application_events` stores the broader timeline.
 - `integrations` represent email, calendar, and job-source connections. Provider-specific details stay in encrypted credentials and adapter-specific metadata.
 - `ai_generation_jobs` records traceability for all AI-generated artifacts.
+- Workspace sharing is a future optional feature and is not shown in the MVP ER diagram.

@@ -3,7 +3,7 @@
 ## 1. Testing Goals
 
 - Protect core application tracking from regressions.
-- Verify workspace authorization everywhere.
+- Verify owner-only workspace authorization everywhere.
 - Ensure document and versioning behavior is immutable and traceable.
 - Validate AI outputs before they affect user-facing records.
 - Keep integrations testable without relying on live providers.
@@ -18,7 +18,7 @@ Test:
 - Application status transitions.
 - Application status history creation.
 - Timeline event creation.
-- Workspace permission checks.
+- Owner-only workspace permission checks.
 - Resume schema validation.
 - Cover letter validation.
 - Job analysis parsing validation.
@@ -70,6 +70,8 @@ Client/server contract tests:
 Critical integration cases:
 
 - User A cannot access User B workspace records.
+- A fully manual job can be created without source URL or plugin data.
+- A URL import failure still allows the user to save a manually completed job.
 - Uploaded document creates version 1.
 - New generated file creates version 2 without mutating version 1.
 - Tailored resume generation creates `ai_generation_job`, `resume_version`, `document_version`, and application event.
@@ -81,7 +83,10 @@ Critical integration cases:
 Use browser tests for critical workflows:
 
 - Create profile, add skills, add experience, and add project.
+- Create a job through full manual entry.
 - Import job by copy/paste description.
+- Attempt URL job extraction, review extracted fields, and save.
+- Attempt URL job extraction failure, manually complete missing fields, and save.
 - Create application from job.
 - Upload resume and attach to application.
 - Move application through statuses.
@@ -119,7 +124,7 @@ AI evals should run against a mock provider in CI and against real providers in 
 
 Required tests:
 
-- Cross-workspace access attempts return 403 or 404.
+- Cross-workspace access attempts by non-owners return 403 or 404.
 - Signed document URLs expire.
 - OAuth credentials are encrypted at rest.
 - Sensitive fields are redacted from logs.
@@ -154,6 +159,8 @@ Initial targets:
 - Upload DOCX resume if supported.
 - Upload PDF job description.
 - Import job from URL.
+- Manually enter a job with no URL.
+- Manually enter a job deadline.
 - Generate tailored resume.
 - Generate cover letter.
 - Attach submitted documents.

@@ -48,15 +48,17 @@ Acceptance criteria:
 
 ## Milestone: Accounts And Profile
 
-### 4. Implement Users, Workspaces, And Memberships
+### 4. Implement Users And Private Workspaces
 
-Create user, workspace, and membership tables with workspace-scoped authorization helpers.
+Create user and private workspace tables with owner-only authorization helpers. Sharing, membership, and roles are out of scope for the MVP.
 
 Acceptance criteria:
 
-- Users can belong to workspaces.
-- Backend rejects cross-workspace access.
+- Users can own one or more private workspaces.
+- Each workspace has exactly one `owner_user_id`.
+- Server rejects cross-workspace access unless the authenticated user owns the workspace.
 - Tests cover authorization checks.
+- No `workspace_members` table is required for MVP.
 
 ### 5. Build Career Profile Data Model
 
@@ -81,12 +83,26 @@ Acceptance criteria:
 
 ### 7. Implement Manual Job Import
 
-Allow users to create jobs from pasted job descriptions and source URLs.
+Allow users to create jobs without any job board API or aggregation plugin. Users can fully type or paste job details from any source, including company sites, recruiter messages, PDFs, referrals, or private postings.
 
 Acceptance criteria:
 
-- Job stores title, company, URL, location, and raw description.
+- Job stores title, company, URL, location, raw description, deadline, posting date, compensation, remote policy, employment type, seniority, and notes.
 - User can view saved jobs.
+- User can create a job when no URL is available.
+- User can create a job when URL extraction fails.
+
+### 7a. Implement URL-Based Job Extraction
+
+Allow users to paste a job posting URL and have the server attempt to extract job details into a reviewable draft.
+
+Acceptance criteria:
+
+- URL import attempts to extract title, company, description, location, salary, and deadline.
+- Extracted jobs are marked `needs_review` until the user confirms them.
+- Failed extraction preserves the source URL and opens the manual entry flow.
+- URL extraction failure does not block application creation.
+- Fetching uses conservative timeouts and respects source limitations.
 
 ### 8. Implement PDF Job Description Import
 

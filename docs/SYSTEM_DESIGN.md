@@ -77,11 +77,32 @@ Job aggregation is optional. DaliJob must support manual import without any aggr
 
 Supported import methods:
 
-- Paste job URL.
+- Paste job URL and let the server attempt to extract the job details from the page.
+- Fully manual job entry where the user types or pastes title, company, description, deadline, location, salary, source URL, and notes.
 - Upload PDF job description.
 - Copy and paste job description.
 - Import from supported integrations.
 - Optional aggregation plugins.
+
+Manual entry is a core workflow, not a fallback-only feature. A user must be able to track a job even when it comes from a company website, recruiter email, private posting, personal referral, PDF, or any site that does not have a job search API.
+
+URL extraction is a convenience feature. If the page cannot be fetched, blocks automated access, requires authentication, renders content client-side, or does not expose parseable job data, DaliJob should keep the URL and let the user manually fill or paste the missing fields. URL extraction must not be required for application tracking.
+
+Manual job fields should include:
+
+- Job title.
+- Company.
+- Source URL.
+- Full job description.
+- Application deadline or closing date.
+- Posting date when known.
+- Location.
+- Remote policy.
+- Employment type.
+- Seniority.
+- Compensation range.
+- Recruiter or contact.
+- User notes.
 
 Initial plugin candidates:
 
@@ -92,6 +113,8 @@ Initial plugin candidates:
 - Remotive.
 
 Plugins must normalize imported postings into the internal job model and must not be required for the application tracker to work.
+
+URL extraction should respect site terms and use conservative fetching. The product should prefer user-provided content, official APIs, structured data embedded in the page, and plugin-specific importers over brittle broad scraping.
 
 ### 4.4 Job Analysis Pipeline
 
@@ -482,8 +505,8 @@ Application enters interview stage
 ## 7. Security Requirements
 
 - Authentication required.
-- Role-based permissions.
-- Workspace-scoped authorization.
+- Owner-only workspace authorization for MVP.
+- Role-based workspace sharing is a future optional feature, not a core requirement.
 - Encrypted storage for sensitive data.
 - Secure file uploads.
 - Signed URLs for document access.

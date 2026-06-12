@@ -21,10 +21,10 @@
 ### Accounts And Workspaces
 
 - [ ] Implement user model.
-- [ ] Implement workspace model.
-- [ ] Implement workspace membership and roles.
+- [ ] Implement private workspace model with `owner_user_id`.
 - [ ] Add authentication.
-- [ ] Add workspace-scoped authorization.
+- [ ] Add owner-only workspace authorization.
+- [ ] Defer workspace sharing, membership, and roles until a future collaboration feature is intentionally designed.
 
 ### Profile
 
@@ -38,9 +38,10 @@
 
 ### Job Import
 
-- [ ] Add manual job creation.
+- [ ] Add full manual job creation with title, company, description, deadline, location, salary, source URL, and notes.
 - [ ] Add copy/paste job description import.
-- [ ] Add URL import placeholder.
+- [ ] Add URL import that attempts extraction and creates a reviewable draft.
+- [ ] Add fallback flow for failed URL extraction so the user can manually complete the job.
 - [ ] Add PDF job description upload.
 - [ ] Store raw and structured job data.
 - [ ] Build jobs list and detail UI.

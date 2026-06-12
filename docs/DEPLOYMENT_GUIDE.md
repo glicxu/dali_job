@@ -286,7 +286,7 @@ Recommended release phases:
 ## 14. Production Readiness Gates
 
 - All critical E2E flows pass.
-- Cross-workspace authorization tests pass.
+- Owner-only cross-workspace authorization tests pass.
 - Backup restore has been tested.
 - Error monitoring is active.
 - AI evals pass minimum thresholds.

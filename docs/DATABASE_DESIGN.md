@@ -5,16 +5,18 @@
 - Store career facts as structured data.
 - Treat generated files as outputs, not canonical data.
 - Preserve immutable versions for resumes, cover letters, and submitted documents.
-- Scope all user data by workspace.
+- Scope all user data by a private owner workspace.
 - Store application history as events.
 - Keep optional integrations loosely coupled.
 - Support future analytics without denormalizing too early.
+- Treat workspace sharing as a future optional feature, not an MVP requirement.
 
 ## 2. Core Conventions
 
 - Primary keys: UUID.
 - Timestamps: `created_at`, `updated_at`, and nullable `deleted_at` where soft delete is useful.
 - Ownership: every user-owned entity should include `workspace_id` unless it belongs directly to `user`.
+- MVP authorization: a workspace has exactly one owner through `workspaces.owner_user_id`.
 - Large files: store in object storage and reference by `storage_key`.
 - Sensitive integration secrets: encrypt before storing.
 - AI outputs: store model provider, model name, prompt version, input references, and validation status.
@@ -91,6 +93,8 @@
 
 ### workspaces
 
+For MVP, a workspace is a private data container owned by one user. It is not a shared collaboration space.
+
 | Field | Type | Notes |
 | --- | --- | --- |
 | id | uuid | Primary key |
@@ -98,16 +102,6 @@
 | name | text | Required |
 | created_at | timestamptz | Required |
 | updated_at | timestamptz | Required |
-
-### workspace_members
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| id | uuid | Primary key |
-| workspace_id | uuid | FK to workspaces |
-| user_id | uuid | FK to users |
-| role | text | `owner`, `admin`, `member`, `viewer` |
-| created_at | timestamptz | Required |
 
 ### profiles
 
@@ -285,9 +279,13 @@ The canonical user career profile.
 | remote_policy | text | `unknown`, `onsite`, `hybrid`, `remote` |
 | employment_type | text | Nullable |
 | seniority | text | Nullable |
+| posting_date | date | Nullable |
+| closing_date | date | Nullable job deadline |
 | compensation_min | numeric | Nullable |
 | compensation_max | numeric | Nullable |
 | compensation_currency | text | Nullable |
+| import_status | text | `manual`, `draft`, `imported`, `needs_review`, `failed_extraction` |
+| import_notes | text | Nullable extraction or manual-entry notes |
 | captured_at | timestamptz | Required |
 | created_at | timestamptz | Required |
 | updated_at | timestamptz | Required |
@@ -595,7 +593,7 @@ The canonical user career profile.
 ## 5. Indexing Recommendations
 
 - `users.email` unique.
-- `workspace_members.workspace_id, user_id` unique.
+- `workspaces.owner_user_id`.
 - `jobs.workspace_id, title`.
 - `jobs.workspace_id, company_id`.
 - `applications.workspace_id, status`.
@@ -623,3 +621,9 @@ The canonical user career profile.
 - Hard-delete OAuth credentials immediately when an integration is revoked.
 - Allow full workspace export and deletion.
 - Retain AI job metadata without storing sensitive prompt payloads unless explicitly required for audit.
+
+## 8. Future Optional Sharing
+
+Sharing is intentionally excluded from the MVP. If DaliJob later supports career coaches, mentors, school career centers, or paid resume reviewers, add a separate sharing model at that time.
+
+Do not add membership tables, shared roles, invitations, or viewer permissions until the product has a clear sharing workflow and privacy model.

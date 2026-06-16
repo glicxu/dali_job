@@ -29,7 +29,10 @@ Key documents:
 
 ## Planned Stack
 
-- Server: Python, FastAPI, SQLAlchemy, PostgreSQL, Alembic.
+- Server: Python, FastAPI, SQLAlchemy, Alembic, and `DaliCommonLib`.
+- Database access: `DaliCommonLib.dali_db_man.DbMan` backed by `ProcessConfig` ini files.
+- SQL database: MySQL-compatible by default because `DbMan` currently uses `mysql+pymysql` configuration.
+- Initial AI feature: OpenAI-backed pasted-text resume-to-job matching with a 0-10 score.
 - Client: React and Next.js.
 - Workers: Celery or equivalent.
 - Cache and broker: Redis.

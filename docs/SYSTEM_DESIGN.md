@@ -33,6 +33,34 @@ Opportunity
 
 ## 4. Major Modules
 
+### 4.0 Initial Resume-To-Job Match Prototype
+
+The first functional build should be a narrow prototype before the full application tracker is implemented. Its purpose is to prove that DaliJob can compare a user's master resume against a job description and return useful matching feedback.
+
+Prototype workflow:
+
+```text
+User opens barebones client UI
+  -> Pastes master resume text
+  -> Pastes job description text
+  -> Server extracts resume and job text
+  -> OpenAI-backed comparison service identifies skills, keywords, requirements, and evidence
+  -> Match engine returns score from 0 to 10
+  -> UI displays score, matched skills, missing skills, keyword overlap, and recommendations
+```
+
+Score meaning:
+
+- `0`: no meaningful overlap between resume and job description.
+- `5`: partial match with several important gaps.
+- `10`: excellent match where the resume strongly supports the job's core requirements.
+
+The first prototype should support pasted text only for both resume and job description. PDF/DOCX upload, job URL extraction, application tracking, cover letter generation, interview prep, email integration, and analytics should come later after the text-only comparison works.
+
+The comparison should use the OpenAI API through the server-side AI provider abstraction. The OpenAI API key must be read from the server process environment variable `OPENAI_API_KEY`, never from the client and never from a committed config file. The model name should be configurable through `ProcessConfig` so it can be changed without code edits.
+
+This prototype should still preserve the client/server split: the client submits resume/job text through the API, and the server performs AI calls, scoring, validation, and persistence.
+
 ### 4.1 User Profile Module
 
 Stores the structured career profile that powers resume generation, cover letters, study guides, and analytics.
@@ -132,13 +160,15 @@ Job Description
 
 Outputs:
 
-- Match score.
+- Match score from 0 to 10.
 - Missing skills.
 - Relevant projects.
 - Relevant experience.
 - Recommended resume changes.
 - Recommended cover letter themes.
 - Recommended study topics.
+
+The score should be explainable. The user should see why the job matched or did not match, including which requirements were supported by resume evidence and which requirements were missing.
 
 ### 4.5 Resume Engine
 
@@ -394,6 +424,10 @@ FastAPI service for:
 
 The server is a separate application under `server/`. It owns persistence, authorization, AI orchestration, file storage, integration credentials, background job scheduling, and business rules.
 
+Server startup must support `--config [config_file_name].ini` and load runtime settings through `DaliCommonLib.dali_config.ProcessConfig`. Follow the existing pattern from `app_server`: keep `main.py` thin, parse CLI args there, and delegate ProcessConfig loading to `server/app/config.py`.
+
+Database reads and writes should use `DaliCommonLib.dali_db_man.DbMan` rather than ad hoc engine/session creation throughout the app. Server repository modules should depend on a small local database adapter that wraps DbMan so the app has one consistent place for sessions, queries, writes, migrations, and tests.
+
 ### Worker System
 
 Celery or equivalent workers for:
@@ -419,6 +453,14 @@ Responsibilities:
 - Track usage and cost.
 - Keep model-specific details out of business services.
 
+Initial provider:
+
+- Use OpenAI for the resume-to-job comparison prototype.
+- Read the API key from `OPENAI_API_KEY` in the server process environment.
+- Read non-secret settings such as `model` from `ProcessConfig`, preferably from an `[openai]` section.
+- Keep OpenAI calls server-side only.
+- Return schema-validated JSON so the match result can be stored and displayed reliably.
+
 ### Document Service
 
 Responsibilities:
@@ -429,6 +471,38 @@ Responsibilities:
 - Text extraction.
 - Preview generation.
 - PDF/DOCX rendering.
+
+### Database Access Layer
+
+DaliJob should use `DaliCommonLib` as the required database/config integration layer.
+
+Required classes:
+
+- `DaliCommonLib.dali_config.ProcessConfig` for process-level ini configuration.
+- `DaliCommonLib.dali_db_man.DbMan` for SQLAlchemy engine/session management and SQL helpers.
+
+Useful `DbMan` functions:
+
+- `get_db_engine(schema=None)`.
+- `get_session_factory(schema=None)`.
+- `get_db_session(schema=None)`.
+- `session_scope(schema=None)`.
+- `session_dependency(schema=None)` for FastAPI dependencies.
+- `create_all(base, schema=None)` and `drop_all(base, schema=None)` for controlled setup tasks.
+- `fetch_dicts(sql, params=None, db=None)`.
+- `fetch_one(sql, params=None, db=None)`.
+- `fetch_scalar(sql, params=None, db=None)`.
+- `write(sql, params=None, db=None)`.
+- `write_many(sql, params_list, db=None)`.
+- `dispose_all_engines()` should be called on app shutdown if available.
+
+The server should avoid creating independent SQLAlchemy engines outside this path. If SQLAlchemy ORM models are used, sessions should still come from `DbMan.session_dependency()` or `DbMan.session_scope()`.
+
+`ProcessConfig` should allow easy switching between local, staging, and production databases by changing only the ini file passed at startup.
+
+The database schema should be DaliJob-specific. The default schema name should be `dali_job` unless a config file specifies another schema through the `mysql.active_db_schema` setting.
+
+Database setup and seed operations should be scriptable. The project should include Python scripts under a top-level `scripts/` folder that load the same `ProcessConfig` ini file and use `DbMan` to create, migrate, validate, and seed the configured schema.
 
 ### Integration Adapters
 
@@ -446,7 +520,7 @@ Adapters isolate external dependencies:
 - The API specification is the contract between them.
 - The client may use generated API types, but generated types should come from OpenAPI or a shared contract artifact, not direct imports from server source files.
 - The server must not assume a specific client implementation. Browser, mobile, CLI, or future desktop clients should all be able to use the API.
-- The client must not access PostgreSQL, Redis, object storage credentials, OAuth secrets, or AI provider keys.
+- The client must not access the SQL database, Redis, object storage credentials, OAuth secrets, or AI provider keys.
 - Client and server should have independent build, test, lint, and deployment pipelines.
 - Breaking API changes require versioning or a migration path.
 - Server-side rendering in Next.js may call the server API, but should still treat the server as an external boundary.
@@ -528,7 +602,10 @@ Application enters interview stage
 
 ## 9. Suggested Tech Stack
 
-- Server: Python, FastAPI, SQLAlchemy, PostgreSQL, Alembic.
+- Server: Python, FastAPI, SQLAlchemy, Alembic, and `DaliCommonLib`.
+- Database access: `DaliCommonLib.dali_db_man.DbMan`.
+- Runtime configuration: `DaliCommonLib.dali_config.ProcessConfig` loaded with `--config [config_file_name].ini`.
+- SQL database: MySQL-compatible by default because `DbMan` currently uses `mysql+pymysql` configuration.
 - Background tasks: Celery or equivalent.
 - Cache and broker: Redis.
 - Storage: S3-compatible object storage.

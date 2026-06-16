@@ -218,13 +218,64 @@ Returns:
 
 ```json
 {
-  "match_score": 82,
+  "match_score": 8,
   "missing_skills": [],
   "relevant_projects": [],
   "recommended_resume_changes": [],
   "recommended_study_topics": []
 }
 ```
+
+### `POST /resume-job-matches`
+
+Runs the initial resume-to-job matching prototype. This endpoint compares a master resume against a job description without requiring the full application tracker flow.
+
+The first implementation should accept pasted text only. Uploaded document references and job IDs can be added after the text-only prototype works.
+
+Body:
+
+```json
+{
+  "resume_text": "Resume text pasted by user...",
+  "job_description_text": "Job description pasted by user..."
+}
+```
+
+Response:
+
+```json
+{
+  "id": "uuid",
+  "match_score": 8,
+  "score_scale": "0-10",
+  "summary": "Strong backend match with gaps around Kubernetes and observability.",
+  "matched_skills": ["Python", "FastAPI", "PostgreSQL", "REST APIs"],
+  "missing_skills": ["Kubernetes", "Prometheus"],
+  "matched_keywords": ["API design", "SQL", "Docker"],
+  "missing_keywords": ["Kubernetes", "monitoring"],
+  "supported_requirements": [
+    {
+      "requirement": "Build REST APIs",
+      "resume_evidence": "Built REST APIs with FastAPI and PostgreSQL.",
+      "confidence": 0.91
+    }
+  ],
+  "unsupported_requirements": [
+    {
+      "requirement": "Operate Kubernetes workloads",
+      "reason": "No Kubernetes evidence found in resume."
+    }
+  ],
+  "recommended_resume_updates": [
+    "Add a stronger backend summary if accurate.",
+    "Mention Docker experience near the most relevant project."
+  ]
+}
+```
+
+`match_score` must always be an integer from `0` to `10`, where `0` means no meaningful match and `10` means the resume strongly supports the job's core requirements.
+
+The server should call OpenAI through the AI provider abstraction. The OpenAI API key must come from the server process environment variable `OPENAI_API_KEY`, and the model should come from server-side `ProcessConfig`, not from the client request.
 
 ## 6. Applications
 

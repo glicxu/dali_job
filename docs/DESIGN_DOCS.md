@@ -18,6 +18,7 @@ DaliJob is designed as a long-term career operating system, not a job board and 
 
 ## Product Phases
 
+0. Phase 0.5: barebones server/client plus pasted-text resume-to-job matching prototype with OpenAI and a 0-10 score.
 1. Phase 1: accounts, profile, resume storage, job import, application tracking, document management, notes, and basic analytics.
 2. Phase 2: AI resume tailoring, cover letters, job analysis, match scoring, and gap analysis.
 3. Phase 3: interview preparation, company summaries, study guides, question generation, interview journal, and mock interviews.
@@ -25,7 +26,10 @@ DaliJob is designed as a long-term career operating system, not a job board and 
 
 ## Preferred Stack
 
-- Server: Python, FastAPI, SQLAlchemy, PostgreSQL, Alembic.
+- Server: Python, FastAPI, SQLAlchemy, Alembic, and `DaliCommonLib`.
+- Database access: `DaliCommonLib.dali_db_man.DbMan`.
+- Runtime config: `DaliCommonLib.dali_config.ProcessConfig` loaded with `--config [config_file_name].ini`.
+- SQL database: MySQL-compatible by default because `DbMan` currently uses `mysql+pymysql` configuration.
 - Background work: Celery or equivalent queue workers.
 - Cache and broker: Redis.
 - Storage: S3-compatible object storage.

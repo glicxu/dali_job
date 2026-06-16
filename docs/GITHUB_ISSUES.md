@@ -6,14 +6,32 @@ These starter issues are grouped by milestone and can be copied into GitHub.
 
 ### 1. Scaffold FastAPI Server
 
-Create the `server/` application with FastAPI, SQLAlchemy, Alembic, typed settings, logging, and health checks.
+Create the `server/` application with FastAPI, SQLAlchemy, Alembic, `DaliCommonLib`, typed settings, logging, and health checks.
 
 Acceptance criteria:
 
 - `/health` returns service status.
-- Database session is configured.
+- `server/requirements.txt` includes `../DaliCommonLib`.
+- Server accepts `--config [config_file_name].ini`.
+- `server/app/config.py` loads config through `DaliCommonLib.dali_config.ProcessConfig`.
+- Database sessions are provided through `DaliCommonLib.dali_db_man.DbMan`.
+- FastAPI shutdown disposes DbMan engines if `dispose_all_engines()` is available.
 - Alembic can create and run migrations.
 - Tests can run in CI.
+
+### 1a. Add DaliJob Database Setup Scripts
+
+Create top-level Python scripts for creating, seeding, and validating the database selected by the config file.
+
+Acceptance criteria:
+
+- `scripts/create_schema.py --config local.ini` creates the configured DaliJob schema if it does not exist.
+- `scripts/create_tables.py --config local.ini` creates or migrates required tables.
+- `scripts/seed_database.py --config local.ini` inserts local development seed data.
+- `scripts/validate_database.py --config local.ini` verifies required tables exist.
+- Scripts load config through `ProcessConfig`.
+- Scripts use `DbMan`.
+- Scripts do not hard-code local or production database credentials.
 
 ### 2. Scaffold Next.js Client
 
@@ -27,12 +45,12 @@ Acceptance criteria:
 
 ### 3. Add Local Docker Compose
 
-Add local services for PostgreSQL, Redis, object storage, server, and client.
+Add local services for a MySQL-compatible SQL database, object storage, server, and client. Add Redis when background workers are introduced.
 
 Acceptance criteria:
 
 - `docker compose up` starts local dependencies.
-- Server can connect to PostgreSQL and Redis.
+- Server can connect to the configured SQL database through `DbMan`.
 - Object storage is reachable in development.
 
 ### 3a. Add Client/Server Contract Boundary
@@ -47,6 +65,24 @@ Acceptance criteria:
 - Contract tests verify key request and response shapes.
 
 ## Milestone: Accounts And Profile
+
+### 3b. Build Resume-To-Job Match Prototype
+
+Build the first functional prototype before the full tracker. The user should be able to paste resume text, paste a job description, run comparison, and receive a 0-10 match score.
+
+Acceptance criteria:
+
+- Barebones client screen accepts pasted resume text.
+- Barebones client screen accepts job description text.
+- Resume/job file upload and job URL extraction are deferred until after text-only comparison works.
+- Server uses OpenAI through the AI provider abstraction.
+- OpenAI API key is read from server environment variable `OPENAI_API_KEY`.
+- OpenAI model is read from `ProcessConfig`.
+- OpenAI API key is never exposed to the client.
+- Server returns integer `match_score` from 0 to 10.
+- Server returns matched skills, missing skills, matched keywords, missing keywords, supported requirements, unsupported requirements, and recommendations.
+- Result is readable in the UI.
+- Invalid or empty inputs return useful validation errors.
 
 ### 4. Implement Users And Private Workspaces
 

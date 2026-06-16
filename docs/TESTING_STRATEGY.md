@@ -19,6 +19,8 @@ Test:
 - Application status history creation.
 - Timeline event creation.
 - Owner-only workspace permission checks.
+- Resume-to-job match scoring with a required 0-10 range.
+- Matched and missing skill extraction.
 - Resume schema validation.
 - Cover letter validation.
 - Job analysis parsing validation.
@@ -35,6 +37,7 @@ Test:
 - Resume output cannot invent dates, degrees, certifications, tools, or metrics.
 - Cover letter output flags unsupported claims.
 - Job analysis output matches schema.
+- Resume-to-job match output includes score, matched skills, missing skills, supported requirements, and unsupported requirements.
 - Email classification maps to allowed application statuses.
 - Interview prep output includes required sections.
 
@@ -53,9 +56,12 @@ Test:
 
 Test with real local services:
 
-- PostgreSQL migrations.
+- SQL database migrations.
 - SQLAlchemy repositories.
-- Redis queue operations.
+- DbMan session and query helpers.
+- ProcessConfig loading from local test ini files.
+- Database setup scripts against a configured DaliJob test schema.
+- Redis queue operations when background jobs are introduced.
 - Object storage upload/download.
 - FastAPI routes with authentication.
 - Worker job lifecycle.
@@ -70,6 +76,12 @@ Client/server contract tests:
 Critical integration cases:
 
 - User A cannot access User B workspace records.
+- Server starts with `--config local-test.ini` and uses that database config.
+- Repository tests use `DbMan.session_scope()` or `DbMan.session_dependency()`.
+- `scripts/create_schema.py`, `scripts/create_tables.py`, `scripts/seed_database.py`, and `scripts/validate_database.py` operate against the schema named in the test config.
+- A pasted resume and pasted job description return a 0-10 match result.
+- OpenAI provider reads API key from `OPENAI_API_KEY` and model from server config, not client input.
+- A score never returns below 0 or above 10.
 - A fully manual job can be created without source URL or plugin data.
 - A URL import failure still allows the user to save a manually completed job.
 - Uploaded document creates version 1.
@@ -83,6 +95,7 @@ Critical integration cases:
 Use browser tests for critical workflows:
 
 - Create profile, add skills, add experience, and add project.
+- Upload or paste a master resume, paste a job description, run comparison, and view a 0-10 match score.
 - Create a job through full manual entry.
 - Import job by copy/paste description.
 - Attempt URL job extraction, review extracted fields, and save.
@@ -178,7 +191,7 @@ Every pull request should run:
 - Server lint.
 - Server type checks if configured.
 - Server unit tests.
-- Server integration tests with PostgreSQL.
+- Server integration tests with configured SQL database.
 - Client lint.
 - Client unit tests.
 - Client build.

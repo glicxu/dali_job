@@ -6,15 +6,58 @@
 - [ ] Create top-level `client/` Next.js project.
 - [ ] Configure client/server API boundary through `/api/v1`.
 - [ ] Add OpenAPI generation or documented contract workflow.
-- [ ] Add PostgreSQL, Redis, and object storage to local Docker Compose.
+- [ ] Add MySQL-compatible SQL database and object storage to local Docker Compose.
+- [ ] Add Redis only when background jobs are introduced.
 - [ ] Configure Alembic migrations.
-- [ ] Add typed server settings.
+- [ ] Add `server/requirements.txt` with `../DaliCommonLib`.
+- [ ] Add typed server settings backed by `DaliCommonLib.dali_config.ProcessConfig`.
+- [ ] Add `--config [config_file_name].ini` support to the server entrypoint.
+- [ ] Add `_load_process_config` helper in `server/app/config.py`, following the `app_server` pattern.
+- [ ] Add database adapter using `DaliCommonLib.dali_db_man.DbMan`.
+- [ ] Use `DbMan.session_dependency()` or `DbMan.session_scope()` for server database access.
+- [ ] Ensure server shutdown calls `DbMan.dispose_all_engines()` if available.
+- [ ] Create top-level `scripts/` folder for database setup and seed utilities.
+- [ ] Add database creation script that loads `--config` and creates the configured DaliJob schema.
+- [ ] Add database seed script that loads `--config` and inserts local development seed data.
+- [ ] Add database validation script that loads `--config` and verifies required tables exist.
 - [ ] Add client environment configuration for public values only.
 - [ ] Add structured logging.
 - [ ] Add health check endpoints.
 - [ ] Add separate CI jobs for server linting, server tests, client linting, client tests, and migrations.
 - [ ] Add API contract tests so client and server can change independently.
-- [ ] Add basic design system and app shell.
+- [ ] Add barebones client app shell.
+- [ ] Add barebones server API shell.
+
+## Phase 0.5: Resume-To-Job Match Prototype
+
+This is the first functional slice. It should happen before the full tracker, cover letter engine, interview prep, email integration, or job aggregation work.
+
+### Barebones UI
+
+- [ ] Add a simple page for pasting master resume text.
+- [ ] Add a simple page or panel for pasting job description text.
+- [ ] Defer PDF/DOCX upload until after text-only comparison works.
+- [ ] Defer job URL extraction until after text-only comparison works.
+- [ ] Add a "Compare Resume To Job" action.
+- [ ] Show a 0-10 match score.
+- [ ] Show matched skills and keywords.
+- [ ] Show missing skills and keywords.
+- [ ] Show job requirements that appear supported by resume evidence.
+- [ ] Show recommended resume improvements.
+
+### Server Capability
+
+- [ ] Add resume pasted-text input.
+- [ ] Add job description pasted-text input.
+- [ ] Add OpenAI provider implementation for the comparison.
+- [ ] Read OpenAI API key from server environment variable `OPENAI_API_KEY`.
+- [ ] Read OpenAI model from `ProcessConfig` `[openai].model`.
+- [ ] Keep OpenAI API key server-side only.
+- [ ] Add prompt/schema for extracting resume skills and job requirements.
+- [ ] Add match scoring logic with score range 0-10.
+- [ ] Add endpoint for ad hoc resume/job comparison.
+- [ ] Store comparison result if the user is authenticated.
+- [ ] Add tests for scoring, missing skills, matched skills, and invalid inputs.
 
 ## Phase 1: MVP Core
 
@@ -40,7 +83,7 @@
 
 - [ ] Add full manual job creation with title, company, description, deadline, location, salary, source URL, and notes.
 - [ ] Add copy/paste job description import.
-- [ ] Add URL import that attempts extraction and creates a reviewable draft.
+- [ ] Add URL import that attempts extraction and creates a reviewable draft after the text-only comparison prototype works.
 - [ ] Add fallback flow for failed URL extraction so the user can manually complete the job.
 - [ ] Add PDF job description upload.
 - [ ] Store raw and structured job data.
@@ -110,7 +153,7 @@
 - [ ] Parse job descriptions.
 - [ ] Extract skills, requirements, keywords, and seniority.
 - [ ] Compare job against profile.
-- [ ] Generate match score.
+- [ ] Generate match score from 0 to 10.
 - [ ] Generate gap analysis.
 - [ ] Generate recommended resume changes.
 - [ ] Generate recommended study topics.

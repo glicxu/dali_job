@@ -17,9 +17,59 @@
 - Timestamps: `created_at`, `updated_at`, and nullable `deleted_at` where soft delete is useful.
 - Ownership: every user-owned entity should include `workspace_id` unless it belongs directly to `user`.
 - MVP authorization: a workspace has exactly one owner through `workspaces.owner_user_id`.
+- Database access should go through `DaliCommonLib.dali_db_man.DbMan`.
+- Runtime database selection should come from `DaliCommonLib.dali_config.ProcessConfig`.
+- Local and production databases should be swapped by passing different ini files with `--config`.
 - Large files: store in object storage and reference by `storage_key`.
 - Sensitive integration secrets: encrypt before storing.
 - AI outputs: store model provider, model name, prompt version, input references, and validation status.
+
+## 2.1 DaliCommonLib Database Access
+
+The server should not scatter raw database connection strings or independent SQLAlchemy engine creation across modules. Use a local repository layer backed by `DbMan`.
+
+Required pattern:
+
+- Load `ProcessConfig` once during server startup.
+- Read SQL database settings from the loaded config file.
+- Use `DbMan.get_db_engine()`, `DbMan.get_db_session()`, `DbMan.session_scope()`, or `DbMan.session_dependency()` for SQLAlchemy access.
+- Use `DbMan.fetch_dicts()`, `DbMan.fetch_one()`, `DbMan.fetch_scalar()`, `DbMan.write()`, and `DbMan.write_many()` for simple SQL helpers where appropriate.
+- Call `DbMan.dispose_all_engines()` during FastAPI shutdown if the function is available.
+
+Current `DbMan` behavior expects a `mysql` config section and builds MySQL-compatible SQLAlchemy URLs through `mysql+pymysql`. If the project later needs PostgreSQL, update or wrap `DbMan` first rather than bypassing the shared database layer.
+
+## 2.2 DaliJob Schema Setup
+
+DaliJob should use its own schema/database, separate from other projects. The default schema name is:
+
+```text
+dali_job
+```
+
+The actual schema should come from the active config file:
+
+```ini
+[mysql]
+active_db_schema = dali_job
+```
+
+The project should include Python scripts under `scripts/` that load the same config file used by the server and then operate on the configured schema.
+
+Required scripts:
+
+- `scripts/create_schema.py` - create the configured schema/database if it does not exist.
+- `scripts/create_tables.py` - create required DaliJob tables, using Alembic or SQLAlchemy metadata once models exist.
+- `scripts/seed_database.py` - insert local development seed data.
+- `scripts/validate_database.py` - verify required tables and key indexes exist.
+
+All scripts should accept:
+
+```powershell
+python scripts/create_schema.py --config local.ini
+python scripts/seed_database.py --config local.ini
+```
+
+Scripts must use `ProcessConfig` and `DbMan`; they should not hard-code local or production database credentials.
 
 ## 3. Enums
 
@@ -57,6 +107,7 @@
 
 - `parse_resume`
 - `parse_job_description`
+- `compare_resume_to_job`
 - `tailor_resume`
 - `generate_cover_letter`
 - `classify_email`
@@ -300,7 +351,7 @@ The canonical user career profile.
 | company_id | uuid | Nullable FK |
 | status | application_status | Required |
 | priority | text | `low`, `normal`, `high` |
-| match_score | integer | Nullable 0-100 |
+| match_score | integer | Nullable 0-10 |
 | salary_notes | text | Nullable |
 | applied_at | timestamptz | Nullable |
 | next_action_at | timestamptz | Nullable |
@@ -320,6 +371,32 @@ The canonical user career profile.
 | to_status | application_status | Required |
 | source | text | `user`, `email`, `ai`, `system` |
 | reason | text | Nullable |
+| created_at | timestamptz | Required |
+
+### resume_job_matches
+
+Stores ad hoc or saved resume-to-job comparison results. This supports the first functional prototype and can later power job analysis, application recommendations, and resume tailoring.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | uuid | Primary key |
+| workspace_id | uuid | FK |
+| resume_version_id | uuid | Nullable FK |
+| resume_document_id | uuid | Nullable FK to documents |
+| job_id | uuid | Nullable FK |
+| application_id | uuid | Nullable FK |
+| source_url | text | Nullable |
+| job_description_snapshot | text | Nullable |
+| resume_text_snapshot | text | Nullable |
+| match_score | integer | Required 0-10 |
+| matched_skills | jsonb | Array |
+| missing_skills | jsonb | Array |
+| matched_keywords | jsonb | Array |
+| missing_keywords | jsonb | Array |
+| supported_requirements | jsonb | Array |
+| unsupported_requirements | jsonb | Array |
+| recommendations | jsonb | Array |
+| ai_generation_job_id | uuid | Nullable FK |
 | created_at | timestamptz | Required |
 
 ### application_events
@@ -598,6 +675,9 @@ The canonical user career profile.
 - `jobs.workspace_id, company_id`.
 - `applications.workspace_id, status`.
 - `applications.workspace_id, applied_at`.
+- `resume_job_matches.workspace_id, created_at`.
+- `resume_job_matches.job_id`.
+- `resume_job_matches.application_id`.
 - `application_events.application_id, created_at`.
 - `document_versions.document_id, version_number` unique.
 - `resume_versions.workspace_id, profile_id, version_number`.

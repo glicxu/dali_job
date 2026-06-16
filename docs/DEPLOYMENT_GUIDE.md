@@ -25,7 +25,7 @@ Required:
 - Next.js client.
 - FastAPI server.
 - Celery or equivalent worker.
-- PostgreSQL.
+- MySQL-compatible SQL database accessed through `DaliCommonLib.dali_db_man.DbMan`.
 - Redis.
 - S3-compatible object storage.
 
@@ -41,10 +41,11 @@ Future optional:
 Recommended local commands:
 
 ```powershell
-docker compose up -d postgres redis minio
+docker compose up -d mysql minio
 cd server
+pip install -r requirements.txt
 alembic upgrade head
-uvicorn app.main:app --reload
+python -m app.main --config local.ini
 ```
 
 ```powershell
@@ -53,9 +54,10 @@ npm install
 npm run dev
 ```
 
-Run workers:
+Run workers after Redis and background queues are introduced:
 
 ```powershell
+docker compose up -d redis
 cd server
 celery -A app.workers.celery_app worker --loglevel=info
 ```
@@ -64,7 +66,7 @@ celery -A app.workers.celery_app worker --loglevel=info
 
 Required server variables:
 
-- `DATABASE_URL`
+- `OPENAI_API_KEY`
 - `REDIS_URL`
 - `OBJECT_STORAGE_ENDPOINT`
 - `OBJECT_STORAGE_BUCKET`
@@ -74,7 +76,62 @@ Required server variables:
 - `ENCRYPTION_KEY`
 - `APP_BASE_URL`
 - `AI_PROVIDER`
-- `AI_PROVIDER_API_KEY`
+
+Required server dependency:
+
+- `server/requirements.txt` must include `../DaliCommonLib` so pip installs the shared library locally.
+
+Required runtime config:
+
+- The server must accept `--config [config_file_name].ini`.
+- `server/app/config.py` must load that file through `DaliCommonLib.dali_config.ProcessConfig`.
+- Local, staging, and production database switching should happen by passing different ini files, not by editing code.
+
+Required `ProcessConfig` database section:
+
+```ini
+[mysql]
+user = dali_user
+passwd = local_password
+active_server = local_db_host
+active_db_schema = dali_job
+port = 3306
+pool_size = 5
+pool_max_overflow = 10
+pool_timeout = 30
+```
+
+Required OpenAI config for the resume-to-job match prototype:
+
+```ini
+[openai]
+model = configured_model_name
+```
+
+The OpenAI API key must be set as an environment variable for the server process:
+
+```powershell
+$env:OPENAI_API_KEY = "your_openai_api_key"
+```
+
+For a persistent user-level Windows environment variable:
+
+```powershell
+[Environment]::SetEnvironmentVariable("OPENAI_API_KEY", "your_openai_api_key", "User")
+```
+
+The OpenAI API key must stay server-side. The client should never receive or store it, and config files should not contain it.
+
+Database setup scripts:
+
+```powershell
+python scripts/create_schema.py --config local.ini
+python scripts/create_tables.py --config local.ini
+python scripts/seed_database.py --config local.ini
+python scripts/validate_database.py --config local.ini
+```
+
+These scripts should operate on the schema specified by the config file, such as `mysql.active_db_schema = dali_job`.
 
 Future integration variables:
 
@@ -112,7 +169,7 @@ Client variables must be safe to expose in a browser. Secrets belong only in ser
 Browser
   -> CDN / Client Host
   -> FastAPI Server
-       -> PostgreSQL
+       -> SQL Database via DbMan
        -> Redis
        -> Object Storage
        -> Secrets Manager
@@ -232,7 +289,7 @@ Alerts:
 
 ## 10. Backups And Recovery
 
-PostgreSQL:
+SQL database:
 
 - Daily backups.
 - Point-in-time recovery where available.

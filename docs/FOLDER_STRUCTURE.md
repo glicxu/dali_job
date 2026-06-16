@@ -57,6 +57,7 @@ dali-job/
       e2e/
       factories/
     pyproject.toml
+    requirements.txt
     alembic.ini
 
   client/
@@ -110,8 +111,14 @@ dali-job/
       run_local.ps1
       seed_dev_data.py
 
+  scripts/
+    create_schema.py
+    create_tables.py
+    seed_database.py
+    validate_database.py
+
   docs/
-    README.md
+    DESIGN_DOCS.md
     SYSTEM_DESIGN.md
     DATABASE_DESIGN.md
     API_SPEC.md
@@ -154,6 +161,10 @@ module_name/
 ```
 
 Keep business rules in services, not routers. Keep database queries in repositories, not services. Keep external provider calls behind adapters.
+
+Database repositories should use a small local adapter around `DaliCommonLib.dali_db_man.DbMan`. Do not create independent SQLAlchemy engines or direct database connection strings inside feature modules.
+
+`server/app/main.py` should parse `--config [config_file_name].ini`, call `create_app(config_path)`, and stay small. `server/app/config.py` should own the `_load_process_config` style function that calls `DaliCommonLib.dali_config.ProcessConfig.load_config()`, following the existing `app_server` pattern.
 
 ## AI Package Structure
 
@@ -224,7 +235,7 @@ Recommended first-screen app areas:
 
 Server settings should live in server config:
 
-- Database URL.
+- Database settings from `ProcessConfig` `mysql` section.
 - Redis URL.
 - Object storage config.
 - AI provider config.
@@ -232,6 +243,38 @@ Server settings should live in server config:
 - Feature flags.
 - Encryption keys.
 
-Do not read environment variables directly throughout the codebase. Use a typed settings object.
+Do not read environment variables directly throughout the codebase. Use a typed settings object loaded from `ProcessConfig` and optional environment overrides.
+
+The server should support:
+
+```powershell
+python -m app.main --config local.ini
+python -m app.main --config production.ini
+```
+
+`server/requirements.txt` should include the local shared library path:
+
+```text
+../DaliCommonLib
+```
+
+## Database Scripts
+
+Top-level database scripts should use the same config mechanism as the server:
+
+```powershell
+python scripts/create_schema.py --config local.ini
+python scripts/create_tables.py --config local.ini
+python scripts/seed_database.py --config local.ini
+python scripts/validate_database.py --config local.ini
+```
+
+Rules:
+
+- Load config through `DaliCommonLib.dali_config.ProcessConfig`.
+- Use `DaliCommonLib.dali_db_man.DbMan`.
+- Operate on the DaliJob schema specified by the config file.
+- Do not hard-code local or production credentials.
+- Keep scripts safe by requiring explicit flags before destructive reset/drop behavior.
 
 Client configuration should be limited to public runtime values such as API base URL, feature flags safe for browser exposure, and analytics settings. Secrets must never be placed in `client/`.

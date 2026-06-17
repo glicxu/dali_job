@@ -172,7 +172,21 @@ The score should be explainable. The user should see why the job matched or did 
 
 ### 4.5 Resume Engine
 
-The resume source of truth is structured data, not a PDF. PDFs and DOCX files are generated artifacts.
+The resume source of truth is structured profile data, not only an uploaded PDF or DOCX. DaliJob should still preserve the original uploaded master resume file because the user may want to download it, re-parse it, compare it against later profile edits, or audit where parsed facts came from.
+
+Master resume import workflow:
+
+```text
+User uploads or pastes master resume
+  -> Store original file as Document + DocumentVersion when a file exists
+  -> Extract raw text
+  -> Parse into structured profile suggestions
+  -> User reviews, edits, accepts, or rejects suggestions
+  -> Accepted facts update Profile, Skills, Experience, Education, Projects, and related tables
+  -> Create ResumeVersion snapshot linked to the source document version when available
+```
+
+Uploaded PDFs and DOCX files are preserved artifacts. Generated tailored PDFs and DOCX files are rendered artifacts. The structured profile and immutable resume versions are what the AI uses for matching, tailoring, validation, and analytics.
 
 Pipeline:
 

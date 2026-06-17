@@ -77,6 +77,9 @@ This is the first functional slice. It should happen before the full tracker, co
 - [ ] Add CRUD for education.
 - [ ] Add CRUD for projects.
 - [ ] Add CRUD for certifications, awards, publications, and links.
+- [ ] Add master resume upload or paste flow that preserves the original document when a file is provided.
+- [ ] Extract master resume text into reviewable structured profile suggestions.
+- [ ] Let the user accept, edit, or reject parsed profile suggestions before updating canonical profile tables.
 - [ ] Build profile editor UI.
 
 ### Job Import
@@ -130,6 +133,7 @@ This is the first functional slice. It should happen before the full tracker, co
 
 - [ ] Define structured resume schema.
 - [ ] Add resume version table.
+- [ ] Link resume versions back to source document versions when created from uploaded files.
 - [ ] Parse uploaded resumes into structured profile suggestions.
 - [ ] Build resume version viewer.
 - [ ] Implement resume tailoring.

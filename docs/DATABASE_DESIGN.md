@@ -412,6 +412,8 @@ Stores ad hoc or saved resume-to-job comparison results. This supports the first
 
 ### documents
 
+Stores uploaded and generated document containers. For a master resume upload, this table identifies the resume as a document, while `document_versions` stores each exact uploaded or rendered file version.
+
 | Field | Type | Notes |
 | --- | --- | --- |
 | id | uuid | Primary key |
@@ -423,6 +425,8 @@ Stores ad hoc or saved resume-to-job comparison results. This supports the first
 | updated_at | timestamptz | Required |
 
 ### document_versions
+
+Stores immutable file versions in object storage. Uploaded master resumes should be stored here before text extraction or parsing. Generated tailored resume files should also be stored here after rendering.
 
 | Field | Type | Notes |
 | --- | --- | --- |
@@ -439,6 +443,8 @@ Stores ad hoc or saved resume-to-job comparison results. This supports the first
 | created_at | timestamptz | Required |
 
 ### resume_versions
+
+Stores immutable structured resume snapshots. A resume version may come from an uploaded master resume, a user-edited profile snapshot, or an AI-tailored version. When the version came from a file upload, `source_document_version_id` links back to the exact uploaded file.
 
 | Field | Type | Notes |
 | --- | --- | --- |

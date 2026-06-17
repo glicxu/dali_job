@@ -42,8 +42,8 @@ Recommended local commands:
 
 ```powershell
 docker compose up -d mysql minio
-cd server
 pip install -r requirements.txt
+cd server
 alembic upgrade head
 python -m app.main --config local.ini
 ```
@@ -79,7 +79,7 @@ Required server variables:
 
 Required server dependency:
 
-- `server/requirements.txt` must include `../DaliCommonLib` so pip installs the shared library locally.
+- The root `requirements.txt` must include `-e ../DaliCommonLib` so pip installs the shared library locally.
 
 Required runtime config:
 

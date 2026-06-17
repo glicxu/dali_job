@@ -4,7 +4,11 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+node_modules/
+.next/
 .env
+server/config.ini
+server/*.local.ini
 *.db
 *.sqlite3
 .venv/
@@ -13,3 +17,4 @@ venv/
 .vscode/
 deploy_logs/
 *.log
+.local/

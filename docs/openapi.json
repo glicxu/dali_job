@@ -1,0 +1,306 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "DaliJob API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "operationId": "health_api_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "title": "Response Health Api V1 Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health/db": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Database Health",
+        "operationId": "database_health_api_v1_health_db_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Database Health Api V1 Health Db Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/resume-job-matches": {
+      "post": {
+        "tags": [
+          "resume-job-matches"
+        ],
+        "summary": "Create Resume Job Match",
+        "operationId": "create_resume_job_match_api_v1_resume_job_matches_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeJobMatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumeJobMatchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ResumeJobMatchRequest": {
+        "properties": {
+          "resume_text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Resume Text"
+          },
+          "job_description_text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Job Description Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "resume_text",
+          "job_description_text"
+        ],
+        "title": "ResumeJobMatchRequest"
+      },
+      "ResumeJobMatchResponse": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "match_score": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Match Score"
+          },
+          "score_scale": {
+            "type": "string",
+            "title": "Score Scale",
+            "default": "0-10"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "matched_skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Matched Skills"
+          },
+          "missing_skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Skills"
+          },
+          "matched_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Matched Keywords"
+          },
+          "missing_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Keywords"
+          },
+          "supported_requirements": {
+            "items": {
+              "$ref": "#/components/schemas/SupportedRequirement"
+            },
+            "type": "array",
+            "title": "Supported Requirements"
+          },
+          "unsupported_requirements": {
+            "items": {
+              "$ref": "#/components/schemas/UnsupportedRequirement"
+            },
+            "type": "array",
+            "title": "Unsupported Requirements"
+          },
+          "recommended_resume_updates": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recommended Resume Updates"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "match_score",
+          "summary"
+        ],
+        "title": "ResumeJobMatchResponse"
+      },
+      "SupportedRequirement": {
+        "properties": {
+          "requirement": {
+            "type": "string",
+            "title": "Requirement"
+          },
+          "resume_evidence": {
+            "type": "string",
+            "title": "Resume Evidence"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "requirement",
+          "resume_evidence",
+          "confidence"
+        ],
+        "title": "SupportedRequirement"
+      },
+      "UnsupportedRequirement": {
+        "properties": {
+          "requirement": {
+            "type": "string",
+            "title": "Requirement"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "requirement",
+          "reason"
+        ],
+        "title": "UnsupportedRequirement"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

@@ -11,7 +11,7 @@ Create the `server/` application with FastAPI, SQLAlchemy, Alembic, `DaliCommonL
 Acceptance criteria:
 
 - `/health` returns service status.
-- `server/requirements.txt` includes `../DaliCommonLib`.
+- Root `requirements.txt` includes `-e ../DaliCommonLib`.
 - Server accepts `--config [config_file_name].ini`.
 - `server/app/config.py` loads config through `DaliCommonLib.dali_config.ProcessConfig`.
 - Database sessions are provided through `DaliCommonLib.dali_db_man.DbMan`.

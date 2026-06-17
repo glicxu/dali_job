@@ -57,7 +57,6 @@ dali-job/
       e2e/
       factories/
     pyproject.toml
-    requirements.txt
     alembic.ini
 
   client/
@@ -116,6 +115,8 @@ dali-job/
     create_tables.py
     seed_database.py
     validate_database.py
+
+  requirements.txt
 
   docs/
     DESIGN_DOCS.md
@@ -252,10 +253,10 @@ python -m app.main --config local.ini
 python -m app.main --config production.ini
 ```
 
-`server/requirements.txt` should include the local shared library path:
+The root `requirements.txt` should include the local shared library path:
 
 ```text
-../DaliCommonLib
+-e ../DaliCommonLib
 ```
 
 ## Database Scripts

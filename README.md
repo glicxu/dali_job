@@ -27,6 +27,34 @@ Key documents:
 - The client and server communicate through the documented `/api/v1` API contract.
 - Optional job aggregation belongs behind plugins and must not be required for the core app to run.
 
+## Run Locally
+
+Server settings come from a `ProcessConfig` ini file. Server secrets, including `OPENAI_API_KEY`, belong in `server/.env`, which is ignored by git.
+
+Create a local server config from the safe example:
+
+```powershell
+Copy-Item server\config.example.ini server\config.ini
+```
+
+Then edit `server\config.ini` for your local database. Start the server from the `server` folder:
+
+```powershell
+python -m pip install -r requirements.txt
+cd server
+python -m app.main --config config.ini
+```
+
+Start the client from the `client` folder:
+
+```powershell
+cd client
+npm install
+npm run dev -- --hostname 127.0.0.1 --port 3000
+```
+
+The API defaults to `http://127.0.0.1:5010`; the client defaults to `http://127.0.0.1:3000`. Stop either process with `Ctrl+C` in its terminal.
+
 ## Planned Stack
 
 - Server: Python, FastAPI, SQLAlchemy, Alembic, and `DaliCommonLib`.

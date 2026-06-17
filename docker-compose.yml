@@ -1,0 +1,33 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: dalijob-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: dalijob-local-password
+      MYSQL_DATABASE: dali_job
+    ports:
+      - "3306:3306"
+    volumes:
+      - dalijob_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pdalijob-local-password"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: dalijob-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: dalijob
+      MINIO_ROOT_PASSWORD: dalijob-local-password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - dalijob_minio_data:/data
+
+volumes:
+  dalijob_mysql_data:
+  dalijob_minio_data:

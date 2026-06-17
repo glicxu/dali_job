@@ -1,0 +1,10 @@
+-e ../DaliCommonLib
+alembic
+fastapi
+openai
+pydantic
+pymysql
+pytest
+python-dotenv
+sqlalchemy
+uvicorn[standard]

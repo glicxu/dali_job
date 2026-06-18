@@ -19,6 +19,7 @@ export default function RootLayout({
             <div className="brand">DaliJob</div>
             <nav>
               <a href="/">Match</a>
+              <a href="/profile">Profile</a>
               <a href="/health">Health</a>
             </nav>
           </aside>

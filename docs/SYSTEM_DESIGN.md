@@ -63,9 +63,9 @@ This prototype should still preserve the client/server split: the client submits
 
 ### 4.1 User Profile Module
 
-Stores the structured career profile that powers resume generation, cover letters, study guides, and analytics.
+Stores the structured resume profile JSON that powers resume generation, cover letters, study guides, and analytics.
 
-Profile sections:
+The active profile is stored in `profiles.resume_data` as one JSON object with sections such as:
 
 - Education.
 - Work experience.
@@ -180,13 +180,15 @@ Master resume import workflow:
 User uploads or pastes master resume
   -> Store original file as Document + DocumentVersion when a file exists
   -> Extract raw text
-  -> Parse into structured profile suggestions
+  -> Parse into structured resume_data JSON suggestions
   -> User reviews, edits, accepts, or rejects suggestions
-  -> Accepted facts update Profile, Skills, Experience, Education, Projects, and related tables
+  -> Accepted facts replace the profile resume_data JSON document
   -> Create ResumeVersion snapshot linked to the source document version when available
 ```
 
-Uploaded PDFs and DOCX files are preserved artifacts. Generated tailored PDFs and DOCX files are rendered artifacts. The structured profile and immutable resume versions are what the AI uses for matching, tailoring, validation, and analytics.
+Uploaded PDFs and DOCX files are preserved artifacts. Generated tailored PDFs and DOCX files are rendered artifacts. The structured profile JSON and immutable resume versions are what the AI uses for matching, tailoring, validation, and analytics.
+
+Before full document management is implemented, DaliJob may provide a PDF resume import prototype that extracts cleaned text, generates reviewable `resume_data` JSON suggestions, and applies accepted suggestions to `profiles.resume_data`. That prototype should not be treated as permanent document storage until `documents` and `document_versions` are implemented.
 
 Pipeline:
 

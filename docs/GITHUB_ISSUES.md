@@ -98,13 +98,12 @@ Acceptance criteria:
 
 ### 5. Build Career Profile Data Model
 
-Add tables and APIs for profile, skills, experience, education, projects, certifications, awards, publications, and portfolio links.
+Add the JSON-backed profile table and APIs for reading/updating the user's structured resume data.
 
 Acceptance criteria:
 
-- User can create and edit all profile sections.
-- Experience bullets can be linked to skills.
-- Profile endpoints return structured data.
+- User can create and edit all profile sections inside one `resume_data` JSON document.
+- Profile endpoints return validated structured resume JSON.
 
 ### 6. Build Profile Editor UI
 
@@ -112,7 +111,7 @@ Create client screens for editing the career profile.
 
 Acceptance criteria:
 
-- User can manage skills, experience, projects, education, and certifications.
+- User can manage skills, experience, projects, education, and certifications through the JSON-backed profile editor.
 - Form validation prevents invalid dates and empty required fields.
 
 ## Milestone: Jobs And Applications

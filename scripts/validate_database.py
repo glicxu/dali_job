@@ -1,10 +1,37 @@
 from __future__ import annotations
 
+from sqlalchemy import inspect
+
 from DaliCommonLib.dali_db_man import DbMan
 
 from db_common import get_schema_name, load_config, parse_config_args
 
-REQUIRED_TABLES: tuple[str, ...] = ()
+REQUIRED_TABLE_COLUMNS: dict[str, set[str]] = {
+    "users": {
+        "id",
+        "email",
+        "display_name",
+        "timezone",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+    },
+    "workspaces": {
+        "id",
+        "owner_user_id",
+        "name",
+        "created_at",
+        "updated_at",
+    },
+    "profiles": {
+        "id",
+        "workspace_id",
+        "user_id",
+        "resume_data",
+        "created_at",
+        "updated_at",
+    },
+}
 
 
 def main() -> int:
@@ -16,9 +43,24 @@ def main() -> int:
     with engine.connect() as connection:
         connection.exec_driver_sql("SELECT 1")
 
-    missing = [table for table in REQUIRED_TABLES if not DbMan.has_table(table, schema=schema)]
+    missing = [
+        table
+        for table in REQUIRED_TABLE_COLUMNS
+        if not DbMan.has_table(table, schema=schema)
+    ]
     if missing:
         print(f"Missing required tables in {schema}: {', '.join(missing)}")
+        return 1
+
+    inspector = inspect(engine)
+    missing_columns: list[str] = []
+    for table, expected_columns in REQUIRED_TABLE_COLUMNS.items():
+        actual_columns = {column["name"] for column in inspector.get_columns(table)}
+        for column in sorted(expected_columns - actual_columns):
+            missing_columns.append(f"{table}.{column}")
+
+    if missing_columns:
+        print(f"Missing required columns in {schema}: {', '.join(missing_columns)}")
         return 1
 
     print(f"Database validation passed for schema: {schema}")

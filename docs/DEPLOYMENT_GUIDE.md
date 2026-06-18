@@ -44,7 +44,7 @@ Recommended local commands:
 docker compose up -d mysql minio
 pip install -r requirements.txt
 cd server
-alembic upgrade head
+alembic -x config=local.ini upgrade head
 python -m app.main --config local.ini
 ```
 

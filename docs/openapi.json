@@ -62,6 +62,148 @@
         }
       }
     },
+    "/api/v1/profile": {
+      "get": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Get Profile",
+        "operationId": "get_profile_api_v1_profile_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Patch Profile",
+        "operationId": "patch_profile_api_v1_profile_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/profile/resume-imports": {
+      "post": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Import Resume Pdf",
+        "operationId": "import_resume_pdf_api_v1_profile_resume_imports_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_resume_pdf_api_v1_profile_resume_imports_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumeImportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/profile/resume-imports/apply": {
+      "post": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Apply Resume Import",
+        "operationId": "apply_resume_import_api_v1_profile_resume_imports_apply_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeData"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/resume-job-matches": {
       "post": {
         "tags": [
@@ -106,6 +248,20 @@
   },
   "components": {
     "schemas": {
+      "Body_import_resume_pdf_api_v1_profile_resume_imports_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_resume_pdf_api_v1_profile_resume_imports_post"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -118,6 +274,224 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "ProfileResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "workspace_id": {
+            "type": "string",
+            "title": "Workspace Id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "resume_data": {
+            "$ref": "#/components/schemas/ResumeData"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "workspace_id",
+          "user_id",
+          "resume_data",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ProfileResponse"
+      },
+      "ProfileUpdateRequest": {
+        "properties": {
+          "resume_data": {
+            "$ref": "#/components/schemas/ResumeData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "resume_data"
+        ],
+        "title": "ProfileUpdateRequest"
+      },
+      "ResumeData": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "headline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headline"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "contact": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "object",
+            "title": "Contact"
+          },
+          "experience": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Experience"
+          },
+          "skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skills"
+          },
+          "education": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Education"
+          },
+          "certifications": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Certifications"
+          },
+          "projects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Projects"
+          },
+          "awards": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Awards"
+          },
+          "publications": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Publications"
+          },
+          "links": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Links"
+          },
+          "languages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Languages"
+          },
+          "volunteer": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Volunteer"
+          },
+          "target_roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Target Roles"
+          },
+          "target_locations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Target Locations"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ResumeData"
+      },
+      "ResumeImportResponse": {
+        "properties": {
+          "file_name": {
+            "type": "string",
+            "title": "File Name"
+          },
+          "extracted_text_preview": {
+            "type": "string",
+            "title": "Extracted Text Preview"
+          },
+          "suggestions": {
+            "$ref": "#/components/schemas/ResumeData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_name",
+          "extracted_text_preview",
+          "suggestions"
+        ],
+        "title": "ResumeImportResponse"
       },
       "ResumeJobMatchRequest": {
         "properties": {

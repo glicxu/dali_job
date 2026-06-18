@@ -18,8 +18,8 @@
 - [x] Ensure server shutdown calls `DbMan.dispose_all_engines()` if available.
 - [x] Create top-level `scripts/` folder for database setup and seed utilities.
 - [x] Add database creation script that loads `--config` and creates the configured DaliJob schema.
-- [ ] Add database seed script that loads `--config` and inserts local development seed data.
-- [ ] Add database validation script that loads `--config` and verifies required tables exist.
+- [x] Add database seed script that loads `--config` and inserts local development seed data.
+- [x] Add database validation script that loads `--config` and verifies required tables exist.
 - [x] Add client environment configuration for public values only.
 - [x] Add structured logging.
 - [x] Add health check endpoints.
@@ -61,26 +61,37 @@ This is the first functional slice. It should happen before the full tracker, co
 
 ## Phase 1: MVP Core
 
+Recommended implementation order:
+
+1. Database foundation: users, private workspaces, base migrations, seed script, validation script, and migration CI.
+2. Profile foundation: one JSON-backed profile table, resume_data editor, PDF resume import, and basic profile editor UI.
+3. Job import: manual job creation, pasted job descriptions, jobs list, and job detail UI.
+4. Application tracking: application table, status transitions, timeline events, notes, tasks, reminders, tracker UI, and application detail UI.
+5. Document management: documents, document versions, signed upload/download flow, document library, and application attachments.
+6. Resume/job match persistence: save comparison results for authenticated users and link results to jobs, applications, resume versions, or uploaded resume documents.
+7. Basic analytics: application counts, status funnel, response-rate calculations, and analytics summary UI.
+
+The sections below are grouped by product area. The order above should guide implementation so each slice leaves the app runnable and reviewable.
+
 ### Accounts And Workspaces
 
-- [ ] Implement user model.
-- [ ] Implement private workspace model with `owner_user_id`.
+- [x] Implement user model.
+- [x] Implement private workspace model with `owner_user_id`.
 - [ ] Add authentication.
 - [ ] Add owner-only workspace authorization.
 - [ ] Defer workspace sharing, membership, and roles until a future collaboration feature is intentionally designed.
 
 ### Profile
 
-- [ ] Create profile schema and tables.
-- [ ] Add CRUD for skills.
-- [ ] Add CRUD for experience.
-- [ ] Add CRUD for education.
-- [ ] Add CRUD for projects.
-- [ ] Add CRUD for certifications, awards, publications, and links.
+- [x] Create profile schema with `profiles.resume_data` JSON as the resume source of truth.
+- [x] Replace separate skills, experience, education, projects, certifications, awards, publications, and links tables with one resume JSON document.
+- [x] Add read/update API for the full resume JSON document.
 - [ ] Add master resume upload or paste flow that preserves the original document when a file is provided.
-- [ ] Extract master resume text into reviewable structured profile suggestions.
-- [ ] Let the user accept, edit, or reject parsed profile suggestions before updating canonical profile tables.
-- [ ] Build profile editor UI.
+- [x] Add PDF master resume import prototype that extracts structured profile suggestions.
+- [x] Extract master resume text into reviewable structured profile suggestions.
+- [x] Let the user accept or reject parsed profile suggestions before updating canonical resume JSON.
+- [x] Let the user edit parsed profile suggestions after applying them in the JSON-backed editor.
+- [x] Build profile editor UI.
 
 ### Job Import
 

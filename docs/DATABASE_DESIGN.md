@@ -156,133 +156,42 @@ For MVP, a workspace is a private data container owned by one user. It is not a 
 
 ### profiles
 
-The canonical user career profile.
+The canonical user resume/profile source of truth. Resume facts are stored as one JSON document instead of separate SQL tables for skills, experience, education, projects, and related sections.
 
 | Field | Type | Notes |
 | --- | --- | --- |
 | id | uuid | Primary key |
 | workspace_id | uuid | FK to workspaces |
 | user_id | uuid | FK to users |
-| headline | text | Nullable |
-| summary | text | Nullable |
-| target_roles | jsonb | Array |
-| target_locations | jsonb | Array |
-| remote_preference | text | Nullable |
-| salary_expectations | jsonb | Nullable |
-| portfolio_links | jsonb | Array |
-| preferences | jsonb | Document style and search prefs |
+| resume_data | jsonb | Required structured resume JSON |
 | created_at | timestamptz | Required |
 | updated_at | timestamptz | Required |
 
-### skills
+`resume_data` shape:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| id | uuid | Primary key |
-| workspace_id | uuid | FK |
-| name | text | Required |
-| category | text | e.g. language, framework, tool, soft skill |
-| normalized_name | text | For deduplication |
-| created_at | timestamptz | Required |
+```json
+{
+  "name": null,
+  "headline": null,
+  "summary": null,
+  "contact": {},
+  "experience": [],
+  "skills": [],
+  "education": [],
+  "certifications": [],
+  "projects": [],
+  "awards": [],
+  "publications": [],
+  "links": [],
+  "languages": [],
+  "volunteer": [],
+  "target_roles": [],
+  "target_locations": [],
+  "notes": []
+}
+```
 
-### experiences
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| id | uuid | Primary key |
-| profile_id | uuid | FK |
-| company_name | text | Required |
-| title | text | Required |
-| location | text | Nullable |
-| start_date | date | Nullable |
-| end_date | date | Nullable |
-| is_current | boolean | Required |
-| description | text | Nullable |
-| sort_order | integer | Required |
-| created_at | timestamptz | Required |
-| updated_at | timestamptz | Required |
-
-### experience_bullets
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| id | uuid | Primary key |
-| experience_id | uuid | FK |
-| text | text | Required |
-| impact_metric | text | Nullable |
-| evidence_level | text | `verified`, `user_claimed`, `ai_inferred`, `needs_review` |
-| sort_order | integer | Required |
-| created_at | timestamptz | Required |
-
-### experience_skills
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| experience_id | uuid | FK |
-| skill_id | uuid | FK |
-
-### education
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| id | uuid | Primary key |
-| profile_id | uuid | FK |
-| institution | text | Required |
-| degree | text | Nullable |
-| field_of_study | text | Nullable |
-| start_date | date | Nullable |
-| end_date | date | Nullable |
-| notes | text | Nullable |
-
-### projects
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| id | uuid | Primary key |
-| profile_id | uuid | FK |
-| name | text | Required |
-| description | text | Nullable |
-| url | text | Nullable |
-| repository_url | text | Nullable |
-| start_date | date | Nullable |
-| end_date | date | Nullable |
-| created_at | timestamptz | Required |
-| updated_at | timestamptz | Required |
-
-### certifications
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| id | uuid | Primary key |
-| profile_id | uuid | FK |
-| name | text | Required |
-| issuer | text | Nullable |
-| issued_at | date | Nullable |
-| expires_at | date | Nullable |
-| credential_url | text | Nullable |
-
-### awards
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| id | uuid | Primary key |
-| profile_id | uuid | FK |
-| title | text | Required |
-| issuer | text | Nullable |
-| awarded_at | date | Nullable |
-| description | text | Nullable |
-
-### publications
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| id | uuid | Primary key |
-| profile_id | uuid | FK |
-| title | text | Required |
-| publisher | text | Nullable |
-| published_at | date | Nullable |
-| url | text | Nullable |
-| description | text | Nullable |
+The old normalized profile-section tables (`skills`, `experiences`, `education`, `projects`, `certifications`, `awards`, `publications`, `profile_links`, `experience_bullets`, and `experience_skills`) are intentionally not part of the active schema.
 
 ### companies
 
@@ -690,7 +599,7 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 - `cover_letter_versions.application_id, version_number`.
 - `email_messages.integration_id, provider_message_id` unique.
 - `email_application_links.email_message_id, application_id` unique.
-- GIN indexes on `jobs.description_structured`, `profiles.preferences`, and analytics JSONB fields if needed.
+- JSON indexes on `jobs.description_structured`, selected `profiles.resume_data` paths, and analytics JSON fields if needed.
 
 ## 6. Versioning Rules
 

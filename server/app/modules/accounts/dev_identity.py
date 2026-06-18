@@ -1,0 +1,7 @@
+from __future__ import annotations
+
+DEV_USER_ID = "00000000-0000-4000-8000-000000000001"
+DEV_WORKSPACE_ID = "00000000-0000-4000-8000-000000000101"
+DEV_USER_EMAIL = "local.user@dalijob.dev"
+DEV_USER_DISPLAY_NAME = "Local DaliJob User"
+DEV_WORKSPACE_NAME = "Personal Job Search"

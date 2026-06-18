@@ -13,7 +13,8 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-load_runtime_config()
+alembic_args = context.get_x_argument(as_dictionary=True)
+load_runtime_config(alembic_args.get("config"))
 
 target_metadata = Base.metadata
 

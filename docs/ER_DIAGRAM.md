@@ -15,17 +15,7 @@ erDiagram
     workspaces ||--o{ ai_generation_jobs : owns
     workspaces ||--o{ resume_job_matches : owns
 
-    profiles ||--o{ experiences : has
-    profiles ||--o{ education : has
-    profiles ||--o{ projects : has
-    profiles ||--o{ certifications : has
-    profiles ||--o{ awards : has
-    profiles ||--o{ publications : has
     profiles ||--o{ resume_versions : produces
-
-    experiences ||--o{ experience_bullets : has
-    experiences ||--o{ experience_skills : uses
-    skills ||--o{ experience_skills : maps_to
 
     companies ||--o{ jobs : posts
     companies ||--o{ recruiters : has
@@ -72,7 +62,7 @@ erDiagram
 ## Relationship Notes
 
 - In the MVP, each `workspace` is private and has exactly one owning `user`.
-- `profiles` hold source career facts. Generated documents should reference profile-derived versions instead of duplicating facts without traceability.
+- `profiles.resume_data` holds source career facts as one structured JSON document. Generated documents should reference profile-derived versions instead of duplicating facts without traceability.
 - `resume_versions`, `cover_letter_versions`, and `document_versions` are immutable.
 - `applications` connect jobs, companies, submitted documents, interviews, notes, tasks, offers, email messages, and calendar events.
 - `resume_job_matches` stores 0-10 resume-to-job comparison results for the initial prototype and later recommendation workflows.

@@ -51,45 +51,50 @@ Required body:
 
 ### `GET /profile`
 
-Returns the active structured career profile.
+Returns the active profile with one `resume_data` JSON document.
 
 ### `PATCH /profile`
 
-Updates profile summary, targets, preferences, and portfolio links.
+Replaces the active profile's `resume_data` JSON document. The server validates the expected JSON shape before storage.
 
-### `GET /profile/skills`
+Example `resume_data`:
 
-Lists skills.
+```json
+{
+  "name": "Candidate Name",
+  "headline": "Backend Engineer",
+  "summary": "Short profile summary.",
+  "contact": {
+    "email": "candidate@example.com",
+    "phone": null,
+    "location": "Remote",
+    "website": null,
+    "linkedin": null,
+    "github": null
+  },
+  "experience": ["Backend Engineer at Example Co - Built APIs."],
+  "skills": ["Python", "FastAPI", "SQL"],
+  "education": ["Example University - BS Computer Science"],
+  "certifications": [],
+  "projects": [],
+  "awards": [],
+  "publications": [],
+  "links": [],
+  "languages": [],
+  "volunteer": [],
+  "target_roles": ["Backend Engineer"],
+  "target_locations": ["Remote"],
+  "notes": []
+}
+```
 
-### `POST /profile/skills`
+### `POST /profile/resume-imports`
 
-Creates a skill.
+Uploads a master resume PDF, cleans extracted text, and returns a structured `resume_data` JSON suggestion for review. The first prototype does not permanently store the uploaded file; document version preservation belongs to the document-management slice.
 
-### `GET /profile/experiences`
+### `POST /profile/resume-imports/apply`
 
-Lists work experiences.
-
-### `POST /profile/experiences`
-
-Creates work experience.
-
-### `PATCH /profile/experiences/{experienceId}`
-
-Updates work experience.
-
-### `POST /profile/experiences/{experienceId}/bullets`
-
-Adds an evidence-backed bullet.
-
-### `GET /profile/projects`
-
-Lists projects.
-
-### `POST /profile/projects`
-
-Creates a project.
-
-Equivalent CRUD endpoints should exist for education, certifications, awards, and publications.
+Applies reviewed resume import suggestions by replacing the active profile's `resume_data` JSON document.
 
 ## 4. Companies And Recruiters
 

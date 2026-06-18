@@ -4,7 +4,9 @@ fastapi
 openai
 pydantic
 pymysql
+pypdf
 pytest
+python-multipart
 python-dotenv
 sqlalchemy
 uvicorn[standard]

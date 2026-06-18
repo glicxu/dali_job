@@ -42,8 +42,49 @@ Then edit `server\config.ini` for your local database. Start the server from the
 ```powershell
 python -m pip install -r requirements.txt
 cd server
+alembic -x config=config.ini upgrade head
 python -m app.main --config config.ini
 ```
+
+## Database Setup
+
+All database commands use the database selected by the active `ProcessConfig` ini file. For local development, that is usually `server\config.ini`.
+
+For a fresh setup, create the schema/database first from the project root:
+
+```powershell
+python scripts\create_schema.py --config server\config.ini
+```
+
+Then run Alembic migrations to create the tables and record migration history:
+
+```powershell
+cd server
+alembic -x config=config.ini upgrade head
+cd ..
+```
+
+If you already created the schema in MySQL Workbench, skip `create_schema.py` and run the same Alembic command above.
+
+Optionally insert local development seed data:
+
+```powershell
+python scripts\seed_database.py --config server\config.ini
+```
+
+Validate the configured database:
+
+```powershell
+python scripts\validate_database.py --config server\config.ini
+```
+
+The older table creation helper is available for quick throwaway local setup from the current SQLAlchemy models:
+
+```powershell
+python scripts\create_tables.py --config server\config.ini
+```
+
+Do not use `create_tables.py` as the normal project setup path if you plan to use Alembic migrations. It creates missing tables but does not record migration history, so Alembic may later try to create tables that already exist. Use Alembic for normal fresh installs and updates.
 
 Start the client from the `client` folder:
 

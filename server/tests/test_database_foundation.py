@@ -8,6 +8,8 @@ from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 
 from app.db.base import Base
+from app.modules.accounts.models import User, Workspace
+from app.modules.auth.dependencies import AuthenticatedIdentity
 from app.modules.profiles import repository
 from app.modules.profiles.schemas import ResumeData
 
@@ -25,6 +27,9 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "id",
         "email",
         "display_name",
+        "password_hash",
+        "auth_provider",
+        "is_active",
         "timezone",
         "created_at",
         "updated_at",
@@ -70,7 +75,7 @@ def test_alembic_has_initial_schema_revision() -> None:
     config.set_main_option("script_location", str(server_dir / "app" / "db" / "migrations"))
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == "20260617_0001"
+    assert script.get_current_head() == "20260618_0002"
 
 
 def test_profile_repository_creates_local_resume_json() -> None:
@@ -83,7 +88,6 @@ def test_profile_repository_creates_local_resume_json() -> None:
         saved = repository.update_profile_resume_data(
             session,
             ResumeData(
-                name="Example User",
                 headline="Backend Engineer",
                 skills=["Python", "FastAPI"],
                 experience=["Backend Engineer at Example Co"],
@@ -91,7 +95,8 @@ def test_profile_repository_creates_local_resume_json() -> None:
         )
 
         assert profile.workspace_id
-        assert saved.resume_data["name"] == "Example User"
+        assert "name" not in saved.resume_data
+        assert "contact" not in saved.resume_data
         assert saved.resume_data["skills"] == ["Python", "FastAPI"]
 
 
@@ -104,7 +109,6 @@ def test_resume_suggestions_replace_resume_json() -> None:
         saved = repository.apply_resume_suggestions(
             session,
             ResumeData(
-                name="Example User",
                 headline="Backend Engineer",
                 summary="Builds Python services.",
                 skills=["Python"],
@@ -116,3 +120,26 @@ def test_resume_suggestions_replace_resume_json() -> None:
         assert saved.id == profile.id
         assert profile.resume_data["headline"] == "Backend Engineer"
         assert profile.resume_data["skills"] == ["Python"]
+
+
+def test_profile_repository_maps_sso_identity_to_private_workspace() -> None:
+    engine = create_engine("sqlite:///:memory:", future=True)
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    identity = AuthenticatedIdentity(
+        external_user_id="sso-user@example.com",
+        email="sso-user@example.com",
+        display_name="SSO User",
+        provider="dalijob",
+    )
+
+    with session_factory() as session:
+        profile = repository.get_or_create_profile(session, identity)
+        user = session.get(User, profile.user_id)
+        workspace = session.get(Workspace, profile.workspace_id)
+
+        assert user is not None
+        assert workspace is not None
+        assert user.email == "sso-user@example.com"
+        assert workspace.owner_user_id == profile.user_id
+        assert workspace.name == "SSO User's Career Search"

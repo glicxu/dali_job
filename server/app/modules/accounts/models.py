@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -23,6 +23,9 @@ class User(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    auth_provider: Mapped[str] = mapped_column(String(32), nullable=False, default="dalijob")
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="America/New_York")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(

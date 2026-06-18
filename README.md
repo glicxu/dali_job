@@ -96,6 +96,28 @@ npm run dev -- --hostname 127.0.0.1 --port 3000
 
 The API defaults to `http://127.0.0.1:5010`; the client defaults to `http://127.0.0.1:3000`. Stop either process with `Ctrl+C` in its terminal.
 
+## Authentication
+
+DaliJob supports two server auth modes:
+
+- `local`: normal DaliJob email/password registration and login.
+- `dev`: no-token local debugging mode. API requests use the built-in local development user.
+
+Configure the mode in your private server config:
+
+```ini
+[dali_job]
+auth_mode = local
+
+[dali_job_auth]
+jwt_secret = use_a_long_private_random_value
+access_ttl_seconds = 604800
+```
+
+When `local` auth is enabled, use the client `/auth` page or the `/api/v1/auth/register` and `/api/v1/auth/login` endpoints. The server returns a DaliJob bearer token, and the client sends it on later API requests.
+
+Long term, one registration across multiple Dalifin apps should be handled by a shared identity database or standalone auth service. That is different from requiring users to log in through another app such as app_server.
+
 ## Planned Stack
 
 - Server: Python, FastAPI, SQLAlchemy, Alembic, and `DaliCommonLib`.

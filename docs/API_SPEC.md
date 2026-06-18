@@ -4,7 +4,7 @@
 
 - Base path: `/api/v1`.
 - Request and response format: JSON unless uploading files.
-- Authentication: session cookie or bearer token.
+- Authentication: DaliJob bearer token from `/auth/login` or `/auth/register`; local development may run in `dev` auth mode.
 - Authorization: every request is scoped to a private workspace owned by the authenticated user.
 - IDs: UUID strings.
 - Errors: return structured error bodies.
@@ -22,6 +22,41 @@ Error shape:
 ```
 
 ## 2. Authentication And Workspaces
+
+DaliJob supports normal email/password registration and login. The client authenticates with DaliJob and sends the returned token on later API requests:
+
+```text
+Authorization: Bearer <token>
+```
+
+The first implementation stores DaliJob-owned account credentials in the DaliJob database. A future Dalifin-wide login can be introduced by moving identity into a shared auth service or shared identity database, but DaliJob should not require users to first log in through app_server.
+
+### `POST /auth/register`
+
+Creates a DaliJob account and returns a bearer token.
+
+Required body:
+
+```json
+{
+  "email": "candidate@example.com",
+  "password": "strong-password",
+  "display_name": "Candidate Name"
+}
+```
+
+### `POST /auth/login`
+
+Logs in with a DaliJob account and returns a bearer token.
+
+Required body:
+
+```json
+{
+  "email": "candidate@example.com",
+  "password": "strong-password"
+}
+```
 
 ### `GET /me`
 
@@ -61,17 +96,8 @@ Example `resume_data`:
 
 ```json
 {
-  "name": "Candidate Name",
   "headline": "Backend Engineer",
   "summary": "Short profile summary.",
-  "contact": {
-    "email": "candidate@example.com",
-    "phone": null,
-    "location": "Remote",
-    "website": null,
-    "linkedin": null,
-    "github": null
-  },
   "experience": ["Backend Engineer at Example Co - Built APIs."],
   "skills": ["Python", "FastAPI", "SQL"],
   "education": ["Example University - BS Computer Science"],
@@ -79,18 +105,16 @@ Example `resume_data`:
   "projects": [],
   "awards": [],
   "publications": [],
-  "links": [],
   "languages": [],
   "volunteer": [],
   "target_roles": ["Backend Engineer"],
-  "target_locations": ["Remote"],
   "notes": []
 }
 ```
 
 ### `POST /profile/resume-imports`
 
-Uploads a master resume PDF, cleans extracted text, and returns a structured `resume_data` JSON suggestion for review. The first prototype does not permanently store the uploaded file; document version preservation belongs to the document-management slice.
+Uploads a master resume PDF, cleans extracted text, redacts common personal contact information before AI parsing, and returns a structured `resume_data` JSON suggestion for review. The JSON schema intentionally excludes name, email, phone number, residential location, personal website, and social profile URL fields. The first prototype does not permanently store the uploaded file; document version preservation belongs to the document-management slice.
 
 ### `POST /profile/resume-imports/apply`
 

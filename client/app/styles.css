@@ -263,6 +263,37 @@ li span {
   margin-top: 24px;
 }
 
+.auth-panel {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+  max-width: 460px;
+}
+
+.auth-form {
+  gap: 18px;
+}
+
+.segmented-control {
+  background: #eef2f7;
+  border-radius: 6px;
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 4px;
+}
+
+.segmented-control button {
+  background: transparent;
+  color: #52606d;
+  padding: 9px 12px;
+}
+
+.segmented-control button.active {
+  background: #fff;
+  color: #1f2933;
+}
+
 .profile-card {
   background: #fff;
   border: 1px solid #d9e2ec;

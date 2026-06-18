@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, File, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db_session
+from app.modules.auth.dependencies import AuthenticatedIdentity, get_current_identity
 from app.modules.profiles import repository
 from app.modules.profiles.resume_import import (
     OpenAIResumeProfileParser,
@@ -22,23 +23,29 @@ def get_resume_profile_parser(request: Request) -> ResumeProfileParser:
 
 
 @router.get("", response_model=ProfileResponse)
-def get_profile(db: Session = Depends(get_db_session)) -> ProfileResponse:
-    return repository.get_or_create_profile(db)
+def get_profile(
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> ProfileResponse:
+    return repository.get_or_create_profile(db, identity)
 
 
 @router.patch("", response_model=ProfileResponse)
 def patch_profile(
     payload: ProfileUpdateRequest,
     db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> ProfileResponse:
-    return repository.update_profile_resume_data(db, payload.resume_data)
+    return repository.update_profile_resume_data(db, payload.resume_data, identity)
 
 
 @router.post("/resume-imports", response_model=ResumeImportResponse)
 async def import_resume_pdf(
     file: UploadFile = File(...),
     parser: ResumeProfileParser = Depends(get_resume_profile_parser),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> ResumeImportResponse:
+    _ = identity
     resume_text = await extract_resume_text(file)
     suggestions = parser.parse(resume_text)
     return ResumeImportResponse(
@@ -52,5 +59,6 @@ async def import_resume_pdf(
 def apply_resume_import(
     payload: ResumeData,
     db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> ProfileResponse:
-    return repository.apply_resume_suggestions(db, payload)
+    return repository.apply_resume_suggestions(db, payload, identity)

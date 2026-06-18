@@ -31,6 +31,7 @@ class RuntimeConfig:
     client_origins: list[str]
     client_origin_regex: str
     openai_model: str
+    auth_mode: str
 
 
 def _load_process_config(config_path: Optional[str]) -> Optional[str]:
@@ -116,6 +117,11 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         or read_config_value("openai", "model", "gpt-4.1-mini")
         or "gpt-4.1-mini"
     )
+    auth_mode = (
+        os.getenv("DALIJOB_AUTH_MODE", "").strip()
+        or read_config_value("dali_job", "auth_mode", "dev")
+        or "dev"
+    )
 
     return RuntimeConfig(
         config_path=loaded_path,
@@ -126,4 +132,5 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         client_origins=client_origins,
         client_origin_regex=client_origin_regex,
         openai_model=openai_model,
+        auth_mode=auth_mode.lower(),
     )

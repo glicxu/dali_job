@@ -19,10 +19,8 @@ def new_uuid() -> str:
 
 def default_resume_data() -> dict:
     return {
-        "name": None,
         "headline": None,
         "summary": None,
-        "contact": {},
         "experience": [],
         "skills": [],
         "education": [],
@@ -30,11 +28,9 @@ def default_resume_data() -> dict:
         "projects": [],
         "awards": [],
         "publications": [],
-        "links": [],
         "languages": [],
         "volunteer": [],
         "target_roles": [],
-        "target_locations": [],
         "notes": [],
     }
 

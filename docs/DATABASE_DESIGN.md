@@ -137,6 +137,9 @@ Scripts must use `ProcessConfig` and `DbMan`; they should not hard-code local or
 | id | uuid | Primary key |
 | email | text | Unique |
 | display_name | text | Required |
+| password_hash | text | Nullable for dev/imported users; required for DaliJob local login users |
+| auth_provider | text | `dalijob` for local DaliJob accounts; future providers can use a different value |
+| is_active | boolean | Required |
 | timezone | text | Default `America/New_York` |
 | created_at | timestamptz | Required |
 | updated_at | timestamptz | Required |
@@ -158,6 +161,8 @@ For MVP, a workspace is a private data container owned by one user. It is not a 
 
 The canonical user resume/profile source of truth. Resume facts are stored as one JSON document instead of separate SQL tables for skills, experience, education, projects, and related sections.
 
+`profiles.resume_data` intentionally excludes personal contact information such as name, email, phone number, residential location, personal website, and social profile URLs. Uploaded resume text should be redacted before AI parsing, and only non-contact career facts should be stored in the JSON document.
+
 | Field | Type | Notes |
 | --- | --- | --- |
 | id | uuid | Primary key |
@@ -171,10 +176,8 @@ The canonical user resume/profile source of truth. Resume facts are stored as on
 
 ```json
 {
-  "name": null,
   "headline": null,
   "summary": null,
-  "contact": {},
   "experience": [],
   "skills": [],
   "education": [],
@@ -182,11 +185,9 @@ The canonical user resume/profile source of truth. Resume facts are stored as on
   "projects": [],
   "awards": [],
   "publications": [],
-  "links": [],
   "languages": [],
   "volunteer": [],
   "target_roles": [],
-  "target_locations": [],
   "notes": []
 }
 ```

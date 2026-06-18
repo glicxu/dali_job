@@ -20,11 +20,9 @@ type SectionKey =
   | "projects"
   | "awards"
   | "publications"
-  | "links"
   | "languages"
   | "volunteer"
   | "target_roles"
-  | "target_locations"
   | "notes";
 
 const sectionLabels: Record<SectionKey, string> = {
@@ -35,11 +33,9 @@ const sectionLabels: Record<SectionKey, string> = {
   projects: "Projects",
   awards: "Awards",
   publications: "Publications",
-  links: "Links",
   languages: "Languages",
   volunteer: "Volunteer",
   target_roles: "Target Roles",
-  target_locations: "Target Locations",
   notes: "Notes",
 };
 
@@ -51,11 +47,9 @@ const editableSections: SectionKey[] = [
   "projects",
   "awards",
   "publications",
-  "links",
   "languages",
   "volunteer",
   "target_roles",
-  "target_locations",
   "notes",
 ];
 
@@ -74,7 +68,6 @@ function normalizeResumeData(value: ResumeData): ResumeData {
   return {
     ...emptyResumeData,
     ...value,
-    contact: value.contact ?? {},
   };
 }
 
@@ -122,14 +115,6 @@ export function ProfileEditor() {
   function buildResumeDataFromEditor(): ResumeData {
     const next: ResumeData = {
       ...resumeData,
-      contact: {
-        email: resumeData.contact.email ?? null,
-        phone: resumeData.contact.phone ?? null,
-        location: resumeData.contact.location ?? null,
-        website: resumeData.contact.website ?? null,
-        linkedin: resumeData.contact.linkedin ?? null,
-        github: resumeData.contact.github ?? null,
-      },
     };
     for (const key of editableSections) {
       next[key] = textToList(sectionText[key]);
@@ -164,7 +149,7 @@ export function ProfileEditor() {
     try {
       const imported = await importResumePdf(file);
       setResumeImport(imported);
-      setStatus("Resume parsed. Review the JSON suggestions before applying them.");
+      setStatus("Resume parsed for preview only. Nothing is saved until you click Apply JSON.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Resume import failed.");
     } finally {
@@ -190,16 +175,6 @@ export function ProfileEditor() {
     }
   }
 
-  function updateContact(key: string, value: string) {
-    setResumeData((current) => ({
-      ...current,
-      contact: {
-        ...current.contact,
-        [key]: value || null,
-      },
-    }));
-  }
-
   if (isLoading) {
     return <p className="empty">Loading profile.</p>;
   }
@@ -214,7 +189,7 @@ export function ProfileEditor() {
           <h2>Import Master Resume</h2>
           <p className="metadata">
             Upload a PDF resume to extract cleaned text and generate one structured resume JSON
-            document for review.
+            document for review. Parsing does not save changes.
           </p>
         </div>
         <form className="inline-form resume-upload-form" onSubmit={importResume}>
@@ -241,47 +216,12 @@ export function ProfileEditor() {
 
         <div className="profile-grid">
           <label>
-            Name
-            <input
-              value={resumeData.name ?? ""}
-              onChange={(event) => setResumeData({ ...resumeData, name: event.target.value || null })}
-            />
-          </label>
-          <label>
             Headline
             <input
               value={resumeData.headline ?? ""}
               onChange={(event) =>
                 setResumeData({ ...resumeData, headline: event.target.value || null })
               }
-            />
-          </label>
-          <label>
-            Email
-            <input
-              value={resumeData.contact.email ?? ""}
-              onChange={(event) => updateContact("email", event.target.value)}
-            />
-          </label>
-          <label>
-            Phone
-            <input
-              value={resumeData.contact.phone ?? ""}
-              onChange={(event) => updateContact("phone", event.target.value)}
-            />
-          </label>
-          <label>
-            Location
-            <input
-              value={resumeData.contact.location ?? ""}
-              onChange={(event) => updateContact("location", event.target.value)}
-            />
-          </label>
-          <label>
-            Website
-            <input
-              value={resumeData.contact.website ?? ""}
-              onChange={(event) => updateContact("website", event.target.value)}
             />
           </label>
         </div>
@@ -346,6 +286,11 @@ function ResumeImportReview({
       </div>
 
       <div className="suggestion-grid">
+        <ReviewText title="Headline" value={suggestions.headline} />
+        <ReviewText title="Summary" value={suggestions.summary} />
+      </div>
+
+      <div className="suggestion-grid">
         <ReviewBlock title="Experience" items={suggestions.experience} />
         <ReviewBlock title="Skills" items={suggestions.skills} />
         <ReviewBlock title="Education" items={suggestions.education} />
@@ -363,6 +308,15 @@ function ResumeImportReview({
         <summary>Cleaned text preview</summary>
         <pre className="text-preview">{result.extracted_text_preview}</pre>
       </details>
+    </section>
+  );
+}
+
+function ReviewText({ title, value }: { title: string; value: string | null }) {
+  return (
+    <section className="result-list">
+      <h2>{title}</h2>
+      {value ? <p className="summary">{value}</p> : <p className="empty">No suggestion.</p>}
     </section>
   );
 }

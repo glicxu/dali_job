@@ -20,6 +20,7 @@ export default function RootLayout({
             <nav>
               <a href="/">Match</a>
               <a href="/profile">Profile</a>
+              <a href="/auth">Login</a>
               <a href="/health">Health</a>
             </nav>
           </aside>

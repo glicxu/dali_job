@@ -33,6 +33,9 @@ def main() -> int:
             id,
             email,
             display_name,
+            password_hash,
+            auth_provider,
+            is_active,
             timezone,
             created_at,
             updated_at
@@ -41,12 +44,17 @@ def main() -> int:
             :id,
             :email,
             :display_name,
+            NULL,
+            'dalijob',
+            1,
             :timezone,
             UTC_TIMESTAMP(6),
             UTC_TIMESTAMP(6)
         )
         ON DUPLICATE KEY UPDATE
             display_name = VALUES(display_name),
+            auth_provider = VALUES(auth_provider),
+            is_active = VALUES(is_active),
             timezone = VALUES(timezone),
             updated_at = UTC_TIMESTAMP(6)
         """,
@@ -101,10 +109,8 @@ def main() -> int:
             :workspace_id,
             :user_id,
             JSON_OBJECT(
-                'name', NULL,
                 'headline', 'DaliJob local profile',
                 'summary', 'Seed profile for local development before authentication is implemented.',
-                'contact', JSON_OBJECT(),
                 'experience', JSON_ARRAY(),
                 'skills', JSON_ARRAY(),
                 'education', JSON_ARRAY(),
@@ -112,11 +118,9 @@ def main() -> int:
                 'projects', JSON_ARRAY(),
                 'awards', JSON_ARRAY(),
                 'publications', JSON_ARRAY(),
-                'links', JSON_ARRAY(),
                 'languages', JSON_ARRAY(),
                 'volunteer', JSON_ARRAY(),
                 'target_roles', JSON_ARRAY(),
-                'target_locations', JSON_ARRAY(),
                 'notes', JSON_ARRAY()
             ),
             UTC_TIMESTAMP(6),

@@ -77,8 +77,12 @@ The sections below are grouped by product area. The order above should guide imp
 
 - [x] Implement user model.
 - [x] Implement private workspace model with `owner_user_id`.
-- [ ] Add authentication.
-- [ ] Add owner-only workspace authorization.
+- [x] Add first-pass authentication dependency with `dev` mode and DaliJob local bearer-token mode.
+- [x] Add DaliJob email/password registration and login API.
+- [x] Add login/register client UI.
+- [x] Map authenticated DaliJob users into private DaliJob users/workspaces.
+- [ ] Decide future shared Dalifin identity architecture for one registration across multiple Dalifin apps.
+- [ ] Add owner-only workspace authorization beyond the current private-workspace profile scope.
 - [ ] Defer workspace sharing, membership, and roles until a future collaboration feature is intentionally designed.
 
 ### Profile
@@ -88,6 +92,8 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Add read/update API for the full resume JSON document.
 - [ ] Add master resume upload or paste flow that preserves the original document when a file is provided.
 - [x] Add PDF master resume import prototype that extracts structured profile suggestions.
+- [x] Redact common personal contact information from uploaded resume text before AI parsing.
+- [x] Exclude name, email, phone, location, personal website, and social profile URL fields from saved resume JSON.
 - [x] Extract master resume text into reviewable structured profile suggestions.
 - [x] Let the user accept or reject parsed profile suggestions before updating canonical resume JSON.
 - [x] Let the user edit parsed profile suggestions after applying them in the JSON-backed editor.
@@ -99,7 +105,6 @@ The sections below are grouped by product area. The order above should guide imp
 - [ ] Add copy/paste job description import.
 - [ ] Add URL import that attempts extraction and creates a reviewable draft after the text-only comparison prototype works.
 - [ ] Add fallback flow for failed URL extraction so the user can manually complete the job.
-- [ ] Add PDF job description upload.
 - [ ] Store raw and structured job data.
 - [ ] Build jobs list and detail UI.
 

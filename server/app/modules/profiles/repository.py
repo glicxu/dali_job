@@ -11,6 +11,7 @@ from app.modules.accounts.dev_identity import (
     DEV_WORKSPACE_NAME,
 )
 from app.modules.accounts.models import User, Workspace
+from app.modules.auth.dependencies import AuthenticatedIdentity, get_dev_identity
 from app.modules.profiles.models import Profile, default_resume_data
 from app.modules.profiles.schemas import ResumeData
 
@@ -39,6 +40,34 @@ def ensure_dev_account(db: Session) -> tuple[User, Workspace]:
     return user, workspace
 
 
+def ensure_account_for_identity(db: Session, identity: AuthenticatedIdentity) -> tuple[User, Workspace]:
+    if identity.provider == "dev":
+        return ensure_dev_account(db)
+
+    email = identity.email.strip().lower()
+    user = db.scalar(select(User).where(User.email == email).limit(1))
+    if user is None:
+        user = User(
+            email=email,
+            display_name=identity.display_name or email,
+            timezone=identity.timezone,
+        )
+        db.add(user)
+        db.flush()
+    else:
+        user.display_name = identity.display_name or user.display_name
+        user.timezone = identity.timezone or user.timezone
+
+    workspace = db.scalar(select(Workspace).where(Workspace.owner_user_id == user.id).limit(1))
+    if workspace is None:
+        name_base = identity.display_name or email
+        workspace = Workspace(owner_user_id=user.id, name=f"{name_base}'s Career Search")
+        db.add(workspace)
+
+    db.flush()
+    return user, workspace
+
+
 def normalize_resume_data(value: dict | None) -> dict:
     merged = default_resume_data()
     if value:
@@ -48,8 +77,8 @@ def normalize_resume_data(value: dict | None) -> dict:
     return ResumeData.model_validate(merged).model_dump()
 
 
-def get_or_create_profile(db: Session) -> Profile:
-    user, workspace = ensure_dev_account(db)
+def get_or_create_profile(db: Session, identity: AuthenticatedIdentity | None = None) -> Profile:
+    user, workspace = ensure_account_for_identity(db, identity or get_dev_identity())
     profile = db.scalar(
         select(Profile).where(
             Profile.workspace_id == workspace.id,
@@ -69,13 +98,21 @@ def get_or_create_profile(db: Session) -> Profile:
     return profile
 
 
-def update_profile_resume_data(db: Session, resume_data: ResumeData) -> Profile:
-    profile = get_or_create_profile(db)
+def update_profile_resume_data(
+    db: Session,
+    resume_data: ResumeData,
+    identity: AuthenticatedIdentity | None = None,
+) -> Profile:
+    profile = get_or_create_profile(db, identity)
     profile.resume_data = resume_data.model_dump()
     db.flush()
     db.refresh(profile)
     return profile
 
 
-def apply_resume_suggestions(db: Session, suggestions: ResumeData) -> Profile:
-    return update_profile_resume_data(db, suggestions)
+def apply_resume_suggestions(
+    db: Session,
+    suggestions: ResumeData,
+    identity: AuthenticatedIdentity | None = None,
+) -> Profile:
+    return update_profile_resume_data(db, suggestions, identity)

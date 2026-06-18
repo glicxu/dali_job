@@ -74,8 +74,9 @@ The active profile is stored in `profiles.resume_data` as one JSON object with s
 - Certifications.
 - Awards.
 - Publications.
-- Portfolio links.
-- Preferences such as target roles, locations, remote policy, industries, salary expectations, and document style.
+- Preferences such as target roles, remote policy, industries, salary expectations, and document style.
+
+The active resume profile JSON should avoid storing personal contact information. Name, email address, phone number, residential location, personal websites, and social profile URLs should be redacted from uploaded resume text before AI parsing and excluded from `profiles.resume_data`.
 
 ### 4.2 Career Knowledge Base
 
@@ -180,6 +181,7 @@ Master resume import workflow:
 User uploads or pastes master resume
   -> Store original file as Document + DocumentVersion when a file exists
   -> Extract raw text
+  -> Redact personal contact information before AI parsing
   -> Parse into structured resume_data JSON suggestions
   -> User reviews, edits, accepts, or rejects suggestions
   -> Accepted facts replace the profile resume_data JSON document
@@ -520,6 +522,15 @@ The database schema should be DaliJob-specific. The default schema name should b
 
 Database setup and seed operations should be scriptable. The project should include Python scripts under a top-level `scripts/` folder that load the same `ProcessConfig` ini file and use `DbMan` to create, migrate, validate, and seed the configured schema.
 
+### Authentication Boundary
+
+DaliJob should provide a normal first-party login experience: users can register and log in directly from DaliJob without needing to open or authenticate through app_server. The first implementation should support two modes:
+
+- `local`: DaliJob-owned email/password registration and login. The server stores password hashes in the DaliJob `users` table and issues DaliJob bearer tokens.
+- `dev`: local debugging mode that maps every request to the built-in DaliJob development user.
+
+The broader Dalifin goal of registering once and using many apps should be treated as a shared identity architecture decision. That can be handled later by extracting identity into a common auth service or shared user database used by DaliJob, app_server, DaliBible, and other Dalifin apps. It should not mean DaliJob depends on an app_server login token or requires users to visit another application before using DaliJob.
+
 ### Integration Adapters
 
 Adapters isolate external dependencies:
@@ -594,7 +605,7 @@ Application enters interview stage
 
 ## 7. Security Requirements
 
-- Authentication required.
+- Authentication required. DaliJob should support direct DaliJob login for MVP.
 - Owner-only workspace authorization for MVP.
 - Role-based workspace sharing is a future optional feature, not a core requirement.
 - Encrypted storage for sensitive data.
@@ -633,7 +644,7 @@ Application enters interview stage
 
 - Whether the first version is single-user local-first, hosted SaaS, or both.
 - Whether DOCX export is required in Phase 1 or Phase 2.
-- Which auth provider to use.
+- Whether the future Dalifin-wide account system should be a shared database, standalone auth service, or common auth package.
 - Which AI provider should be default.
 - Which email provider should be supported first.
 - Whether browser extension import belongs in Phase 2 or later.

@@ -24,3 +24,16 @@ def test_health_endpoint_returns_ok() -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_me_endpoint_returns_dev_identity_by_default() -> None:
+    app = create_app()
+    client = TestClient(app)
+
+    response = client.get("/api/v1/me")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["auth_mode"] == "dev"
+    assert body["provider"] == "dev"
+    assert body["email"] == "local.user@dalijob.dev"

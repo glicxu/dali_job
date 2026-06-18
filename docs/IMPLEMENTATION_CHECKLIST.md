@@ -38,6 +38,9 @@ This is the first functional slice. It should happen before the full tracker, co
 - [x] Add a simple page or panel for pasting job description text.
 - [x] Defer PDF/DOCX upload until after text-only comparison works.
 - [x] Defer job URL extraction until after text-only comparison works.
+- [x] Add uploaded resume document selection for matching.
+- [x] Add job URL input with server-side text extraction for matching.
+- [x] Keep pasted resume and job description text as fallback inputs.
 - [x] Add a "Compare Resume To Job" action.
 - [x] Show a 0-10 match score.
 - [x] Show matched skills and keywords.
@@ -48,7 +51,9 @@ This is the first functional slice. It should happen before the full tracker, co
 ### Server Capability
 
 - [x] Add resume pasted-text input.
+- [x] Add resume document ID input using stored redacted extracted text.
 - [x] Add job description pasted-text input.
+- [x] Add job URL extraction input for ad hoc matching.
 - [x] Add OpenAI provider implementation for the comparison.
 - [x] Read OpenAI API key from server environment variable `OPENAI_API_KEY`.
 - [x] Read OpenAI model from `ProcessConfig` `[openai].model`.
@@ -57,7 +62,7 @@ This is the first functional slice. It should happen before the full tracker, co
 - [x] Add match scoring logic with score range 0-10.
 - [x] Add endpoint for ad hoc resume/job comparison.
 - [ ] Store comparison result if the user is authenticated.
-- [x] Add tests for scoring, missing skills, matched skills, and invalid inputs.
+- [x] Add tests for scoring, missing skills, matched skills, document input, URL extraction, and invalid inputs.
 
 ## Phase 1: MVP Core
 
@@ -121,11 +126,14 @@ The sections below are grouped by product area. The order above should guide imp
 
 ### Document Management
 
-- [ ] Add documents and document versions.
+- [x] Add documents and document versions.
+- [x] Add owner-protected local document upload endpoint.
+- [x] Add owner-protected local document download endpoint.
+- [x] Store redacted extracted text for supported uploaded documents.
 - [ ] Add signed upload URL flow.
 - [ ] Add signed download URL flow.
 - [ ] Add application document attachments.
-- [ ] Add document list and preview UI.
+- [x] Add document list and preview UI.
 
 ### Basic Analytics
 

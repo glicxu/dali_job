@@ -328,28 +328,28 @@ Stores uploaded and generated document containers. For a master resume upload, t
 | --- | --- | --- |
 | id | uuid | Primary key |
 | workspace_id | uuid | FK |
+| user_id | uuid | FK to users |
 | document_type | document_type | Required |
 | title | text | Required |
-| current_version_id | uuid | Nullable FK to document_versions |
 | created_at | timestamptz | Required |
 | updated_at | timestamptz | Required |
+| deleted_at | timestamptz | Nullable |
 
 ### document_versions
 
-Stores immutable file versions in object storage. Uploaded master resumes should be stored here before text extraction or parsing. Generated tailored resume files should also be stored here after rendering.
+Stores immutable file versions. The first implementation uses local server storage; production can move `storage_path` to an object-storage key. Uploaded master resumes should be stored here before text extraction or parsing. Generated tailored resume files should also be stored here after rendering.
 
 | Field | Type | Notes |
 | --- | --- | --- |
 | id | uuid | Primary key |
 | document_id | uuid | FK |
 | version_number | integer | Required |
-| storage_key | text | Required |
-| mime_type | text | Required |
 | file_name | text | Required |
-| file_size_bytes | bigint | Required |
-| content_hash | text | SHA-256 |
-| created_by | text | User, AI, renderer, import |
-| ai_generation_job_id | uuid | Nullable FK |
+| content_type | text | Required |
+| size_bytes | integer | Required |
+| sha256 | text | SHA-256 |
+| storage_path | text | Local path or future object-storage key |
+| extracted_text | text | Nullable redacted extracted text |
 | created_at | timestamptz | Required |
 
 ### resume_versions

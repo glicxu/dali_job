@@ -32,6 +32,7 @@ class RuntimeConfig:
     client_origin_regex: str
     openai_model: str
     auth_mode: str
+    document_storage_dir: str
 
 
 def _load_process_config(config_path: Optional[str]) -> Optional[str]:
@@ -122,6 +123,11 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         or read_config_value("dali_job", "auth_mode", "dev")
         or "dev"
     )
+    document_storage_dir = (
+        os.getenv("DALIJOB_DOCUMENT_STORAGE_DIR", "").strip()
+        or read_config_value("documents", "storage_dir", "")
+        or str(Path(__file__).resolve().parents[1] / "storage" / "documents")
+    )
 
     return RuntimeConfig(
         config_path=loaded_path,
@@ -133,4 +139,5 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         client_origin_regex=client_origin_regex,
         openai_model=openai_model,
         auth_mode=auth_mode.lower(),
+        document_storage_dir=str(Path(document_storage_dir).expanduser().resolve()),
     )

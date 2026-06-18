@@ -259,14 +259,23 @@ Returns:
 
 Runs the initial resume-to-job matching prototype. This endpoint compares a master resume against a job description without requiring the full application tracker flow.
 
-The first implementation should accept pasted text only. Uploaded document references and job IDs can be added after the text-only prototype works.
+The endpoint accepts either pasted resume text or an uploaded resume document ID. It also accepts either pasted job description text or a job URL. When `resume_document_id` is provided, the server uses the latest redacted extracted text from the document library. When `job_url` is provided, the server attempts conservative server-side extraction from public HTML/text pages and rejects private-network URLs.
 
-Body:
+Pasted text body:
 
 ```json
 {
   "resume_text": "Resume text pasted by user...",
   "job_description_text": "Job description pasted by user..."
+}
+```
+
+Uploaded resume and job URL body:
+
+```json
+{
+  "resume_document_id": "uuid",
+  "job_url": "https://example.com/careers/software-engineer"
 }
 ```
 
@@ -361,25 +370,41 @@ Creates a task or reminder for the application.
 
 ## 7. Documents
 
-### `POST /documents/upload-url`
-
-Creates a signed upload URL.
+The first implemented document slice uses owner-protected API uploads/downloads and local server storage. Production object storage and signed URLs remain future hardening work.
 
 ### `POST /documents`
 
-Creates document metadata after upload.
+Uploads a PDF or plain text document, stores the original file, creates a document and first document version, and saves redacted extracted text when extraction is supported.
+
+Multipart fields:
+
+- `file`: required PDF or text file.
+- `title`: optional document title.
+- `document_type`: optional, defaults to `resume`.
 
 ### `GET /documents`
 
-Lists documents.
+Lists documents owned by the current user.
 
 ### `GET /documents/{documentId}`
 
-Returns document metadata and versions.
+Returns document metadata and latest version metadata.
+
+### `GET /documents/{documentId}/text`
+
+Returns redacted extracted text for the latest version when available. This is intended to support future resume/job matching from stored documents without re-uploading the same file.
+
+### `GET /documents/{documentId}/download`
+
+Downloads the original latest file version. This endpoint is bearer-token protected in the current MVP.
+
+### `POST /documents/upload-url`
+
+Future production endpoint that creates a signed upload URL.
 
 ### `GET /documents/{documentId}/download-url`
 
-Creates a signed download URL.
+Future production endpoint that creates a signed download URL.
 
 ### `POST /applications/{applicationId}/documents`
 

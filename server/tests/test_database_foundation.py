@@ -15,13 +15,17 @@ from app.modules.profiles.schemas import ResumeData
 
 
 def test_foundation_tables_are_registered_in_metadata() -> None:
-    assert {"users", "workspaces", "profiles"}.issubset(Base.metadata.tables.keys())
+    assert {"users", "workspaces", "profiles", "documents", "document_versions"}.issubset(
+        Base.metadata.tables.keys()
+    )
     assert "skills" not in Base.metadata.tables
     assert "experiences" not in Base.metadata.tables
 
     user_columns = set(Base.metadata.tables["users"].columns.keys())
     workspace_columns = set(Base.metadata.tables["workspaces"].columns.keys())
     profile_columns = set(Base.metadata.tables["profiles"].columns.keys())
+    document_columns = set(Base.metadata.tables["documents"].columns.keys())
+    document_version_columns = set(Base.metadata.tables["document_versions"].columns.keys())
 
     assert {
         "id",
@@ -50,6 +54,28 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "created_at",
         "updated_at",
     }.issubset(profile_columns)
+    assert {
+        "id",
+        "workspace_id",
+        "user_id",
+        "title",
+        "document_type",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+    }.issubset(document_columns)
+    assert {
+        "id",
+        "document_id",
+        "version_number",
+        "file_name",
+        "content_type",
+        "size_bytes",
+        "sha256",
+        "storage_path",
+        "extracted_text",
+        "created_at",
+    }.issubset(document_version_columns)
 
 
 def test_foundation_metadata_can_create_tables() -> None:
@@ -61,6 +87,8 @@ def test_foundation_metadata_can_create_tables() -> None:
     assert inspector.has_table("users")
     assert inspector.has_table("workspaces")
     assert inspector.has_table("profiles")
+    assert inspector.has_table("documents")
+    assert inspector.has_table("document_versions")
     assert not inspector.has_table("skills")
     assert not inspector.has_table("experiences")
 
@@ -75,7 +103,7 @@ def test_alembic_has_initial_schema_revision() -> None:
     config.set_main_option("script_location", str(server_dir / "app" / "db" / "migrations"))
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == "20260618_0002"
+    assert script.get_current_head() == "20260618_0003"
 
 
 def test_profile_repository_creates_local_resume_json() -> None:

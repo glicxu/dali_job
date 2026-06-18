@@ -18,3 +18,4 @@ venv/
 deploy_logs/
 *.log
 .local/
+server/storage/

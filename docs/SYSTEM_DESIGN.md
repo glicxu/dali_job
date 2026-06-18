@@ -41,9 +41,10 @@ Prototype workflow:
 
 ```text
 User opens barebones client UI
-  -> Pastes master resume text
-  -> Pastes job description text
-  -> Server extracts resume and job text
+  -> Selects uploaded master resume document or pastes resume text
+  -> Pastes job description URL or job description text
+  -> Server loads redacted resume document text when selected
+  -> Server extracts job text from the URL when supplied
   -> OpenAI-backed comparison service identifies skills, keywords, requirements, and evidence
   -> Match engine returns score from 0 to 10
   -> UI displays score, matched skills, missing skills, keyword overlap, and recommendations
@@ -55,7 +56,7 @@ Score meaning:
 - `5`: partial match with several important gaps.
 - `10`: excellent match where the resume strongly supports the job's core requirements.
 
-The first prototype should support pasted text only for both resume and job description. PDF/DOCX upload, job URL extraction, application tracking, cover letter generation, interview prep, email integration, and analytics should come later after the text-only comparison works.
+The first prototype started with pasted text only. After document management is available, the matcher should support selecting an uploaded resume document and pasting a job URL, while retaining pasted text fallbacks for pages that block extraction.
 
 The comparison should use the OpenAI API through the server-side AI provider abstraction. The OpenAI API key must be read from the server process environment variable `OPENAI_API_KEY`, never from the client and never from a committed config file. The model name should be configurable through `ProcessConfig` so it can be changed without code edits.
 

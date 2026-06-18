@@ -25,6 +25,19 @@ export type ResumeJobMatchResponse = {
   recommended_resume_updates: string[];
 };
 
+export type ResumeJobMatchRequest = {
+  resume_text?: string;
+  resume_document_id?: string;
+  job_description_text?: string;
+  job_url?: string;
+};
+
+export type JobUrlExtractResponse = {
+  job_url: string;
+  extracted_text: string;
+  character_count: number;
+};
+
 export type ResumeData = {
   headline: string | null;
   summary: string | null;
@@ -68,6 +81,39 @@ export type AuthResponse = {
   access_token: string;
   token_type: "bearer";
   user: CurrentUser;
+};
+
+export type DocumentVersion = {
+  id: string;
+  document_id: string;
+  version_number: number;
+  file_name: string;
+  content_type: string;
+  size_bytes: number;
+  sha256: string;
+  extracted_text_available: boolean;
+  created_at: string;
+};
+
+export type StoredDocument = {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  title: string;
+  document_type: string;
+  created_at: string;
+  updated_at: string;
+  latest_version: DocumentVersion | null;
+};
+
+export type DocumentListResponse = {
+  documents: StoredDocument[];
+};
+
+export type DocumentTextResponse = {
+  document_id: string;
+  version_id: string;
+  extracted_text: string;
 };
 
 export const emptyResumeData: ResumeData = {
@@ -168,16 +214,81 @@ export function getCurrentUser(): Promise<CurrentUser> {
   return requestJson<CurrentUser>("/me");
 }
 
-export async function compareResumeToJob(
-  resumeText: string,
-  jobDescriptionText: string,
-): Promise<ResumeJobMatchResponse> {
+export function listDocuments(): Promise<DocumentListResponse> {
+  return requestJson<DocumentListResponse>("/documents");
+}
+
+export async function uploadDocument(
+  file: File,
+  title: string,
+  documentType = "resume",
+): Promise<StoredDocument> {
+  const form = new FormData();
+  form.append("file", file);
+  if (title.trim()) {
+    form.append("title", title.trim());
+  }
+  form.append("document_type", documentType);
+
+  const response = await fetch(`${getApiBaseUrl()}/documents`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: form,
+  });
+
+  if (!response.ok) {
+    let message = `Document upload failed with status ${response.status}`;
+    try {
+      const payload = await response.json();
+      if (typeof payload.detail === "string") {
+        message = payload.detail;
+      }
+    } catch {
+      // Keep the status-based message when the server does not return JSON.
+    }
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+export function getDocumentText(documentId: string): Promise<DocumentTextResponse> {
+  return requestJson<DocumentTextResponse>(`/documents/${documentId}/text`);
+}
+
+export function getDocumentDownloadUrl(documentId: string): string {
+  return `${getApiBaseUrl()}/documents/${documentId}/download`;
+}
+
+export async function downloadDocumentFile(documentId: string, fileName: string): Promise<void> {
+  const response = await fetch(getDocumentDownloadUrl(documentId), {
+    headers: authHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(`Document download failed with status ${response.status}`);
+  }
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+export async function compareResumeToJob(payload: ResumeJobMatchRequest): Promise<ResumeJobMatchResponse> {
   return requestJson<ResumeJobMatchResponse>("/resume-job-matches", {
     method: "POST",
-    body: JSON.stringify({
-      resume_text: resumeText,
-      job_description_text: jobDescriptionText,
-    }),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function extractJobUrl(jobUrl: string): Promise<JobUrlExtractResponse> {
+  return requestJson<JobUrlExtractResponse>("/resume-job-matches/job-url-extract", {
+    method: "POST",
+    body: JSON.stringify({ job_url: jobUrl }),
   });
 }
 

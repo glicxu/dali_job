@@ -34,6 +34,28 @@ REQUIRED_TABLE_COLUMNS: dict[str, set[str]] = {
         "created_at",
         "updated_at",
     },
+    "documents": {
+        "id",
+        "workspace_id",
+        "user_id",
+        "title",
+        "document_type",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+    },
+    "document_versions": {
+        "id",
+        "document_id",
+        "version_number",
+        "file_name",
+        "content_type",
+        "size_bytes",
+        "sha256",
+        "storage_path",
+        "extracted_text",
+        "created_at",
+    },
 }
 
 

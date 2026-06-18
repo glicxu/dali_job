@@ -118,6 +118,17 @@ When `local` auth is enabled, use the client `/auth` page or the `/api/v1/auth/r
 
 Long term, one registration across multiple Dalifin apps should be handled by a shared identity database or standalone auth service. That is different from requiring users to log in through another app such as app_server.
 
+## Document Storage
+
+The current document-management slice stores uploaded files on the server filesystem and records metadata in SQL. Configure the storage folder in your private config:
+
+```ini
+[documents]
+storage_dir = ./storage/documents
+```
+
+`server/storage/` is ignored by git. Uploaded documents can contain sensitive information, so do not commit or manually copy this folder into source control.
+
 ## Planned Stack
 
 - Server: Python, FastAPI, SQLAlchemy, Alembic, and `DaliCommonLib`.

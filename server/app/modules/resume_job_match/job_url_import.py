@@ -210,6 +210,23 @@ def _unique_lines(text: str) -> str:
     return clean_job_text("\n".join(output))
 
 
+def _dedupe_lines(text: str) -> str:
+    lines = [line.strip() for line in text.splitlines()]
+    output: list[str] = []
+    seen: set[str] = set()
+    for line in lines:
+        if not line:
+            if output and output[-1]:
+                output.append("")
+            continue
+        key = line.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        output.append(line)
+    return clean_job_text("\n".join(output))
+
+
 def _trim_footer_text(text: str) -> str:
     lines = [line.strip() for line in text.splitlines()]
     output: list[str] = []
@@ -360,7 +377,16 @@ def extract_job_description_from_html(content: str) -> str:
     return text
 
 
-def fetch_job_description_from_url(url: str) -> str:
+def extract_job_page_text_from_html(content: str) -> str:
+    parser = JobHtmlParser()
+    parser.feed(content)
+    text = _dedupe_lines("\n".join(parser.visible_parts))
+    if len(text) < 200:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Could not extract enough job text from the URL.")
+    return text
+
+
+def _fetch_url_text(url: str) -> tuple[str, str]:
     safe_url = validate_public_job_url(url)
     request = Request(
         safe_url,
@@ -388,6 +414,18 @@ def fetch_job_description_from_url(url: str) -> str:
     if match:
         charset = match.group(1)
     text = raw.decode(charset, errors="ignore")
+    return content_type, text
+
+
+def fetch_job_description_from_url(url: str) -> str:
+    content_type, text = _fetch_url_text(url)
     if "text/plain" in content_type:
         return clean_job_text(text)
     return extract_job_description_from_html(text)
+
+
+def fetch_job_page_text_from_url(url: str) -> str:
+    content_type, text = _fetch_url_text(url)
+    if "text/plain" in content_type:
+        return clean_job_text(text)
+    return extract_job_page_text_from_html(text)

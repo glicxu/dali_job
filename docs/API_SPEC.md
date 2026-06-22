@@ -161,7 +161,9 @@ Creates recruiter/contact.
 
 Lists imported jobs.
 
-Query params:
+Response fields include `id`, `title`, `company`, `source_url`, `raw_description_text`, `job_data`, `notes`, `match_score`, `matched_resume_document_id`, `matched_resume_source`, `created_at`, and `updated_at`.
+
+Future query params:
 
 - `q`
 - `company_id`
@@ -171,41 +173,23 @@ Query params:
 - `limit`
 - `cursor`
 
-### `POST /jobs`
+### `POST /jobs/draft`
 
-Creates a job from manual input. This is a core workflow and must not depend on job board APIs, plugins, or URL extraction.
+Creates a reviewable job draft from either a public URL or pasted job description text. This endpoint parses with OpenAI but does not save the job.
 
-Body:
+Body with URL:
 
 ```json
 {
-  "title": "Software Engineer",
-  "company_name": "Example Co",
-  "source_url": "https://example.com/jobs/123",
-  "description_raw": "Full job description...",
-  "location": "Remote",
-  "remote_policy": "remote",
-  "employment_type": "full_time",
-  "seniority": "mid_level",
-  "posting_date": "2026-06-01",
-  "closing_date": "2026-07-01",
-  "compensation_min": 90000,
-  "compensation_max": 125000,
-  "compensation_currency": "USD",
-  "notes": "Found on company careers page."
+  "job_url": "https://example.com/careers/software-engineer"
 }
 ```
 
-### `POST /jobs/import-url`
-
-Attempts to import a job from a pasted URL. The server may fetch the page, extract structured job posting data, parse visible text, and return a draft job for user review.
-
-Body:
+Body with pasted text:
 
 ```json
 {
-  "url": "https://example.com/careers/software-engineer",
-  "create_application": false
+  "job_description_text": "Full job posting text..."
 }
 ```
 
@@ -213,27 +197,135 @@ Response:
 
 ```json
 {
-  "job_id": "uuid",
-  "import_status": "needs_review",
-  "fields_extracted": ["title", "company_name", "description_raw", "location"],
-  "fields_missing": ["closing_date", "compensation_min", "compensation_max"],
-  "message": "Review extracted fields before saving."
+  "source_url": "https://example.com/careers/software-engineer",
+  "raw_description_text": "Cleaned scraped or pasted text...",
+  "job_data": {
+    "title": "Software Engineer",
+    "company": "Example Co",
+    "summary": "",
+    "responsibilities": [],
+    "required_skills": [],
+    "preferred_skills": [],
+    "required_experience": [],
+    "preferred_experience": [],
+    "education": [],
+    "certifications": [],
+    "tools_and_technologies": [],
+    "keywords": [],
+    "seniority_level": "",
+    "employment_type": "",
+    "security_clearance": "",
+    "work_location": "",
+    "salary_range": "",
+    "application_deadline": ""
+  },
+  "fields_missing": ["summary"]
 }
 ```
 
-If extraction fails, the API should return a draft with the URL preserved and instructions for manual completion rather than blocking the user from creating the job.
+### `POST /jobs/import-description`
+
+Imports a job description foundation record from pasted text or a public URL. The server stores the cleaned raw text and the OpenAI-parsed structured job JSON. This endpoint supports matching and later job import review, but it is not the full application tracking workflow.
+
+Body with pasted text:
+
+```json
+{
+  "job_description_text": "Full job posting text..."
+}
+```
+
+Body with URL:
+
+```json
+{
+  "job_url": "https://example.com/careers/software-engineer"
+}
+```
+
+Response:
+
+```json
+{
+  "id": "uuid",
+  "workspace_id": "uuid",
+  "user_id": "uuid",
+  "title": "Software Engineer",
+  "company": "Example Co",
+  "source_url": "https://example.com/careers/software-engineer",
+  "raw_description_text": "Cleaned scraped or pasted text...",
+  "job_data": {
+    "title": "Software Engineer",
+    "company": "Example Co",
+    "summary": "",
+    "responsibilities": [],
+    "required_skills": [],
+    "preferred_skills": [],
+    "required_experience": [],
+    "preferred_experience": [],
+    "education": [],
+    "certifications": [],
+    "tools_and_technologies": [],
+    "keywords": [],
+    "seniority_level": "",
+    "employment_type": "",
+    "security_clearance": "",
+    "work_location": "",
+    "salary_range": "",
+    "application_deadline": ""
+  },
+  "created_at": "2026-06-19T12:00:00Z",
+  "updated_at": "2026-06-19T12:00:00Z"
+}
+```
+
+### `POST /jobs`
+
+Creates a saved job from a reviewed draft or fully manual input. This is a core workflow and does not depend on job board APIs, plugins, or URL extraction.
+
+Body:
+
+```json
+{
+  "title": "Software Engineer",
+  "company": "Example Co",
+  "source_url": "https://example.com/jobs/123",
+  "raw_description_text": "Full job description...",
+  "job_data": {
+    "title": "Software Engineer",
+    "company": "Example Co",
+    "summary": "",
+    "responsibilities": [],
+    "required_skills": [],
+    "preferred_skills": [],
+    "required_experience": [],
+    "preferred_experience": [],
+    "education": [],
+    "certifications": [],
+    "tools_and_technologies": [],
+    "keywords": [],
+    "seniority_level": "mid_level",
+    "employment_type": "full_time",
+    "security_clearance": "",
+    "work_location": "Remote",
+    "salary_range": "$90,000 - $125,000",
+    "application_deadline": "2026-07-01"
+  },
+  "notes": "Found on company careers page."
+}
+```
+
+### `GET /jobs/{jobId}`
+
+Returns a saved job owned by the current user.
+
+### `PATCH /jobs/{jobId}`
+
+Updates saved job metadata, raw text, structured `job_data`, and notes. Any job saved from URL import, pasted description import, manual entry, or matching can be edited.
 
 ### `POST /jobs/import-file`
 
 Imports a job description from an uploaded PDF or text file.
-
-### `GET /jobs/{jobId}`
-
-Returns a job with structured analysis and linked applications.
-
-### `PATCH /jobs/{jobId}`
-
-Updates job metadata.
 
 ### `POST /jobs/{jobId}/analyze`
 
@@ -259,7 +351,16 @@ Returns:
 
 Runs the initial resume-to-job matching prototype. This endpoint compares a master resume against a job description without requiring the full application tracker flow.
 
-The endpoint accepts either pasted resume text or an uploaded resume document ID. It also accepts either pasted job description text or a job URL. When `resume_document_id` is provided, the server uses the latest redacted extracted text from the document library. When `job_url` is provided, the server attempts conservative server-side extraction from public HTML/text pages and rejects private-network URLs.
+The endpoint accepts either pasted resume text or an uploaded resume document ID. It also accepts exactly one job source: pasted job description text or a job URL. The UI should block one job input when the other is filled.
+
+Before scoring, the server parses the job source into structured `job_data` JSON, then compares structured resume JSON against structured job JSON. If the saved profile resume JSON is empty, the server falls back to the supplied resume/document text wrapped as raw resume JSON so the prototype remains usable.
+
+When `job_url` is provided, the server uses broader cleaned visible page extraction for the job parser. When pasted text is provided, that text is parsed the same way.
+
+Save behavior:
+
+- If `match_score >= 5`, the server automatically saves the job to the `jobs` table with `match_score`, `matched_resume_document_id` when an uploaded resume was selected, and `matched_resume_source`.
+- If `match_score < 5`, the server does not save the job immediately. It returns `pending_job`; the UI asks whether to save or discard the low-compatibility job.
 
 Pasted text body:
 
@@ -279,11 +380,24 @@ Uploaded resume and job URL body:
 }
 ```
 
+Invalid body because both job sources are present:
+
+```json
+{
+  "resume_document_id": "uuid",
+  "job_url": "https://example.com/careers/software-engineer",
+  "job_description_text": "Pasted job text..."
+}
+```
+
 Response:
 
 ```json
 {
   "id": "uuid",
+  "saved_job_id": "uuid",
+  "job_saved": true,
+  "pending_job": null,
   "match_score": 8,
   "score_scale": "0-10",
   "summary": "Strong backend match with gaps around Kubernetes and observability.",

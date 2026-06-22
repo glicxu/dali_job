@@ -13,6 +13,9 @@ export type UnsupportedRequirement = {
 
 export type ResumeJobMatchResponse = {
   id: string | null;
+  saved_job_id: string | null;
+  job_saved: boolean;
+  pending_job: PendingMatchedJob | null;
   match_score: number;
   score_scale: "0-10";
   summary: string;
@@ -36,6 +39,69 @@ export type JobUrlExtractResponse = {
   job_url: string;
   extracted_text: string;
   character_count: number;
+};
+
+export type JobDescriptionData = {
+  title: string;
+  company: string;
+  summary: string;
+  responsibilities: string[];
+  required_skills: string[];
+  preferred_skills: string[];
+  required_experience: string[];
+  preferred_experience: string[];
+  education: string[];
+  certifications: string[];
+  tools_and_technologies: string[];
+  keywords: string[];
+  seniority_level: string;
+  employment_type: string;
+  security_clearance: string;
+  work_location: string;
+  salary_range: string;
+  application_deadline: string;
+};
+
+export type StoredJob = {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  title: string;
+  company: string;
+  source_url: string | null;
+  raw_description_text: string;
+  job_data: JobDescriptionData;
+  notes: string | null;
+  match_score: number | null;
+  matched_resume_document_id: string | null;
+  matched_resume_source: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type JobDraftResponse = {
+  source_url: string | null;
+  raw_description_text: string;
+  job_data: JobDescriptionData;
+  fields_missing: string[];
+};
+
+export type JobSavePayload = {
+  title: string;
+  company: string;
+  source_url?: string | null;
+  raw_description_text: string;
+  job_data: JobDescriptionData;
+  notes?: string | null;
+  match_score?: number | null;
+  matched_resume_document_id?: string | null;
+  matched_resume_source?: string | null;
+};
+
+export type PendingMatchedJob = JobSavePayload & {
+  match_score: number;
+  matched_resume_document_id: string | null;
+  matched_resume_source: string;
 };
 
 export type ResumeData = {
@@ -130,6 +196,27 @@ export const emptyResumeData: ResumeData = {
   volunteer: [],
   target_roles: [],
   notes: [],
+};
+
+export const emptyJobDescriptionData: JobDescriptionData = {
+  title: "",
+  company: "",
+  summary: "",
+  responsibilities: [],
+  required_skills: [],
+  preferred_skills: [],
+  required_experience: [],
+  preferred_experience: [],
+  education: [],
+  certifications: [],
+  tools_and_technologies: [],
+  keywords: [],
+  seniority_level: "",
+  employment_type: "",
+  security_clearance: "",
+  work_location: "",
+  salary_range: "",
+  application_deadline: "",
 };
 
 const tokenStorageKey = "dalijob_access_token";
@@ -289,6 +376,38 @@ export function extractJobUrl(jobUrl: string): Promise<JobUrlExtractResponse> {
   return requestJson<JobUrlExtractResponse>("/resume-job-matches/job-url-extract", {
     method: "POST",
     body: JSON.stringify({ job_url: jobUrl }),
+  });
+}
+
+export function listJobs(): Promise<StoredJob[]> {
+  return requestJson<StoredJob[]>("/jobs");
+}
+
+export function draftJobFromUrl(jobUrl: string): Promise<JobDraftResponse> {
+  return requestJson<JobDraftResponse>("/jobs/draft", {
+    method: "POST",
+    body: JSON.stringify({ job_url: jobUrl }),
+  });
+}
+
+export function draftJobFromText(jobDescriptionText: string): Promise<JobDraftResponse> {
+  return requestJson<JobDraftResponse>("/jobs/draft", {
+    method: "POST",
+    body: JSON.stringify({ job_description_text: jobDescriptionText }),
+  });
+}
+
+export function createJob(payload: JobSavePayload): Promise<StoredJob> {
+  return requestJson<StoredJob>("/jobs", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateJob(jobId: string, payload: JobSavePayload): Promise<StoredJob> {
+  return requestJson<StoredJob>(`/jobs/${jobId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
   });
 }
 

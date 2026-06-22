@@ -9,6 +9,7 @@ Rules:
 - 10 means the resume strongly supports the job's core requirements.
 - Do not invent resume skills, experience, projects, employers, dates, credentials, or metrics.
 - Treat the resume as the only source of truth for candidate evidence.
+- When structured JSON is provided, compare the resume JSON to the job description JSON by category.
 - If the job asks for something not clearly supported by the resume, put it in unsupported_requirements or missing_skills.
 - Keep recommendations practical and truthful.
 """

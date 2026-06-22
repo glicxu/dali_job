@@ -1,15 +1,28 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { compareResumeToJob, listDocuments, ResumeJobMatchResponse, StoredDocument } from "../lib/api";
+import {
+  compareResumeToJob,
+  createJob,
+  listDocuments,
+  PendingMatchedJob,
+  ResumeJobMatchResponse,
+  StoredDocument,
+} from "../lib/api";
+
+type ResumeSourceMode = "document" | "paste";
+type JobSourceMode = "url" | "paste";
 
 export function ResumeJobMatchForm() {
   const [documents, setDocuments] = useState<StoredDocument[]>([]);
+  const [resumeSourceMode, setResumeSourceMode] = useState<ResumeSourceMode>("document");
+  const [jobSourceMode, setJobSourceMode] = useState<JobSourceMode>("url");
   const [selectedDocumentId, setSelectedDocumentId] = useState("");
   const [resumeText, setResumeText] = useState("");
   const [jobUrl, setJobUrl] = useState("");
   const [jobText, setJobText] = useState("");
   const [result, setResult] = useState<ResumeJobMatchResponse | null>(null);
+  const [pendingLowMatchJob, setPendingLowMatchJob] = useState<PendingMatchedJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(true);
@@ -23,6 +36,13 @@ export function ResumeJobMatchForm() {
       ),
     [documents],
   );
+  const hasResumeSource =
+    resumeSourceMode === "document" ? Boolean(selectedDocumentId) : Boolean(resumeText.trim());
+  const hasJobSource = jobSourceMode === "url" ? Boolean(jobUrl.trim()) : Boolean(jobText.trim());
+  const resumeWarning =
+    !isLoadingDocuments && !hasResumeSource
+      ? "Add an uploaded resume or paste resume text before matching."
+      : null;
 
   useEffect(() => {
     listDocuments()
@@ -34,6 +54,9 @@ export function ResumeJobMatchForm() {
         );
         if (firstResume) {
           setSelectedDocumentId(firstResume.id);
+          setResumeSourceMode("document");
+        } else {
+          setResumeSourceMode("paste");
         }
       })
       .catch((err) => {
@@ -47,17 +70,33 @@ export function ResumeJobMatchForm() {
     setError(null);
     setStatus(null);
     setResult(null);
+    setPendingLowMatchJob(null);
+
+    if (!hasResumeSource) {
+      setError("Add an uploaded resume or paste resume text before matching.");
+      return;
+    }
+    if (!hasJobSource) {
+      setError("Add a job URL or paste a job description before matching.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       const match = await compareResumeToJob({
-        resume_document_id: selectedDocumentId || undefined,
-        resume_text: selectedDocumentId ? undefined : resumeText,
-        job_url: jobUrl.trim() || undefined,
-        job_description_text: jobUrl.trim() ? undefined : jobText,
+        resume_document_id: resumeSourceMode === "document" ? selectedDocumentId : undefined,
+        resume_text: resumeSourceMode === "paste" ? resumeText : undefined,
+        job_url: jobSourceMode === "url" ? jobUrl.trim() : undefined,
+        job_description_text: jobSourceMode === "paste" ? jobText : undefined,
       });
       setResult(match);
-      setStatus("Comparison complete.");
+      if (match.pending_job && match.match_score < 5) {
+        setPendingLowMatchJob(match.pending_job);
+        setStatus("Low compatibility match. Choose whether to save this job.");
+      } else {
+        setStatus(match.job_saved ? "Comparison complete. Job saved." : "Comparison complete.");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Comparison failed.");
     } finally {
@@ -65,25 +104,65 @@ export function ResumeJobMatchForm() {
     }
   }
 
-  const hasResumeSource = Boolean(selectedDocumentId || resumeText.trim());
-  const hasJobSource = Boolean(jobUrl.trim() || jobText.trim());
+  async function saveLowMatchJob() {
+    if (!pendingLowMatchJob) return;
+    setError(null);
+    setStatus(null);
+    setIsLoading(true);
+    try {
+      const saved = await createJob(pendingLowMatchJob);
+      setPendingLowMatchJob(null);
+      setResult((current) =>
+        current
+          ? {
+              ...current,
+              saved_job_id: saved.id,
+              job_saved: true,
+              pending_job: null,
+            }
+          : current,
+      );
+      setStatus("Low compatibility job saved.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Job save failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  function declineLowMatchJob() {
+    setPendingLowMatchJob(null);
+    setStatus("Low compatibility job was not saved.");
+  }
 
   return (
     <form className="match-form" onSubmit={handleSubmit}>
       {error ? <div className="error-banner">{error}</div> : null}
       {status ? <div className="status-banner">{status}</div> : null}
+      {resumeWarning ? <div className="status-banner">{resumeWarning}</div> : null}
 
       <section className="match-source-grid">
         <label>
           Uploaded resume
           <select
-            value={selectedDocumentId}
-            onChange={(event) => setSelectedDocumentId(event.target.value)}
+            value={resumeSourceMode === "paste" ? "__paste__" : selectedDocumentId}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value === "__paste__") {
+                setResumeSourceMode("paste");
+                setSelectedDocumentId("");
+              } else {
+                setResumeSourceMode("document");
+                setSelectedDocumentId(value);
+                setResumeText("");
+              }
+            }}
             disabled={isLoadingDocuments}
           >
             <option value="">
-              {isLoadingDocuments ? "Loading documents..." : "Use pasted resume text"}
+              {isLoadingDocuments ? "Loading documents..." : "Choose an uploaded resume"}
             </option>
+            <option value="__paste__">Paste resume text</option>
             {resumeDocuments.map((document) => (
               <option key={document.id} value={document.id}>
                 {document.title}
@@ -93,42 +172,85 @@ export function ResumeJobMatchForm() {
         </label>
 
         <label>
-          Job URL
-          <input
-            type="url"
-            value={jobUrl}
-            onChange={(event) => setJobUrl(event.target.value)}
-            placeholder="https://company.com/careers/job-id"
-          />
+          Job source
+          <select
+            value={jobSourceMode}
+            onChange={(event) => {
+              const nextMode = event.target.value as JobSourceMode;
+              setJobSourceMode(nextMode);
+              if (nextMode === "url") {
+                setJobText("");
+              } else {
+                setJobUrl("");
+              }
+            }}
+          >
+            <option value="url">Paste job URL</option>
+            <option value="paste">Paste job description</option>
+          </select>
         </label>
       </section>
 
-      <div className="input-grid">
-        <label>
-          Resume text fallback
-          <textarea
-            value={resumeText}
-            onChange={(event) => setResumeText(event.target.value)}
-            placeholder="Paste resume text if you do not want to use an uploaded resume."
-            disabled={Boolean(selectedDocumentId)}
-          />
-        </label>
-        <label>
-          Job description fallback
-          <textarea
-            value={jobText}
-            onChange={(event) => setJobText(event.target.value)}
-            placeholder="Paste the job description if URL extraction fails or the page blocks fetching."
-            disabled={Boolean(jobUrl.trim())}
-          />
-        </label>
-      </div>
+      <section className="input-grid">
+        <div>
+          {resumeSourceMode === "paste" ? (
+            <label>
+              Resume text
+              <textarea
+                value={resumeText}
+                onChange={(event) => setResumeText(event.target.value)}
+                placeholder="Paste resume text."
+              />
+            </label>
+          ) : null}
+        </div>
+        <div>
+          {jobSourceMode === "url" ? (
+            <label>
+              Job URL
+              <input
+                type="url"
+                value={jobUrl}
+                onChange={(event) => setJobUrl(event.target.value)}
+                placeholder="https://company.com/careers/job-id"
+              />
+            </label>
+          ) : (
+            <label>
+              Job description
+              <textarea
+                value={jobText}
+                onChange={(event) => setJobText(event.target.value)}
+                placeholder="Paste the job description."
+              />
+            </label>
+          )}
+        </div>
+      </section>
 
       <button type="submit" disabled={isLoading || !hasResumeSource || !hasJobSource}>
-        {isLoading ? "Comparing..." : "Compare Resume To Job"}
+        {isLoading ? "Comparing..." : "Match"}
       </button>
 
       {result ? <MatchResult result={result} /> : null}
+      {pendingLowMatchJob ? (
+        <section className="warning-banner">
+          <div>
+            <strong>Low compatibility</strong>
+            <p className="summary">
+              This job scored below 5. Save it only if you still want to keep it in your job list.
+            </p>
+          </div>
+          <div className="button-row">
+            <button type="button" className="secondary-button" onClick={declineLowMatchJob}>
+              Do Not Save
+            </button>
+            <button type="button" disabled={isLoading} onClick={() => void saveLowMatchJob()}>
+              Save Job
+            </button>
+          </div>
+        </section>
+      ) : null}
     </form>
   );
 }

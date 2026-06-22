@@ -225,31 +225,52 @@ The old normalized profile-section tables (`skills`, `experiences`, `education`,
 
 ### jobs
 
+The initial implemented jobs table stores a cleaned raw posting snapshot plus a structured `job_data` JSON document. Later application tracking can add richer workflow columns or normalize selected fields, but matching should use `job_data` instead of parsing raw text repeatedly.
+
 | Field | Type | Notes |
 | --- | --- | --- |
 | id | uuid | Primary key |
 | workspace_id | uuid | FK |
-| company_id | uuid | Nullable FK |
-| source_provider | text | Manual, plugin, URL, PDF, paste |
+| user_id | uuid | FK owner |
+| title | text | Copied from `job_data.title` for list/filter display |
+| company | text | Copied from `job_data.company` for list/filter display |
 | source_url | text | Nullable |
-| external_id | text | Nullable |
-| title | text | Required |
-| description_raw | text | Required |
-| description_structured | jsonb | Parsed model |
-| location | text | Nullable |
-| remote_policy | text | `unknown`, `onsite`, `hybrid`, `remote` |
-| employment_type | text | Nullable |
-| seniority | text | Nullable |
-| posting_date | date | Nullable |
-| closing_date | date | Nullable job deadline |
-| compensation_min | numeric | Nullable |
-| compensation_max | numeric | Nullable |
-| compensation_currency | text | Nullable |
-| import_status | text | `manual`, `draft`, `imported`, `needs_review`, `failed_extraction` |
-| import_notes | text | Nullable extraction or manual-entry notes |
-| captured_at | timestamptz | Required |
+| raw_description_text | text | Cleaned text from pasted input or broad URL scraping |
+| job_data | jsonb | Structured job description JSON used for matching |
+| notes | text | Nullable user notes |
+| match_score | integer | Nullable 0-10 score from the latest resume/job match that saved this job |
+| matched_resume_document_id | uuid | Nullable FK to the uploaded resume document used for the saved match |
+| matched_resume_source | text | Nullable source label such as `document` or `pasted_text` |
 | created_at | timestamptz | Required |
 | updated_at | timestamptz | Required |
+| deleted_at | timestamptz | Nullable soft delete |
+
+`job_data` schema:
+
+```json
+{
+  "title": "",
+  "company": "",
+  "summary": "",
+  "responsibilities": [],
+  "required_skills": [],
+  "preferred_skills": [],
+  "required_experience": [],
+  "preferred_experience": [],
+  "education": [],
+  "certifications": [],
+  "tools_and_technologies": [],
+  "keywords": [],
+  "seniority_level": "",
+  "employment_type": "",
+  "security_clearance": "",
+  "work_location": "",
+  "salary_range": "",
+  "application_deadline": ""
+}
+```
+
+Future application tracking may add or derive columns such as `remote_policy`, `closing_date`, `compensation_min`, and `compensation_max` when those fields need filtering/sorting. The raw JSON remains the canonical parsed job description for AI matching.
 
 ### applications
 

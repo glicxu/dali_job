@@ -41,6 +41,7 @@ This is the first functional slice. It should happen before the full tracker, co
 - [x] Add uploaded resume document selection for matching.
 - [x] Add job URL input with server-side text extraction for matching.
 - [x] Keep pasted resume and job description text as fallback inputs.
+- [x] Make job URL input and pasted job description input mutually exclusive in the matcher UI.
 - [x] Add a "Compare Resume To Job" action.
 - [x] Show a 0-10 match score.
 - [x] Show matched skills and keywords.
@@ -54,6 +55,12 @@ This is the first functional slice. It should happen before the full tracker, co
 - [x] Add resume document ID input using stored redacted extracted text.
 - [x] Add job description pasted-text input.
 - [x] Add job URL extraction input for ad hoc matching.
+- [x] Parse the job description as structured job JSON before matching.
+- [x] Use structured resume JSON and structured job JSON for the OpenAI match request when available.
+- [x] Save pasted job-description fallback text to the jobs table when the match is saved.
+- [x] Auto-save matched jobs only when the score is 5 or higher.
+- [x] Ask the user whether to save low-compatibility jobs below score 5.
+- [x] Store match score and selected resume reference on saved jobs.
 - [x] Add OpenAI provider implementation for the comparison.
 - [x] Read OpenAI API key from server environment variable `OPENAI_API_KEY`.
 - [x] Read OpenAI model from `ProcessConfig` `[openai].model`.
@@ -106,12 +113,15 @@ The sections below are grouped by product area. The order above should guide imp
 
 ### Job Import
 
-- [ ] Add full manual job creation with title, company, description, deadline, location, salary, source URL, and notes.
-- [ ] Add copy/paste job description import.
-- [ ] Add URL import that attempts extraction and creates a reviewable draft after the text-only comparison prototype works.
-- [ ] Add fallback flow for failed URL extraction so the user can manually complete the job.
-- [ ] Store raw and structured job data.
-- [ ] Build jobs list and detail UI.
+- [x] Add backend jobs table for raw scraped/pasted text plus structured job JSON.
+- [x] Add backend OpenAI parser contract for the structured job description JSON schema.
+- [x] Add backend endpoint that saves pasted or URL-scraped job descriptions as raw text plus parsed JSON.
+- [x] Add full manual job creation with title, company, description, deadline, location, salary, source URL, and notes.
+- [x] Add copy/paste job description import.
+- [x] Add URL import that attempts extraction and creates a reviewable draft after the text-only comparison prototype works.
+- [x] Add fallback flow for failed URL extraction so the user can manually complete the job.
+- [x] Store raw and structured job data.
+- [x] Build jobs list and detail UI.
 
 ### Application Tracking
 

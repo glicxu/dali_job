@@ -42,11 +42,14 @@ Prototype workflow:
 ```text
 User opens barebones client UI
   -> Selects uploaded master resume document or pastes resume text
-  -> Pastes job description URL or job description text
-  -> Server loads redacted resume document text when selected
-  -> Server extracts job text from the URL when supplied
-  -> OpenAI-backed comparison service identifies skills, keywords, requirements, and evidence
+  -> Pastes either a job description URL or job description text, never both
+  -> Server loads structured profile resume JSON when available
+  -> Server extracts broad job page text from the URL or accepts pasted fallback text
+  -> OpenAI parses the job text into structured job_data JSON
+  -> OpenAI-backed comparison service compares resume JSON against job_data JSON
   -> Match engine returns score from 0 to 10
+  -> If score is 5 or higher, server saves raw_description_text, job_data, match_score, and resume reference
+  -> If score is below 5, UI asks whether to save or discard the low-compatibility job
   -> UI displays score, matched skills, missing skills, keyword overlap, and recommendations
 ```
 
@@ -56,11 +59,11 @@ Score meaning:
 - `5`: partial match with several important gaps.
 - `10`: excellent match where the resume strongly supports the job's core requirements.
 
-The first prototype started with pasted text only. After document management is available, the matcher should support selecting an uploaded resume document and pasting a job URL, while retaining pasted text fallbacks for pages that block extraction.
+The first prototype started with pasted text only. After document management is available, the matcher should support selecting an uploaded resume document and pasting a job URL, while retaining pasted text fallbacks for pages that block extraction. The job URL field and pasted job description field should be mutually exclusive. In either mode, the server should save high-compatibility jobs automatically and let the user decide whether to save jobs with a score below 5.
 
 The comparison should use the OpenAI API through the server-side AI provider abstraction. The OpenAI API key must be read from the server process environment variable `OPENAI_API_KEY`, never from the client and never from a committed config file. The model name should be configurable through `ProcessConfig` so it can be changed without code edits.
 
-This prototype should still preserve the client/server split: the client submits resume/job text through the API, and the server performs AI calls, scoring, validation, and persistence.
+This prototype should still preserve the client/server split: the client submits source selections through the API, and the server performs URL fetching, AI parsing, scoring, validation, and persistence.
 
 ### 4.1 User Profile Module
 
@@ -118,6 +121,15 @@ Manual entry is a core workflow, not a fallback-only feature. A user must be abl
 
 URL extraction is a convenience feature. If the page cannot be fetched, blocks automated access, requires authentication, renders content client-side, or does not expose parseable job data, DaliJob should keep the URL and let the user manually fill or paste the missing fields. URL extraction must not be required for application tracking.
 
+The implemented job import flow creates reviewable drafts from URL or pasted text before saving. Users can also start with a blank manual job form. Any saved job can be reopened and edited, including jobs created during resume-to-job matching.
+
+For AI parsing, DaliJob should preserve two forms of each imported posting:
+
+- `raw_description_text`: cleaned pasted text or broadly scraped visible page text.
+- `job_data`: structured JSON extracted from `raw_description_text`.
+
+The resume-to-job matching system should eventually compare structured resume JSON against structured job JSON rather than only comparing raw text. URL scraping for this path can be broader than the conservative text-only matcher scraper because OpenAI is responsible for categorizing useful fields and ignoring unrelated page text. The original raw text should still be saved so the job can be reparsed when the schema or prompts improve.
+
 Manual job fields should include:
 
 - Job title.
@@ -150,8 +162,9 @@ URL extraction should respect site terms and use conservative fetching. The prod
 
 ```text
 Job Description
-  -> Parser
-  -> Structured Job Model
+  -> Cleaned raw_description_text
+  -> OpenAI Parser
+  -> Structured job_data JSON
   -> Skill Extraction
   -> Requirement Extraction
   -> Keyword Extraction
@@ -171,6 +184,31 @@ Outputs:
 - Recommended study topics.
 
 The score should be explainable. The user should see why the job matched or did not match, including which requirements were supported by resume evidence and which requirements were missing.
+
+Initial structured job JSON:
+
+```json
+{
+  "title": "",
+  "company": "",
+  "summary": "",
+  "responsibilities": [],
+  "required_skills": [],
+  "preferred_skills": [],
+  "required_experience": [],
+  "preferred_experience": [],
+  "education": [],
+  "certifications": [],
+  "tools_and_technologies": [],
+  "keywords": [],
+  "seniority_level": "",
+  "employment_type": "",
+  "security_clearance": "",
+  "work_location": "",
+  "salary_range": "",
+  "application_deadline": ""
+}
+```
 
 ### 4.5 Resume Engine
 

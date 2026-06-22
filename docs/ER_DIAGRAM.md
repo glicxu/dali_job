@@ -63,6 +63,7 @@ erDiagram
 
 - In the MVP, each `workspace` is private and has exactly one owning `user`.
 - `profiles.resume_data` holds source career facts as one structured JSON document. Generated documents should reference profile-derived versions instead of duplicating facts without traceability.
+- `jobs.raw_description_text` stores the cleaned pasted or scraped posting text, and `jobs.job_data` stores the structured job description JSON used for matching.
 - `resume_versions`, `cover_letter_versions`, and `document_versions` are immutable.
 - `applications` connect jobs, companies, submitted documents, interviews, notes, tasks, offers, email messages, and calendar events.
 - `resume_job_matches` stores 0-10 resume-to-job comparison results for the initial prototype and later recommendation workflows.

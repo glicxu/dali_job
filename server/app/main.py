@@ -16,6 +16,7 @@ from app.db.session import dispose_db_engines
 from app.modules.auth.router import auth_router, router as auth_base_router
 from app.modules.documents.router import router as documents_router
 from app.modules.health.router import router as health_router
+from app.modules.jobs.router import router as jobs_router
 from app.modules.profiles.router import router as profile_router
 from app.modules.resume_job_match.router import router as resume_job_match_router
 
@@ -59,6 +60,7 @@ def create_app(config_path: Optional[str] = None) -> FastAPI:
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(documents_router, prefix="/api/v1")
     app.include_router(health_router, prefix="/api/v1")
+    app.include_router(jobs_router, prefix="/api/v1")
     app.include_router(profile_router, prefix="/api/v1")
     app.include_router(resume_job_match_router, prefix="/api/v1")
     return app

@@ -379,6 +379,269 @@
         }
       }
     },
+    "/api/v1/jobs": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "List Jobs",
+        "operationId": "list_jobs_api_v1_jobs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JobResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Jobs Api V1 Jobs Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Create Job",
+        "operationId": "create_job_api_v1_jobs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/jobs/draft": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Draft Job Description",
+        "operationId": "draft_job_description_api_v1_jobs_draft_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobDraftResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/import-description": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Import Job Description",
+        "operationId": "import_job_description_api_v1_jobs_import_description_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Get Job",
+        "operationId": "get_job_api_v1_jobs__job_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Update Job",
+        "operationId": "update_job_api_v1_jobs__job_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/profile": {
       "get": {
         "tags": [
@@ -891,6 +1154,494 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "JobDescriptionData": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": ""
+          },
+          "company": {
+            "type": "string",
+            "title": "Company",
+            "default": ""
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "default": ""
+          },
+          "responsibilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Responsibilities"
+          },
+          "required_skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Required Skills"
+          },
+          "preferred_skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Preferred Skills"
+          },
+          "required_experience": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Required Experience"
+          },
+          "preferred_experience": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Preferred Experience"
+          },
+          "education": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Education"
+          },
+          "certifications": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Certifications"
+          },
+          "tools_and_technologies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tools And Technologies"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Keywords"
+          },
+          "seniority_level": {
+            "type": "string",
+            "title": "Seniority Level",
+            "default": ""
+          },
+          "employment_type": {
+            "type": "string",
+            "title": "Employment Type",
+            "default": ""
+          },
+          "security_clearance": {
+            "type": "string",
+            "title": "Security Clearance",
+            "default": ""
+          },
+          "work_location": {
+            "type": "string",
+            "title": "Work Location",
+            "default": ""
+          },
+          "salary_range": {
+            "type": "string",
+            "title": "Salary Range",
+            "default": ""
+          },
+          "application_deadline": {
+            "type": "string",
+            "title": "Application Deadline",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "JobDescriptionData"
+      },
+      "JobDraftResponse": {
+        "properties": {
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "raw_description_text": {
+            "type": "string",
+            "title": "Raw Description Text"
+          },
+          "job_data": {
+            "$ref": "#/components/schemas/JobDescriptionData"
+          },
+          "fields_missing": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Fields Missing"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_url",
+          "raw_description_text",
+          "job_data"
+        ],
+        "title": "JobDraftResponse"
+      },
+      "JobImportRequest": {
+        "properties": {
+          "job_description_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Description Text"
+          },
+          "job_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2083,
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Url"
+          }
+        },
+        "type": "object",
+        "title": "JobImportRequest"
+      },
+      "JobResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "workspace_id": {
+            "type": "string",
+            "title": "Workspace Id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "company": {
+            "type": "string",
+            "title": "Company"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "raw_description_text": {
+            "type": "string",
+            "title": "Raw Description Text"
+          },
+          "job_data": {
+            "$ref": "#/components/schemas/JobDescriptionData"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "match_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Score"
+          },
+          "matched_resume_document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Resume Document Id"
+          },
+          "matched_resume_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Resume Source"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "workspace_id",
+          "user_id",
+          "title",
+          "company",
+          "source_url",
+          "raw_description_text",
+          "job_data",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "JobResponse"
+      },
+      "JobSaveRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": ""
+          },
+          "company": {
+            "type": "string",
+            "title": "Company",
+            "default": ""
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2083,
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "raw_description_text": {
+            "type": "string",
+            "title": "Raw Description Text"
+          },
+          "job_data": {
+            "$ref": "#/components/schemas/JobDescriptionData"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "match_score": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Score"
+          },
+          "matched_resume_document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Resume Document Id"
+          },
+          "matched_resume_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Resume Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "raw_description_text",
+          "job_data"
+        ],
+        "title": "JobSaveRequest"
+      },
+      "JobUpdateRequest": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2083,
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "raw_description_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Description Text"
+          },
+          "job_data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobDescriptionData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "match_score": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Score"
+          },
+          "matched_resume_document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Resume Document Id"
+          },
+          "matched_resume_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Resume Source"
+          }
+        },
+        "type": "object",
+        "title": "JobUpdateRequest"
+      },
       "JobUrlExtractRequest": {
         "properties": {
           "job_url": {
@@ -951,6 +1702,78 @@
           "password"
         ],
         "title": "LoginRequest"
+      },
+      "PendingMatchedJob": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "company": {
+            "type": "string",
+            "title": "Company"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "raw_description_text": {
+            "type": "string",
+            "title": "Raw Description Text"
+          },
+          "job_data": {
+            "$ref": "#/components/schemas/JobDescriptionData"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "match_score": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Match Score"
+          },
+          "matched_resume_document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Resume Document Id"
+          },
+          "matched_resume_source": {
+            "type": "string",
+            "title": "Matched Resume Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "company",
+          "raw_description_text",
+          "job_data",
+          "match_score",
+          "matched_resume_source"
+        ],
+        "title": "PendingMatchedJob"
       },
       "ProfileResponse": {
         "properties": {
@@ -1214,6 +2037,30 @@
               }
             ],
             "title": "Job Url"
+          },
+          "resume_data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Data"
+          },
+          "job_data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Data"
           }
         },
         "type": "object",
@@ -1231,6 +2078,32 @@
               }
             ],
             "title": "Id"
+          },
+          "saved_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Saved Job Id"
+          },
+          "job_saved": {
+            "type": "boolean",
+            "title": "Job Saved",
+            "default": false
+          },
+          "pending_job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PendingMatchedJob"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "match_score": {
             "type": "integer",

@@ -56,6 +56,23 @@ REQUIRED_TABLE_COLUMNS: dict[str, set[str]] = {
         "extracted_text",
         "created_at",
     },
+    "jobs": {
+        "id",
+        "workspace_id",
+        "user_id",
+        "title",
+        "company",
+        "source_url",
+        "raw_description_text",
+        "job_data",
+        "notes",
+        "match_score",
+        "matched_resume_document_id",
+        "matched_resume_source",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+    },
 }
 
 

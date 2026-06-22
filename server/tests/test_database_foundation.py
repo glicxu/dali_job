@@ -15,7 +15,7 @@ from app.modules.profiles.schemas import ResumeData
 
 
 def test_foundation_tables_are_registered_in_metadata() -> None:
-    assert {"users", "workspaces", "profiles", "documents", "document_versions"}.issubset(
+    assert {"users", "workspaces", "profiles", "documents", "document_versions", "jobs"}.issubset(
         Base.metadata.tables.keys()
     )
     assert "skills" not in Base.metadata.tables
@@ -26,6 +26,7 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
     profile_columns = set(Base.metadata.tables["profiles"].columns.keys())
     document_columns = set(Base.metadata.tables["documents"].columns.keys())
     document_version_columns = set(Base.metadata.tables["document_versions"].columns.keys())
+    job_columns = set(Base.metadata.tables["jobs"].columns.keys())
 
     assert {
         "id",
@@ -76,6 +77,23 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "extracted_text",
         "created_at",
     }.issubset(document_version_columns)
+    assert {
+        "id",
+        "workspace_id",
+        "user_id",
+        "title",
+        "company",
+        "source_url",
+        "raw_description_text",
+        "job_data",
+        "notes",
+        "match_score",
+        "matched_resume_document_id",
+        "matched_resume_source",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+    }.issubset(job_columns)
 
 
 def test_foundation_metadata_can_create_tables() -> None:
@@ -89,6 +107,7 @@ def test_foundation_metadata_can_create_tables() -> None:
     assert inspector.has_table("profiles")
     assert inspector.has_table("documents")
     assert inspector.has_table("document_versions")
+    assert inspector.has_table("jobs")
     assert not inspector.has_table("skills")
     assert not inspector.has_table("experiences")
 
@@ -103,7 +122,7 @@ def test_alembic_has_initial_schema_revision() -> None:
     config.set_main_option("script_location", str(server_dir / "app" / "db" / "migrations"))
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == "20260618_0003"
+    assert script.get_current_head() == "20260619_0006"
 
 
 def test_profile_repository_creates_local_resume_json() -> None:

@@ -100,6 +100,11 @@ class FakeJobDescriptionParser:
         )
 
 
+class FailingJobDescriptionParser:
+    def parse(self, raw_description_text: str) -> JobDescriptionData:
+        raise AssertionError("cached job URL should not be parsed again")
+
+
 def create_test_client() -> TestClient:
     engine = create_engine(
         "sqlite://",
@@ -197,6 +202,8 @@ def test_resume_job_match_returns_score_and_skills() -> None:
     payload = response.json()
     assert payload["match_score"] == 7
     assert payload["score_scale"] == "0-10"
+    assert payload["saved_job_id"] is not None
+    assert payload["saved_match_id"] is not None
     assert payload["matched_skills"] == ["Python", "FastAPI"]
     assert payload["missing_skills"] == ["Kubernetes"]
     assert payload["supported_requirements"][0]["confidence"] == 0.9
@@ -242,11 +249,93 @@ def test_resume_job_match_uses_document_and_job_url(monkeypatch) -> None:
     assert payload["match_score"] == 7
     assert payload["job_saved"] is True
     assert payload["saved_job_id"] is not None
+    assert payload["saved_match_id"] is not None
     jobs = client.get("/api/v1/jobs").json()
     assert jobs[0]["source_url"] == "https://example.com/jobs/backend-engineer"
     assert jobs[0]["match_score"] == 7
     assert jobs[0]["matched_resume_document_id"] == document_id
     assert jobs[0]["matched_resume_source"] == "document"
+
+
+def test_resume_job_match_uses_saved_resume_profile() -> None:
+    client = create_test_client()
+
+    profile_response = client.post(
+        "/api/v1/resume-profiles",
+        json={
+            "title": "Backend Resume",
+            "resume_data": {
+                "headline": "Backend Engineer",
+                "summary": "Builds APIs.",
+                "experience": ["Built FastAPI services with Python."],
+                "skills": ["Python", "FastAPI"],
+                "education": [],
+                "certifications": [],
+                "projects": [],
+                "awards": [],
+                "publications": [],
+                "languages": [],
+                "volunteer": [],
+                "target_roles": [],
+                "notes": [],
+            },
+            "is_favorite": True,
+        },
+    )
+    assert profile_response.status_code == 200
+    resume_profile_id = profile_response.json()["id"]
+
+    response = client.post(
+        "/api/v1/resume-job-matches",
+        json={
+            "resume_profile_id": resume_profile_id,
+            "job_description_text": "Build APIs using PostgreSQL and Kubernetes.",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["match_score"] == 7
+    jobs = client.get("/api/v1/jobs").json()
+    assert jobs[0]["matched_resume_profile_id"] == resume_profile_id
+    assert jobs[0]["matched_resume_source"] == "resume_profile"
+
+
+def test_resume_job_match_reuses_cached_job_url(monkeypatch) -> None:
+    client = create_test_client()
+    monkeypatch.setattr(
+        match_router,
+        "fetch_job_page_text_from_url",
+        lambda _url: "Build APIs using PostgreSQL and Kubernetes.",
+    )
+
+    first_response = client.post(
+        "/api/v1/resume-job-matches",
+        json={
+            "resume_text": "Built FastAPI services with Python.",
+            "job_url": "https://example.com/jobs/backend-engineer",
+        },
+    )
+
+    assert first_response.status_code == 200
+    client.app.dependency_overrides[get_match_job_description_parser] = lambda: FailingJobDescriptionParser()
+    monkeypatch.setattr(
+        match_router,
+        "fetch_job_page_text_from_url",
+        lambda _url: (_ for _ in ()).throw(AssertionError("cached job URL should not be fetched again")),
+    )
+
+    second_response = client.post(
+        "/api/v1/resume-job-matches",
+        json={
+            "resume_text": "Built FastAPI services with Python.",
+            "job_url": "https://example.com/jobs/backend-engineer",
+        },
+    )
+
+    assert second_response.status_code == 200
+    assert second_response.json()["saved_job_id"] == first_response.json()["saved_job_id"]
+    assert len(client.get("/api/v1/jobs").json()) == 1
 
 
 def test_resume_job_match_low_score_returns_pending_job_without_saving() -> None:
@@ -266,9 +355,21 @@ def test_resume_job_match_low_score_returns_pending_job_without_saving() -> None
     assert payload["match_score"] == 3
     assert payload["job_saved"] is False
     assert payload["saved_job_id"] is None
+    assert payload["saved_match_id"] is None
     assert payload["pending_job"]["match_score"] == 3
     assert payload["pending_job"]["matched_resume_source"] == "pasted_text"
     assert client.get("/api/v1/jobs").json() == []
+
+    save_response = client.post("/api/v1/resume-job-matches/pending-job", json=payload["pending_job"])
+
+    assert save_response.status_code == 200
+    saved_payload = save_response.json()
+    assert saved_payload["saved_job_id"] is not None
+    assert saved_payload["saved_match_id"] is not None
+    saved_jobs = client.get("/api/v1/jobs").json()
+    assert len(saved_jobs) == 1
+    assert saved_jobs[0]["match_score"] == 3
+    assert saved_jobs[0]["matched_resume_source"] == "pasted_text"
 
 
 def test_resume_job_match_rejects_both_job_sources() -> None:

@@ -210,3 +210,41 @@ def test_update_saved_job_edits_metadata_and_json() -> None:
     assert payload["title"] == "Senior Backend Engineer"
     assert payload["job_data"]["required_skills"] == ["Python", "PostgreSQL"]
     assert payload["notes"] == "Updated after review."
+
+
+def test_updating_saved_job_does_not_mutate_cached_url_job(monkeypatch) -> None:
+    client = create_test_client()
+    monkeypatch.setattr(
+        jobs_router,
+        "fetch_job_page_text_from_url",
+        lambda _url: "Build APIs using Python and PostgreSQL for customer workflows.",
+    )
+    create_response = client.post(
+        "/api/v1/jobs/import-description",
+        json={"job_url": "https://example.com/jobs/backend-engineer"},
+    )
+    assert create_response.status_code == 200
+    saved = create_response.json()
+
+    update_response = client.patch(
+        f"/api/v1/jobs/{saved['id']}",
+        json={
+            "title": "My Edited Job Title",
+            "job_data": {
+                **saved["job_data"],
+                "title": "My Edited Job Title",
+                "required_skills": ["Custom Skill"],
+            },
+        },
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["job_data"]["required_skills"] == ["Custom Skill"]
+
+    draft_response = client.post(
+        "/api/v1/jobs/draft",
+        json={"job_url": "https://example.com/jobs/backend-engineer"},
+    )
+    assert draft_response.status_code == 200
+    draft = draft_response.json()
+    assert draft["job_data"]["title"] == "Backend Engineer"
+    assert draft["job_data"]["required_skills"] == ["Python", "API design"]

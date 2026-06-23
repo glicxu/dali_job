@@ -9,7 +9,8 @@ from app.modules.jobs.schemas import JobDescriptionData
 
 class ResumeJobMatchRequest(BaseModel):
     resume_text: str | None = Field(default=None)
-    resume_document_id: str | None = Field(default=None)
+    resume_profile_id: int | None = Field(default=None)
+    resume_document_id: int | None = Field(default=None)
     job_description_text: str | None = Field(default=None)
     job_url: HttpUrl | None = Field(default=None)
     resume_data: dict[str, Any] | None = Field(default=None)
@@ -17,8 +18,15 @@ class ResumeJobMatchRequest(BaseModel):
 
     @model_validator(mode="after")
     def require_resume_and_job_sources(self) -> ResumeJobMatchRequest:
-        if not (self.resume_text and self.resume_text.strip()) and not self.resume_document_id:
-            raise ValueError("Provide resume_text or resume_document_id.")
+        resume_sources = [
+            bool(self.resume_profile_id),
+            bool(self.resume_document_id),
+            bool(self.resume_text and self.resume_text.strip()),
+        ]
+        if not any(resume_sources):
+            raise ValueError("Provide resume_profile_id, resume_text, or resume_document_id.")
+        if sum(resume_sources) > 1:
+            raise ValueError("Provide only one resume source.")
         has_job_text = bool(self.job_description_text and self.job_description_text.strip())
         has_job_url = bool(self.job_url)
         if not has_job_text and not has_job_url and not self.job_data:
@@ -47,15 +55,17 @@ class PendingMatchedJob(BaseModel):
     job_data: JobDescriptionData
     notes: str | None = None
     match_score: int = Field(..., ge=0, le=10)
-    matched_resume_document_id: str | None = None
+    matched_resume_profile_id: int | None = None
+    matched_resume_document_id: int | None = None
     matched_resume_source: str
 
 
 class ResumeJobMatchResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    id: str | None = None
-    saved_job_id: str | None = None
+    id: int | None = None
+    saved_job_id: int | None = None
+    saved_match_id: int | None = None
     job_saved: bool = False
     pending_job: PendingMatchedJob | None = None
     match_score: int = Field(..., ge=0, le=10)
@@ -78,3 +88,8 @@ class JobUrlExtractResponse(BaseModel):
     job_url: str
     extracted_text: str
     character_count: int
+
+
+class SavePendingMatchedJobResponse(BaseModel):
+    saved_job_id: int
+    saved_match_id: int

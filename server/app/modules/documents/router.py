@@ -60,7 +60,7 @@ async def upload_document(
 
 @router.get("/{document_id}", response_model=DocumentResponse)
 def get_document(
-    document_id: str,
+    document_id: int,
     db: Session = Depends(get_db_session),
     identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> DocumentResponse:
@@ -73,7 +73,7 @@ def get_document(
 
 @router.get("/{document_id}/text", response_model=DocumentTextResponse)
 def get_document_text(
-    document_id: str,
+    document_id: int,
     db: Session = Depends(get_db_session),
     identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> DocumentTextResponse:
@@ -88,7 +88,7 @@ def get_document_text(
 
 @router.get("/{document_id}/download")
 def download_document(
-    document_id: str,
+    document_id: int,
     db: Session = Depends(get_db_session),
     identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> FileResponse:

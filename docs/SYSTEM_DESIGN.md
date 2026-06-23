@@ -8,7 +8,7 @@ DaliJob is not a job board and not simply a resume builder. Job aggregation is o
 
 ## 2. Product Principles
 
-- The user's profile is the canonical source of truth for career facts.
+- The user's structured resume profiles are the canonical source of truth for resume facts.
 - Generated resumes, cover letters, and study guides are outputs derived from structured data.
 - AI may rephrase, reorder, emphasize, and summarize. AI may not invent skills, projects, experience, employment, certifications, education, metrics, or dates.
 - Every application should preserve the exact resume, cover letter, documents, and notes used for that opportunity.
@@ -41,14 +41,14 @@ Prototype workflow:
 
 ```text
 User opens barebones client UI
-  -> Selects uploaded master resume document or pastes resume text
+  -> Selects a structured resume profile, uploaded master resume document, or pasted resume text
   -> Pastes either a job description URL or job description text, never both
-  -> Server loads structured profile resume JSON when available
+  -> Server loads the selected structured resume profile JSON when available
   -> Server extracts broad job page text from the URL or accepts pasted fallback text
-  -> OpenAI parses the job text into structured job_data JSON
+  -> Server reuses cached job_data when the URL is already stored, otherwise OpenAI parses the job text into structured job_data JSON
   -> OpenAI-backed comparison service compares resume JSON against job_data JSON
   -> Match engine returns score from 0 to 10
-  -> If score is 5 or higher, server saves raw_description_text, job_data, match_score, and resume reference
+  -> If score is 5 or higher, server saves or reuses jobs_cache, creates a user_jobs editable copy, and stores the score/resume reference in job_resume_matches
   -> If score is below 5, UI asks whether to save or discard the low-compatibility job
   -> UI displays score, matched skills, missing skills, keyword overlap, and recommendations
 ```
@@ -59,17 +59,19 @@ Score meaning:
 - `5`: partial match with several important gaps.
 - `10`: excellent match where the resume strongly supports the job's core requirements.
 
-The first prototype started with pasted text only. After document management is available, the matcher should support selecting an uploaded resume document and pasting a job URL, while retaining pasted text fallbacks for pages that block extraction. The job URL field and pasted job description field should be mutually exclusive. In either mode, the server should save high-compatibility jobs automatically and let the user decide whether to save jobs with a score below 5.
+The first prototype started with pasted text only. After document management is available, the matcher should support selecting a structured resume profile or uploaded resume document and pasting a job URL, while retaining pasted text fallbacks for pages that block extraction. The resume selector should list favorited resume profiles first, followed by other resume profiles, uploaded resume documents, and pasted-text fallback. The job URL field and pasted job description field should be mutually exclusive. In either mode, the server should save high-compatibility jobs automatically and let the user decide whether to save jobs with a score below 5. `jobs_cache` is a shared posting cache, `user_jobs` stores each user's editable job copy, and match scores are user/resume-specific in `job_resume_matches`.
 
 The comparison should use the OpenAI API through the server-side AI provider abstraction. The OpenAI API key must be read from the server process environment variable `OPENAI_API_KEY`, never from the client and never from a committed config file. The model name should be configurable through `ProcessConfig` so it can be changed without code edits.
 
 This prototype should still preserve the client/server split: the client submits source selections through the API, and the server performs URL fetching, AI parsing, scoring, validation, and persistence.
 
-### 4.1 User Profile Module
+### 4.1 Resume Profiles Module
 
-Stores the structured resume profile JSON that powers resume generation, cover letters, study guides, and analytics.
+Stores multiple structured resume profiles that power resume generation, cover letters, study guides, matching, and analytics.
 
-The active profile is stored in `profiles.resume_data` as one JSON object with sections such as:
+There is no separate `profiles` table in the active schema. If DaliJob later needs account-level career preferences, add a clearly named table such as `career_preferences`.
+
+Each `resume_profiles.resume_data` object contains sections such as:
 
 - Education.
 - Work experience.
@@ -80,7 +82,9 @@ The active profile is stored in `profiles.resume_data` as one JSON object with s
 - Publications.
 - Preferences such as target roles, remote policy, industries, salary expectations, and document style.
 
-The active resume profile JSON should avoid storing personal contact information. Name, email address, phone number, residential location, personal websites, and social profile URLs should be redacted from uploaded resume text before AI parsing and excluded from `profiles.resume_data`.
+Resume profile JSON should avoid storing personal contact information. Name, email address, phone number, residential location, personal websites, and social profile URLs should be redacted from uploaded resume text before AI parsing and excluded from `resume_profiles.resume_data`.
+
+DaliJob should not require one primary resume. Users can star or favorite any number of resume profiles. The profile page and resume selectors should sort favorited resumes first, then non-favorited resumes by most recently updated. Favorites are a UI prioritization signal only; they do not prevent the user from matching, editing, tailoring, or applying with any resume profile.
 
 ### 4.2 Career Knowledge Base
 
@@ -121,7 +125,7 @@ Manual entry is a core workflow, not a fallback-only feature. A user must be abl
 
 URL extraction is a convenience feature. If the page cannot be fetched, blocks automated access, requires authentication, renders content client-side, or does not expose parseable job data, DaliJob should keep the URL and let the user manually fill or paste the missing fields. URL extraction must not be required for application tracking.
 
-The implemented job import flow creates reviewable drafts from URL or pasted text before saving. Users can also start with a blank manual job form. Any saved job can be reopened and edited, including jobs created during resume-to-job matching.
+The implemented job import flow creates reviewable drafts from URL or pasted text before saving. Users can also start with a blank manual job form. Saved jobs are represented by editable `user_jobs` rows that optionally reference shared `jobs_cache` rows, so the same parsed URL can appear in multiple users' job lists without reparsing the posting while still allowing private user edits.
 
 For AI parsing, DaliJob should preserve two forms of each imported posting:
 
@@ -212,7 +216,7 @@ Initial structured job JSON:
 
 ### 4.5 Resume Engine
 
-The resume source of truth is structured profile data, not only an uploaded PDF or DOCX. DaliJob should still preserve the original uploaded master resume file because the user may want to download it, re-parse it, compare it against later profile edits, or audit where parsed facts came from.
+The resume source of truth is structured resume profile data, not only an uploaded PDF or DOCX. DaliJob should still preserve the original uploaded master resume file because the user may want to download it, re-parse it, compare it against later profile edits, or audit where parsed facts came from.
 
 Master resume import workflow:
 
@@ -223,18 +227,18 @@ User uploads or pastes master resume
   -> Redact personal contact information before AI parsing
   -> Parse into structured resume_data JSON suggestions
   -> User reviews, edits, accepts, or rejects suggestions
-  -> Accepted facts replace the profile resume_data JSON document
+  -> Accepted facts create or update a selected resume_profiles row
   -> Create ResumeVersion snapshot linked to the source document version when available
 ```
 
-Uploaded PDFs and DOCX files are preserved artifacts. Generated tailored PDFs and DOCX files are rendered artifacts. The structured profile JSON and immutable resume versions are what the AI uses for matching, tailoring, validation, and analytics.
+Uploaded PDFs and DOCX files are preserved artifacts. Generated tailored PDFs and DOCX files are rendered artifacts. Structured resume profile JSON and immutable resume versions are what the AI uses for matching, tailoring, validation, and analytics.
 
-Before full document management is implemented, DaliJob may provide a PDF resume import prototype that extracts cleaned text, generates reviewable `resume_data` JSON suggestions, and applies accepted suggestions to `profiles.resume_data`. That prototype should not be treated as permanent document storage until `documents` and `document_versions` are implemented.
+Before full document management is implemented, DaliJob may provide a PDF resume import prototype that extracts cleaned text, generates reviewable `resume_data` JSON suggestions, and applies accepted suggestions to a resume profile. That prototype should not be treated as permanent document storage until `documents` and `document_versions` are implemented.
 
 Pipeline:
 
 ```text
-Master Profile
+Selected Resume Profile
   + Job Description
   -> Resume Context Builder
   -> AI Resume Engine

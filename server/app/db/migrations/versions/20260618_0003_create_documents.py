@@ -17,9 +17,9 @@ depends_on = None
 def upgrade() -> None:
     op.create_table(
         "documents",
-        sa.Column("id", sa.String(length=36), nullable=False),
-        sa.Column("workspace_id", sa.String(length=36), nullable=False),
-        sa.Column("user_id", sa.String(length=36), nullable=False),
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("workspace_id", sa.Integer(), nullable=False),
+        sa.Column("user_id", sa.Integer(), nullable=False),
         sa.Column("title", sa.String(length=255), nullable=False),
         sa.Column("document_type", sa.String(length=64), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -34,8 +34,8 @@ def upgrade() -> None:
 
     op.create_table(
         "document_versions",
-        sa.Column("id", sa.String(length=36), nullable=False),
-        sa.Column("document_id", sa.String(length=36), nullable=False),
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("document_id", sa.Integer(), nullable=False),
         sa.Column("version_number", sa.Integer(), nullable=False),
         sa.Column("file_name", sa.String(length=255), nullable=False),
         sa.Column("content_type", sa.String(length=128), nullable=False),

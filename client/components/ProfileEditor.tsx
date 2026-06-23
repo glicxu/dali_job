@@ -1,15 +1,17 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   applyResumeProfileSuggestions,
+  createResumeProfile,
+  deleteResumeProfile,
   emptyResumeData,
-  getProfile,
   importResumePdf,
-  Profile,
+  listResumeProfiles,
   ResumeData,
   ResumeImportResponse,
-  updateProfile,
+  ResumeProfile,
+  updateResumeProfile,
 } from "../lib/api";
 
 type SectionKey =
@@ -64,18 +66,45 @@ function textToList(value: string): string[] {
     .filter(Boolean);
 }
 
-function normalizeResumeData(value: ResumeData): ResumeData {
+function normalizeResumeData(value?: Partial<ResumeData> | null): ResumeData {
   return {
     ...emptyResumeData,
-    ...value,
+    ...(value ?? {}),
   };
 }
 
+function makeSectionText(data: ResumeData): Record<SectionKey, string> {
+  return Object.fromEntries(
+    editableSections.map((key) => [key, listToText(data[key])]),
+  ) as Record<SectionKey, string>;
+}
+
+function profilePreview(data: ResumeData): string {
+  const parts = [
+    data.summary,
+    data.experience[0],
+    data.projects[0],
+    data.education[0],
+  ].filter(Boolean);
+  return parts[0] || "No preview content yet.";
+}
+
+function sortResumeProfiles(profiles: ResumeProfile[]): ResumeProfile[] {
+  return [...profiles].sort((a, b) => {
+    if (a.is_favorite !== b.is_favorite) {
+      return a.is_favorite ? -1 : 1;
+    }
+    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+  });
+}
+
 export function ProfileEditor() {
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [resumeProfiles, setResumeProfiles] = useState<ResumeProfile[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [title, setTitle] = useState("Master Resume");
   const [resumeData, setResumeData] = useState<ResumeData>(emptyResumeData);
   const [sectionText, setSectionText] = useState<Record<SectionKey, string>>(
-    Object.fromEntries(editableSections.map((key) => [key, ""])) as Record<SectionKey, string>,
+    makeSectionText(emptyResumeData),
   );
   const [resumeImport, setResumeImport] = useState<ResumeImportResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,33 +112,58 @@ export function ProfileEditor() {
   const [isLoading, setIsLoading] = useState(true);
   const [isImportingResume, setIsImportingResume] = useState(false);
   const [isApplyingResume, setIsApplyingResume] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  function setEditorData(data: ResumeData) {
-    const normalized = normalizeResumeData(data);
+  const selectedProfile = useMemo(
+    () => resumeProfiles.find((profile) => profile.id === selectedId) ?? null,
+    [resumeProfiles, selectedId],
+  );
+
+  function setEditorFromProfile(profile: ResumeProfile) {
+    const normalized = normalizeResumeData(profile.resume_data);
+    setSelectedId(profile.id);
+    setTitle(profile.title);
     setResumeData(normalized);
-    setSectionText(
-      Object.fromEntries(
-        editableSections.map((key) => [key, listToText(normalized[key])]),
-      ) as Record<SectionKey, string>,
-    );
+    setSectionText(makeSectionText(normalized));
   }
 
-  async function loadProfile() {
+  function upsertResumeProfile(profile: ResumeProfile) {
+    setResumeProfiles((current) => {
+      const withoutSaved = current.filter((item) => item.id !== profile.id);
+      return sortResumeProfiles([...withoutSaved, profile]);
+    });
+    setEditorFromProfile(profile);
+  }
+
+  async function loadResumeProfiles(selectId?: number) {
     setError(null);
     setIsLoading(true);
     try {
-      const profilePayload = await getProfile();
-      setProfile(profilePayload);
-      setEditorData(profilePayload.resume_data);
+      const payload = await listResumeProfiles();
+      setResumeProfiles(payload.resume_profiles);
+      const nextSelection =
+        payload.resume_profiles.find((profile) => profile.id === selectId) ??
+        payload.resume_profiles.find((profile) => profile.id === selectedId) ??
+        payload.resume_profiles[0] ??
+        null;
+      if (nextSelection) {
+        setEditorFromProfile(nextSelection);
+      } else {
+        setSelectedId(null);
+        setTitle("Master Resume");
+        setResumeData(emptyResumeData);
+        setSectionText(makeSectionText(emptyResumeData));
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Profile load failed.");
+      setError(err instanceof Error ? err.message : "Resume profiles failed to load.");
     } finally {
       setIsLoading(false);
     }
   }
 
   useEffect(() => {
-    void loadProfile();
+    void loadResumeProfiles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function buildResumeDataFromEditor(): ResumeData {
@@ -122,17 +176,65 @@ export function ProfileEditor() {
     return next;
   }
 
-  async function saveProfile(event: FormEvent<HTMLFormElement>) {
+  async function saveResumeProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setStatus(null);
+    setIsSaving(true);
     try {
-      const saved = await updateProfile(buildResumeDataFromEditor());
-      setProfile(saved);
-      setEditorData(saved.resume_data);
-      setStatus("Resume JSON saved.");
+      const payload = {
+        title: title.trim() || "Untitled Resume",
+        resume_data: buildResumeDataFromEditor(),
+      };
+      const saved = selectedProfile
+        ? await updateResumeProfile(selectedProfile.id, payload)
+        : await createResumeProfile({ ...payload, is_favorite: false });
+      upsertResumeProfile(saved);
+      setStatus("Resume profile saved.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Profile save failed.");
+      setError(err instanceof Error ? err.message : "Resume profile save failed.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function createBlankResumeProfile() {
+    setError(null);
+    setStatus(null);
+    try {
+      const created = await createResumeProfile({
+        title: "Untitled Resume",
+        resume_data: emptyResumeData,
+        is_favorite: false,
+      });
+      upsertResumeProfile(created);
+      setStatus("Blank resume profile created.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Resume profile creation failed.");
+    }
+  }
+
+  async function toggleFavorite(profile: ResumeProfile) {
+    setError(null);
+    setStatus(null);
+    try {
+      const updated = await updateResumeProfile(profile.id, { is_favorite: !profile.is_favorite });
+      upsertResumeProfile(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Favorite update failed.");
+    }
+  }
+
+  async function removeSelectedResumeProfile() {
+    if (!selectedProfile) return;
+    setError(null);
+    setStatus(null);
+    try {
+      await deleteResumeProfile(selectedProfile.id);
+      await loadResumeProfiles();
+      setStatus("Resume profile deleted.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Resume profile delete failed.");
     }
   }
 
@@ -164,10 +266,9 @@ export function ProfileEditor() {
     setIsApplyingResume(true);
     try {
       const saved = await applyResumeProfileSuggestions(resumeImport.suggestions);
-      setProfile(saved);
-      setEditorData(saved.resume_data);
       setResumeImport(null);
-      setStatus("Resume suggestions applied to resume JSON.");
+      upsertResumeProfile(saved);
+      setStatus("Resume suggestions saved as a new resume profile.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Applying resume suggestions failed.");
     } finally {
@@ -176,7 +277,7 @@ export function ProfileEditor() {
   }
 
   if (isLoading) {
-    return <p className="empty">Loading profile.</p>;
+    return <p className="empty">Loading resume profiles.</p>;
   }
 
   return (
@@ -185,12 +286,14 @@ export function ProfileEditor() {
       {status ? <div className="status-banner">{status}</div> : null}
 
       <section className="profile-card">
-        <div>
-          <h2>Import Master Resume</h2>
-          <p className="metadata">
-            Upload a PDF resume to extract cleaned text and generate one structured resume JSON
-            document for review. Parsing does not save changes.
-          </p>
+        <div className="profile-card-header">
+          <div>
+            <h2>Import Master Resume</h2>
+            <p className="metadata">
+              Upload a PDF resume to generate a structured resume profile preview. Parsing does
+              not save changes.
+            </p>
+          </div>
         </div>
         <form className="inline-form resume-upload-form" onSubmit={importResume}>
           <input name="resume" type="file" accept="application/pdf" required />
@@ -208,13 +311,56 @@ export function ProfileEditor() {
         ) : null}
       </section>
 
-      <form className="profile-card" onSubmit={saveProfile}>
+      <section className="profile-card">
         <div className="profile-card-header">
-          <h2>Resume JSON Profile</h2>
-          <button type="submit">Save JSON</button>
+          <div>
+            <h2>Resume Profiles</h2>
+            <p className="metadata">Favorited resumes appear first.</p>
+          </div>
+          <button type="button" className="secondary-button" onClick={() => void createBlankResumeProfile()}>
+            New Resume
+          </button>
+        </div>
+        {resumeProfiles.length ? (
+          <div className="resume-profile-list">
+            {resumeProfiles.map((profile) => (
+              <ResumeProfileCard
+                key={profile.id}
+                profile={profile}
+                isSelected={profile.id === selectedId}
+                onOpen={() => setEditorFromProfile(profile)}
+                onToggleFavorite={() => void toggleFavorite(profile)}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="empty">No resume profiles yet.</p>
+        )}
+      </section>
+
+      <form className="profile-card" onSubmit={saveResumeProfile}>
+        <div className="profile-card-header">
+          <div>
+            <h2>Full Resume Profile</h2>
+            {selectedProfile ? <p className="metadata">Resume Profile ID: {selectedProfile.id}</p> : null}
+          </div>
+          <div className="button-row">
+            {selectedProfile ? (
+              <button type="button" className="secondary-button" onClick={() => void removeSelectedResumeProfile()}>
+                Delete
+              </button>
+            ) : null}
+            <button type="submit" disabled={isSaving}>
+              {isSaving ? "Saving..." : "Save Resume"}
+            </button>
+          </div>
         </div>
 
         <div className="profile-grid">
+          <label>
+            Resume Title
+            <input value={title} onChange={(event) => setTitle(event.target.value)} />
+          </label>
           <label>
             Headline
             <input
@@ -248,10 +394,53 @@ export function ProfileEditor() {
             </label>
           ))}
         </div>
-
-        {profile ? <p className="metadata">Profile ID: {profile.id}</p> : null}
       </form>
     </div>
+  );
+}
+
+function ResumeProfileCard({
+  profile,
+  isSelected,
+  onOpen,
+  onToggleFavorite,
+}: {
+  profile: ResumeProfile;
+  isSelected: boolean;
+  onOpen: () => void;
+  onToggleFavorite: () => void;
+}) {
+  const data = normalizeResumeData(profile.resume_data);
+  const skillPreview = data.skills.slice(0, 5);
+
+  return (
+    <article className={`resume-profile-card${isSelected ? " selected" : ""}`}>
+      <button type="button" className="resume-profile-open" onClick={onOpen}>
+        <span className="resume-profile-title">
+          {profile.title}
+          {profile.is_favorite ? <span className="favorite-label">Favorite</span> : null}
+        </span>
+        <span className="metadata">{data.headline || "No headline yet"}</span>
+        <span className="resume-profile-preview">{profilePreview(data)}</span>
+        {skillPreview.length ? (
+          <span className="resume-chip-row">
+            {skillPreview.map((skill) => (
+              <span className="resume-chip" key={skill}>
+                {skill}
+              </span>
+            ))}
+          </span>
+        ) : null}
+      </button>
+      <button
+        type="button"
+        className="secondary-button favorite-button"
+        onClick={onToggleFavorite}
+        aria-label={profile.is_favorite ? "Remove favorite" : "Favorite resume"}
+      >
+        {profile.is_favorite ? "Starred" : "Star"}
+      </button>
+    </article>
   );
 }
 

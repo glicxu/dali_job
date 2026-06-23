@@ -94,7 +94,8 @@ Critical integration cases:
 
 Use browser tests for critical workflows:
 
-- Create profile, edit resume JSON skills, experience, education, and projects.
+- Create multiple resume profiles, edit resume JSON skills, experience, education, and projects.
+- Favorite and unfavorite resume profiles, then verify favorites sort first without requiring one primary resume.
 - Upload or paste a master resume, paste a job description, run comparison, and view a 0-10 match score.
 - Create a job through full manual entry.
 - Import job by copy/paste description.

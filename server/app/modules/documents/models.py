@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from uuid import uuid4
-
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -13,22 +11,18 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def new_uuid() -> str:
-    return str(uuid4())
-
-
 class Document(Base):
     __tablename__ = "documents"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
-    workspace_id: Mapped[str] = mapped_column(
-        String(36),
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[int] = mapped_column(
+        Integer,
         ForeignKey("workspaces.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    user_id: Mapped[str] = mapped_column(
-        String(36),
+    user_id: Mapped[int] = mapped_column(
+        Integer,
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -48,9 +42,9 @@ class Document(Base):
 class DocumentVersion(Base):
     __tablename__ = "document_versions"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
-    document_id: Mapped[str] = mapped_column(
-        String(36),
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    document_id: Mapped[int] = mapped_column(
+        Integer,
         ForeignKey("documents.id", ondelete="CASCADE"),
         nullable=False,
         index=True,

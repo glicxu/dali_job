@@ -8,8 +8,8 @@ from pydantic import BaseModel, ConfigDict
 class DocumentVersionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: str
-    document_id: str
+    id: int
+    document_id: int
     version_number: int
     file_name: str
     content_type: str
@@ -22,9 +22,9 @@ class DocumentVersionResponse(BaseModel):
 class DocumentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: str
-    workspace_id: str
-    user_id: str
+    id: int
+    workspace_id: int
+    user_id: int
     title: str
     document_type: str
     created_at: datetime
@@ -37,6 +37,6 @@ class DocumentListResponse(BaseModel):
 
 
 class DocumentTextResponse(BaseModel):
-    document_id: str
-    version_id: str
+    document_id: int
+    version_id: int
     extracted_text: str

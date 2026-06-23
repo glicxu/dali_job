@@ -201,7 +201,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "type": "integer",
               "title": "Document Id"
             }
           }
@@ -248,7 +248,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "type": "integer",
               "title": "Document Id"
             }
           }
@@ -295,7 +295,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "type": "integer",
               "title": "Document Id"
             }
           }
@@ -558,7 +558,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "type": "integer",
               "title": "Job Id"
             }
           }
@@ -603,7 +603,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "type": "integer",
               "title": "Job Id"
             }
           }
@@ -640,76 +640,6 @@
             }
           }
         }
-      }
-    },
-    "/api/v1/profile": {
-      "get": {
-        "tags": [
-          "profile"
-        ],
-        "summary": "Get Profile",
-        "operationId": "get_profile_api_v1_profile_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProfileResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      },
-      "patch": {
-        "tags": [
-          "profile"
-        ],
-        "summary": "Patch Profile",
-        "operationId": "patch_profile_api_v1_profile_patch",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProfileUpdateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProfileResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
       }
     },
     "/api/v1/profile/resume-imports": {
@@ -781,7 +711,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProfileResponse"
+                  "$ref": "#/components/schemas/ResumeProfileResponse"
                 }
               }
             }
@@ -802,6 +732,216 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/api/v1/resume-profiles": {
+      "get": {
+        "tags": [
+          "resume-profiles"
+        ],
+        "summary": "List Resume Profiles",
+        "operationId": "list_resume_profiles_api_v1_resume_profiles_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumeProfileListResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "resume-profiles"
+        ],
+        "summary": "Create Resume Profile",
+        "operationId": "create_resume_profile_api_v1_resume_profiles_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeProfileCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumeProfileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/resume-profiles/{resume_profile_id}": {
+      "get": {
+        "tags": [
+          "resume-profiles"
+        ],
+        "summary": "Get Resume Profile",
+        "operationId": "get_resume_profile_api_v1_resume_profiles__resume_profile_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "resume_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Resume Profile Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumeProfileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "resume-profiles"
+        ],
+        "summary": "Update Resume Profile",
+        "operationId": "update_resume_profile_api_v1_resume_profiles__resume_profile_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "resume_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Resume Profile Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeProfileUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumeProfileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "resume-profiles"
+        ],
+        "summary": "Delete Resume Profile",
+        "operationId": "delete_resume_profile_api_v1_resume_profiles__resume_profile_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "resume_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Resume Profile Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/resume-job-matches/job-url-extract": {
@@ -869,6 +1009,52 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ResumeJobMatchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/resume-job-matches/pending-job": {
+      "post": {
+        "tags": [
+          "resume-job-matches"
+        ],
+        "summary": "Save Pending Matched Job",
+        "operationId": "save_pending_matched_job_api_v1_resume_job_matches_pending_job_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PendingMatchedJob"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavePendingMatchedJobResponse"
                 }
               }
             }
@@ -1012,15 +1198,15 @@
       "DocumentResponse": {
         "properties": {
           "id": {
-            "type": "string",
+            "type": "integer",
             "title": "Id"
           },
           "workspace_id": {
-            "type": "string",
+            "type": "integer",
             "title": "Workspace Id"
           },
           "user_id": {
-            "type": "string",
+            "type": "integer",
             "title": "User Id"
           },
           "title": {
@@ -1067,11 +1253,11 @@
       "DocumentTextResponse": {
         "properties": {
           "document_id": {
-            "type": "string",
+            "type": "integer",
             "title": "Document Id"
           },
           "version_id": {
-            "type": "string",
+            "type": "integer",
             "title": "Version Id"
           },
           "extracted_text": {
@@ -1090,11 +1276,11 @@
       "DocumentVersionResponse": {
         "properties": {
           "id": {
-            "type": "string",
+            "type": "integer",
             "title": "Id"
           },
           "document_id": {
-            "type": "string",
+            "type": "integer",
             "title": "Document Id"
           },
           "version_number": {
@@ -1339,16 +1525,27 @@
       "JobResponse": {
         "properties": {
           "id": {
-            "type": "string",
+            "type": "integer",
             "title": "Id"
           },
           "workspace_id": {
-            "type": "string",
+            "type": "integer",
             "title": "Workspace Id"
           },
           "user_id": {
-            "type": "string",
+            "type": "integer",
             "title": "User Id"
+          },
+          "jobs_cache_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jobs Cache Id"
           },
           "title": {
             "type": "string",
@@ -1398,10 +1595,21 @@
             ],
             "title": "Match Score"
           },
+          "matched_resume_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Resume Profile Id"
+          },
           "matched_resume_document_id": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "integer"
               },
               {
                 "type": "null"
@@ -1489,41 +1697,6 @@
               }
             ],
             "title": "Notes"
-          },
-          "match_score": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "maximum": 10.0,
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Match Score"
-          },
-          "matched_resume_document_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Matched Resume Document Id"
-          },
-          "matched_resume_source": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Matched Resume Source"
           }
         },
         "type": "object",
@@ -1602,41 +1775,6 @@
               }
             ],
             "title": "Notes"
-          },
-          "match_score": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "maximum": 10.0,
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Match Score"
-          },
-          "matched_resume_document_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Matched Resume Document Id"
-          },
-          "matched_resume_source": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Matched Resume Source"
           }
         },
         "type": "object",
@@ -1748,10 +1886,21 @@
             "minimum": 0.0,
             "title": "Match Score"
           },
+          "matched_resume_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Resume Profile Id"
+          },
           "matched_resume_document_id": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "integer"
               },
               {
                 "type": "null"
@@ -1774,57 +1923,6 @@
           "matched_resume_source"
         ],
         "title": "PendingMatchedJob"
-      },
-      "ProfileResponse": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "workspace_id": {
-            "type": "string",
-            "title": "Workspace Id"
-          },
-          "user_id": {
-            "type": "string",
-            "title": "User Id"
-          },
-          "resume_data": {
-            "$ref": "#/components/schemas/ResumeData"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Updated At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "workspace_id",
-          "user_id",
-          "resume_data",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "ProfileResponse"
-      },
-      "ProfileUpdateRequest": {
-        "properties": {
-          "resume_data": {
-            "$ref": "#/components/schemas/ResumeData"
-          }
-        },
-        "type": "object",
-        "required": [
-          "resume_data"
-        ],
-        "title": "ProfileUpdateRequest"
       },
       "RegisterRequest": {
         "properties": {
@@ -2002,10 +2100,21 @@
             ],
             "title": "Resume Text"
           },
+          "resume_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Profile Id"
+          },
           "resume_document_id": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "integer"
               },
               {
                 "type": "null"
@@ -2071,7 +2180,7 @@
           "id": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "integer"
               },
               {
                 "type": "null"
@@ -2082,13 +2191,24 @@
           "saved_job_id": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
             "title": "Saved Job Id"
+          },
+          "saved_match_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Saved Match Id"
           },
           "job_saved": {
             "type": "boolean",
@@ -2177,6 +2297,172 @@
           "summary"
         ],
         "title": "ResumeJobMatchResponse"
+      },
+      "ResumeProfileCreateRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Title",
+            "default": "Master Resume"
+          },
+          "resume_data": {
+            "$ref": "#/components/schemas/ResumeData"
+          },
+          "is_favorite": {
+            "type": "boolean",
+            "title": "Is Favorite",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "ResumeProfileCreateRequest"
+      },
+      "ResumeProfileListResponse": {
+        "properties": {
+          "resume_profiles": {
+            "items": {
+              "$ref": "#/components/schemas/ResumeProfileResponse"
+            },
+            "type": "array",
+            "title": "Resume Profiles"
+          }
+        },
+        "type": "object",
+        "required": [
+          "resume_profiles"
+        ],
+        "title": "ResumeProfileListResponse"
+      },
+      "ResumeProfileResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "workspace_id": {
+            "type": "integer",
+            "title": "Workspace Id"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "resume_data": {
+            "$ref": "#/components/schemas/ResumeData"
+          },
+          "source_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Document Id"
+          },
+          "source_document_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Document Version Id"
+          },
+          "is_favorite": {
+            "type": "boolean",
+            "title": "Is Favorite"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "workspace_id",
+          "user_id",
+          "title",
+          "resume_data",
+          "is_favorite",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ResumeProfileResponse"
+      },
+      "ResumeProfileUpdateRequest": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "resume_data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResumeData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "is_favorite": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Favorite"
+          }
+        },
+        "type": "object",
+        "title": "ResumeProfileUpdateRequest"
+      },
+      "SavePendingMatchedJobResponse": {
+        "properties": {
+          "saved_job_id": {
+            "type": "integer",
+            "title": "Saved Job Id"
+          },
+          "saved_match_id": {
+            "type": "integer",
+            "title": "Saved Match Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "saved_job_id",
+          "saved_match_id"
+        ],
+        "title": "SavePendingMatchedJobResponse"
       },
       "SupportedRequirement": {
         "properties": {

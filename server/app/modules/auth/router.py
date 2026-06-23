@@ -92,7 +92,7 @@ def register(
         db.add(user)
         db.flush()
         identity = AuthenticatedIdentity(
-            external_user_id=user.id,
+            external_user_id=str(user.id),
             email=user.email,
             display_name=user.display_name,
             timezone=user.timezone,
@@ -120,7 +120,7 @@ def login(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="user inactive")
 
     identity = AuthenticatedIdentity(
-        external_user_id=user.id,
+        external_user_id=str(user.id),
         email=user.email,
         display_name=user.display_name,
         timezone=user.timezone,

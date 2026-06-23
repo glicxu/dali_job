@@ -1,4 +1,4 @@
-# DaliJob API Specification
+﻿# DaliJob API Specification
 
 ## 1. API Conventions
 
@@ -6,7 +6,7 @@
 - Request and response format: JSON unless uploading files.
 - Authentication: DaliJob bearer token from `/auth/login` or `/auth/register`; local development may run in `dev` auth mode.
 - Authorization: every request is scoped to a private workspace owned by the authenticated user.
-- IDs: UUID strings.
+- IDs: integer values.
 - Errors: return structured error bodies.
 
 Error shape:
@@ -82,15 +82,27 @@ Required body:
 }
 ```
 
-## 3. Profile
+## 3. Resume Profiles
 
-### `GET /profile`
+### `GET /resume-profiles`
 
-Returns the active profile with one `resume_data` JSON document.
+Lists structured resume profiles owned by the current user. Response ordering should put `is_favorite = true` resumes first, then sort by `updated_at` descending.
 
-### `PATCH /profile`
+### `POST /resume-profiles`
 
-Replaces the active profile's `resume_data` JSON document. The server validates the expected JSON shape before storage.
+Creates a structured resume profile. The server validates the expected JSON shape before storage and rejects personal contact fields.
+
+### `GET /resume-profiles/{resumeProfileId}`
+
+Returns one structured resume profile.
+
+### `PATCH /resume-profiles/{resumeProfileId}`
+
+Updates title, structured resume JSON, or favorite state. Toggling `is_favorite` must not unset favorites from other resumes because users may favorite multiple resumes.
+
+### `DELETE /resume-profiles/{resumeProfileId}`
+
+Soft-deletes a resume profile when it is not needed anymore.
 
 Example `resume_data`:
 
@@ -114,11 +126,11 @@ Example `resume_data`:
 
 ### `POST /profile/resume-imports`
 
-Uploads a master resume PDF, cleans extracted text, redacts common personal contact information before AI parsing, and returns a structured `resume_data` JSON suggestion for review. The JSON schema intentionally excludes name, email, phone number, residential location, personal website, and social profile URL fields. The first prototype does not permanently store the uploaded file; document version preservation belongs to the document-management slice.
+Uploads a master resume PDF, cleans extracted text, redacts common personal contact information before AI parsing, and returns a structured `resume_data` JSON suggestion for review. The JSON schema intentionally excludes name, email, phone number, residential location, personal website, and social profile URL fields. The import response should not overwrite an existing resume profile until the user explicitly applies it.
 
 ### `POST /profile/resume-imports/apply`
 
-Applies reviewed resume import suggestions by replacing the active profile's `resume_data` JSON document.
+Applies reviewed resume import suggestions by creating a new `resume_profiles` row or updating a selected existing resume profile.
 
 ## 4. Companies And Recruiters
 
@@ -159,9 +171,11 @@ Creates recruiter/contact.
 
 ### `GET /jobs`
 
-Lists imported jobs.
+Lists jobs saved by the current user. The API returns editable `user_jobs` rows. If the job came from a cached URL, `jobs_cache_id` references the shared `jobs_cache` row used as the original parsed source.
 
-Response fields include `id`, `title`, `company`, `source_url`, `raw_description_text`, `job_data`, `notes`, `match_score`, `matched_resume_document_id`, `matched_resume_source`, `created_at`, and `updated_at`.
+Response fields include `id`, `title`, `company`, `source_url`, `raw_description_text`, `job_data`, `notes`, `match_score`, `matched_resume_profile_id`, `matched_resume_document_id`, `matched_resume_source`, `created_at`, and `updated_at`.
+
+`match_score`, `matched_resume_profile_id`, `matched_resume_document_id`, and `matched_resume_source` are response-only convenience fields computed from the current user's latest `job_resume_matches` row for that `user_jobs` record. They are not stored on `user_jobs` or `jobs_cache`.
 
 Future query params:
 
@@ -175,7 +189,7 @@ Future query params:
 
 ### `POST /jobs/draft`
 
-Creates a reviewable job draft from either a public URL or pasted job description text. This endpoint parses with OpenAI but does not save the job.
+Creates a reviewable job draft from either a public URL or pasted job description text. This endpoint parses with OpenAI but does not save the job. If the URL already exists in the job cache, the server returns the cached raw text and structured `job_data` without another OpenAI parsing call.
 
 Body with URL:
 
@@ -225,7 +239,7 @@ Response:
 
 ### `POST /jobs/import-description`
 
-Imports a job description foundation record from pasted text or a public URL. The server stores the cleaned raw text and the OpenAI-parsed structured job JSON. This endpoint supports matching and later job import review, but it is not the full application tracking workflow.
+Imports a job description foundation record from pasted text or a public URL. For URLs, the server stores or reuses the cleaned raw text and OpenAI-parsed structured job JSON in `jobs_cache`, then creates a current-user editable copy in `user_jobs`. If the URL is already cached, the server reuses the stored cache JSON instead of parsing again. User edits later update only `user_jobs`.
 
 Body with pasted text:
 
@@ -247,9 +261,10 @@ Response:
 
 ```json
 {
-  "id": "uuid",
-  "workspace_id": "uuid",
-  "user_id": "uuid",
+  "id": 1,
+  "workspace_id": 1,
+  "user_id": 1,
+  "jobs_cache_id": 1,
   "title": "Software Engineer",
   "company": "Example Co",
   "source_url": "https://example.com/careers/software-engineer",
@@ -281,7 +296,7 @@ Response:
 
 ### `POST /jobs`
 
-Creates a saved job from a reviewed draft or fully manual input. This is a core workflow and does not depend on job board APIs, plugins, or URL extraction.
+Creates a saved job from a reviewed draft or fully manual input. If a source URL already exists in `jobs_cache`, the server reuses that cache row but still saves the reviewed/edited values into a separate `user_jobs` row. This is a core workflow and does not depend on job board APIs, plugins, or URL extraction.
 
 Body:
 
@@ -317,11 +332,11 @@ Body:
 
 ### `GET /jobs/{jobId}`
 
-Returns a saved job owned by the current user.
+Returns a job saved by the current user from `user_jobs`.
 
 ### `PATCH /jobs/{jobId}`
 
-Updates saved job metadata, raw text, structured `job_data`, and notes. Any job saved from URL import, pasted description import, manual entry, or matching can be edited.
+Updates saved job metadata, raw text, structured `job_data`, and notes on `user_jobs` only. This never mutates `jobs_cache`.
 
 ### `POST /jobs/import-file`
 
@@ -333,7 +348,7 @@ Queues job analysis.
 
 ### `POST /jobs/{jobId}/compare-profile`
 
-Compares job requirements against the user's profile.
+Compares job requirements against a selected resume profile.
 
 Returns:
 
@@ -349,18 +364,18 @@ Returns:
 
 ### `POST /resume-job-matches`
 
-Runs the initial resume-to-job matching prototype. This endpoint compares a master resume against a job description without requiring the full application tracker flow.
+Runs the initial resume-to-job matching prototype. This endpoint compares a selected resume source against a job description without requiring the full application tracker flow.
 
-The endpoint accepts either pasted resume text or an uploaded resume document ID. It also accepts exactly one job source: pasted job description text or a job URL. The UI should block one job input when the other is filled.
+The endpoint accepts exactly one resume source: `resume_profile_id`, pasted resume text, or an uploaded resume document ID. It also accepts exactly one job source: pasted job description text or a job URL. The UI should block conflicting inputs.
 
-Before scoring, the server parses the job source into structured `job_data` JSON, then compares structured resume JSON against structured job JSON. If the saved profile resume JSON is empty, the server falls back to the supplied resume/document text wrapped as raw resume JSON so the prototype remains usable.
+Before scoring, the server parses the job source into structured `job_data` JSON, then compares structured resume JSON against structured job JSON. If the URL already exists in the job cache, the server reuses the stored `job_data` instead of parsing the same URL again. If a structured resume profile is not selected, the server falls back to the supplied resume/document text wrapped as raw resume JSON so the prototype remains usable.
 
 When `job_url` is provided, the server uses broader cleaned visible page extraction for the job parser. When pasted text is provided, that text is parsed the same way.
 
 Save behavior:
 
-- If `match_score >= 5`, the server automatically saves the job to the `jobs` table with `match_score`, `matched_resume_document_id` when an uploaded resume was selected, and `matched_resume_source`.
-- If `match_score < 5`, the server does not save the job immediately. It returns `pending_job`; the UI asks whether to save or discard the low-compatibility job.
+- If `match_score >= 5`, the server automatically saves or reuses `jobs_cache`, creates or reuses a `user_jobs` editable copy for the current user, then creates a `job_resume_matches` row with the current user, `user_job_id`, optional `jobs_cache_id`, optional `resume_profile_id`, optional resume document, resume source, score, and match details.
+- If `match_score < 5`, the server does not save the job or match immediately. It returns `pending_job`; the UI asks whether to save or discard the low-compatibility job.
 
 Pasted text body:
 
@@ -375,7 +390,16 @@ Uploaded resume and job URL body:
 
 ```json
 {
-  "resume_document_id": "uuid",
+  "resume_document_id": 1,
+  "job_url": "https://example.com/careers/software-engineer"
+}
+```
+
+Saved resume profile and job URL body:
+
+```json
+{
+  "resume_profile_id": 1,
   "job_url": "https://example.com/careers/software-engineer"
 }
 ```
@@ -384,7 +408,7 @@ Invalid body because both job sources are present:
 
 ```json
 {
-  "resume_document_id": "uuid",
+  "resume_document_id": 1,
   "job_url": "https://example.com/careers/software-engineer",
   "job_description_text": "Pasted job text..."
 }
@@ -394,8 +418,9 @@ Response:
 
 ```json
 {
-  "id": "uuid",
-  "saved_job_id": "uuid",
+  "id": 1,
+  "saved_job_id": 1,
+  "saved_match_id": 1,
   "job_saved": true,
   "pending_job": null,
   "match_score": 8,
@@ -422,6 +447,17 @@ Response:
     "Add a stronger backend summary if accurate.",
     "Mention Docker experience near the most relevant project."
   ]
+}
+```
+
+### `POST /resume-job-matches/pending-job`
+
+Saves a low-compatibility `pending_job` returned by `POST /resume-job-matches` after the user confirms they still want to keep it. The server saves or reuses the job, creates a `job_resume_matches` row, and returns:
+
+```json
+{
+  "saved_job_id": 1,
+  "saved_match_id": 1
 }
 ```
 
@@ -528,8 +564,8 @@ Body:
 
 ```json
 {
-  "document_id": "uuid",
-  "document_version_id": "uuid",
+  "document_id": 1,
+  "document_version_id": 1,
   "purpose": "submitted"
 }
 ```
@@ -542,7 +578,7 @@ Lists resume versions.
 
 ### `POST /resume-versions/parse`
 
-Queues parsing from an uploaded resume document into structured profile data.
+Queues parsing from an uploaded resume document into structured resume profile data.
 
 ### `POST /applications/{applicationId}/resume/tailor`
 
@@ -552,7 +588,7 @@ Body:
 
 ```json
 {
-  "source_profile_id": "uuid",
+  "source_resume_profile_id": 1,
   "length": "one_page",
   "tone": "technical",
   "emphasis": ["server", "cloud", "leadership"]
@@ -738,3 +774,4 @@ Returns status, validation result, and output references.
 ### `POST /ai/jobs/{jobId}/cancel`
 
 Cancels queued or running job.
+

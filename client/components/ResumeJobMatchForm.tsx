@@ -3,20 +3,24 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   compareResumeToJob,
-  createJob,
   listDocuments,
+  listResumeProfiles,
   PendingMatchedJob,
   ResumeJobMatchResponse,
+  ResumeProfile,
+  savePendingMatchedJob,
   StoredDocument,
 } from "../lib/api";
 
-type ResumeSourceMode = "document" | "paste";
+type ResumeSourceMode = "profile" | "document" | "paste";
 type JobSourceMode = "url" | "paste";
 
 export function ResumeJobMatchForm() {
   const [documents, setDocuments] = useState<StoredDocument[]>([]);
-  const [resumeSourceMode, setResumeSourceMode] = useState<ResumeSourceMode>("document");
+  const [resumeProfiles, setResumeProfiles] = useState<ResumeProfile[]>([]);
+  const [resumeSourceMode, setResumeSourceMode] = useState<ResumeSourceMode>("profile");
   const [jobSourceMode, setJobSourceMode] = useState<JobSourceMode>("url");
+  const [selectedResumeProfileId, setSelectedResumeProfileId] = useState("");
   const [selectedDocumentId, setSelectedDocumentId] = useState("");
   const [resumeText, setResumeText] = useState("");
   const [jobUrl, setJobUrl] = useState("");
@@ -37,30 +41,39 @@ export function ResumeJobMatchForm() {
     [documents],
   );
   const hasResumeSource =
-    resumeSourceMode === "document" ? Boolean(selectedDocumentId) : Boolean(resumeText.trim());
+    resumeSourceMode === "profile"
+      ? Boolean(selectedResumeProfileId)
+      : resumeSourceMode === "document"
+        ? Boolean(selectedDocumentId)
+        : Boolean(resumeText.trim());
   const hasJobSource = jobSourceMode === "url" ? Boolean(jobUrl.trim()) : Boolean(jobText.trim());
   const resumeWarning =
     !isLoadingDocuments && !hasResumeSource
-      ? "Add an uploaded resume or paste resume text before matching."
+      ? "Add a saved resume profile, uploaded resume, or pasted resume text before matching."
       : null;
 
   useEffect(() => {
-    listDocuments()
-      .then((payload) => {
-        setDocuments(payload.documents);
-        const firstResume = payload.documents.find(
+    Promise.all([listResumeProfiles(), listDocuments()])
+      .then(([profilePayload, documentPayload]) => {
+        setResumeProfiles(profilePayload.resume_profiles);
+        setDocuments(documentPayload.documents);
+        const firstProfile = profilePayload.resume_profiles[0];
+        const firstResume = documentPayload.documents.find(
           (document) =>
             document.document_type === "resume" && Boolean(document.latest_version?.extracted_text_available),
         );
-        if (firstResume) {
-          setSelectedDocumentId(firstResume.id);
+        if (firstProfile) {
+          setSelectedResumeProfileId(String(firstProfile.id));
+          setResumeSourceMode("profile");
+        } else if (firstResume) {
+          setSelectedDocumentId(String(firstResume.id));
           setResumeSourceMode("document");
         } else {
           setResumeSourceMode("paste");
         }
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : "Could not load uploaded documents.");
+        setError(err instanceof Error ? err.message : "Could not load resume sources.");
       })
       .finally(() => setIsLoadingDocuments(false));
   }, []);
@@ -73,7 +86,7 @@ export function ResumeJobMatchForm() {
     setPendingLowMatchJob(null);
 
     if (!hasResumeSource) {
-      setError("Add an uploaded resume or paste resume text before matching.");
+      setError("Add a saved resume profile, uploaded resume, or pasted resume text before matching.");
       return;
     }
     if (!hasJobSource) {
@@ -85,7 +98,12 @@ export function ResumeJobMatchForm() {
 
     try {
       const match = await compareResumeToJob({
-        resume_document_id: resumeSourceMode === "document" ? selectedDocumentId : undefined,
+        resume_profile_id:
+          resumeSourceMode === "profile" && selectedResumeProfileId
+            ? Number(selectedResumeProfileId)
+            : undefined,
+        resume_document_id:
+          resumeSourceMode === "document" && selectedDocumentId ? Number(selectedDocumentId) : undefined,
         resume_text: resumeSourceMode === "paste" ? resumeText : undefined,
         job_url: jobSourceMode === "url" ? jobUrl.trim() : undefined,
         job_description_text: jobSourceMode === "paste" ? jobText : undefined,
@@ -110,13 +128,14 @@ export function ResumeJobMatchForm() {
     setStatus(null);
     setIsLoading(true);
     try {
-      const saved = await createJob(pendingLowMatchJob);
+      const saved = await savePendingMatchedJob(pendingLowMatchJob);
       setPendingLowMatchJob(null);
       setResult((current) =>
         current
           ? {
               ...current,
-              saved_job_id: saved.id,
+              saved_job_id: saved.saved_job_id,
+              saved_match_id: saved.saved_match_id,
               job_saved: true,
               pending_job: null,
             }
@@ -143,28 +162,48 @@ export function ResumeJobMatchForm() {
 
       <section className="match-source-grid">
         <label>
-          Uploaded resume
-          <select
-            value={resumeSourceMode === "paste" ? "__paste__" : selectedDocumentId}
+        Resume source
+        <select
+            value={
+              resumeSourceMode === "paste"
+                ? "__paste__"
+                : resumeSourceMode === "profile"
+                  ? `profile:${selectedResumeProfileId}`
+                  : `document:${selectedDocumentId}`
+            }
             onChange={(event) => {
               const value = event.target.value;
               if (value === "__paste__") {
                 setResumeSourceMode("paste");
+                setSelectedResumeProfileId("");
                 setSelectedDocumentId("");
+              } else if (value.startsWith("profile:")) {
+                setResumeSourceMode("profile");
+                setSelectedResumeProfileId(value.replace("profile:", ""));
+                setSelectedDocumentId("");
+                setResumeText("");
               } else {
                 setResumeSourceMode("document");
-                setSelectedDocumentId(value);
+                setSelectedDocumentId(value.replace("document:", ""));
+                setSelectedResumeProfileId("");
                 setResumeText("");
               }
             }}
             disabled={isLoadingDocuments}
           >
             <option value="">
-              {isLoadingDocuments ? "Loading documents..." : "Choose an uploaded resume"}
+              {isLoadingDocuments ? "Loading resume sources..." : "Choose a resume source"}
             </option>
+            {resumeProfiles.map((profile) => (
+              <option key={profile.id} value={`profile:${profile.id}`}>
+                {profile.is_favorite ? "Starred - " : ""}
+                {profile.title}
+              </option>
+            ))}
+            {resumeDocuments.length ? <option disabled>Uploaded resumes</option> : null}
             <option value="__paste__">Paste resume text</option>
             {resumeDocuments.map((document) => (
-              <option key={document.id} value={document.id}>
+              <option key={document.id} value={`document:${document.id}`}>
                 {document.title}
               </option>
             ))}

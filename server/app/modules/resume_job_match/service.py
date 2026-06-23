@@ -27,8 +27,9 @@ MATCH_RESULT_SCHEMA = {
         "type": "object",
         "additionalProperties": False,
         "properties": {
-            "id": {"type": ["string", "null"]},
-            "saved_job_id": {"type": ["string", "null"]},
+            "id": {"type": ["integer", "null"]},
+            "saved_job_id": {"type": ["integer", "null"]},
+            "saved_match_id": {"type": ["integer", "null"]},
             "job_saved": {"type": "boolean"},
             "pending_job": {"type": "null"},
             "match_score": {"type": "integer", "minimum": 0, "maximum": 10},
@@ -68,6 +69,7 @@ MATCH_RESULT_SCHEMA = {
         "required": [
             "id",
             "saved_job_id",
+            "saved_match_id",
             "job_saved",
             "pending_job",
             "match_score",

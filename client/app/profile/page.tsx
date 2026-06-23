@@ -7,8 +7,8 @@ export default function ProfilePage() {
         <p className="eyebrow">Phase 1 Foundation</p>
         <h1>Career profile</h1>
         <p className="lede">
-          Maintain the structured career facts that will later power matching, resume
-          tailoring, cover letters, and interview preparation.
+          Maintain multiple structured resume profiles that will later power matching,
+          resume tailoring, cover letters, and interview preparation.
         </p>
       </div>
       <ProfileEditor />

@@ -25,7 +25,7 @@ type ArrayField =
   | "keywords";
 
 type JobEditorState = {
-  id?: string;
+  id?: number;
   title: string;
   company: string;
   source_url: string;
@@ -201,7 +201,7 @@ export function JobsManager() {
     setIsSaving(true);
     try {
       const saved = editor.id ? await updateJob(editor.id, payload) : await createJob(payload);
-      setEditor(editorFromJob(saved, false));
+      setEditor(null);
       setStatus(editor.id ? "Job updated." : "Job saved.");
       await loadJobs();
     } catch (err) {

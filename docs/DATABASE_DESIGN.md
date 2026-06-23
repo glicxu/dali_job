@@ -1,4 +1,4 @@
-# DaliJob Database Design
+﻿# DaliJob Database Design
 
 ## 1. Design Principles
 
@@ -13,7 +13,7 @@
 
 ## 2. Core Conventions
 
-- Primary keys: UUID.
+- Primary keys: auto-incrementing integers.
 - Timestamps: `created_at`, `updated_at`, and nullable `deleted_at` where soft delete is useful.
 - Ownership: every user-owned entity should include `workspace_id` unless it belongs directly to `user`.
 - MVP authorization: a workspace has exactly one owner through `workspaces.owner_user_id`.
@@ -134,7 +134,7 @@ Scripts must use `ProcessConfig` and `DbMan`; they should not hard-code local or
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
+| id | integer | Primary key |
 | email | text | Unique |
 | display_name | text | Required |
 | password_hash | text | Nullable for dev/imported users; required for DaliJob local login users |
@@ -151,26 +151,33 @@ For MVP, a workspace is a private data container owned by one user. It is not a 
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| owner_user_id | uuid | FK to users |
+| id | integer | Primary key |
+| owner_user_id | integer | FK to users |
 | name | text | Required |
 | created_at | timestamptz | Required |
 | updated_at | timestamptz | Required |
 
-### profiles
+### resume_profiles
 
-The canonical user resume/profile source of truth. Resume facts are stored as one JSON document instead of separate SQL tables for skills, experience, education, projects, and related sections.
+Stores each structured resume profile as one JSON document. A user can have multiple parsed or manually created resume profiles, such as a backend-focused resume, data-focused resume, federal resume, or internship resume.
 
-`profiles.resume_data` intentionally excludes personal contact information such as name, email, phone number, residential location, personal website, and social profile URLs. Uploaded resume text should be redacted before AI parsing, and only non-contact career facts should be stored in the JSON document.
+`resume_profiles.resume_data` intentionally excludes personal contact information such as name, email, phone number, residential location, personal website, and social profile URLs. Uploaded resume text should be redacted before AI parsing, and only non-contact career facts should be stored in the JSON document.
+
+Favorites are a sorting and usability feature, not an ownership or canonical-data rule. A user may favorite zero, one, or many resume profiles. The UI should display favorited resumes first, then non-favorited resumes by most recently updated.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| workspace_id | uuid | FK to workspaces |
-| user_id | uuid | FK to users |
+| id | integer | Primary key |
+| workspace_id | integer | FK to workspaces |
+| user_id | integer | FK to users |
+| title | text | User-facing resume label |
 | resume_data | jsonb | Required structured resume JSON |
+| source_document_id | integer | Nullable FK to uploaded source resume document |
+| source_document_version_id | integer | Nullable FK to exact uploaded source version |
+| is_favorite | boolean | Required, default false |
 | created_at | timestamptz | Required |
 | updated_at | timestamptz | Required |
+| deleted_at | timestamptz | Nullable |
 
 `resume_data` shape:
 
@@ -194,12 +201,14 @@ The canonical user resume/profile source of truth. Resume facts are stored as on
 
 The old normalized profile-section tables (`skills`, `experiences`, `education`, `projects`, `certifications`, `awards`, `publications`, `profile_links`, `experience_bullets`, and `experience_skills`) are intentionally not part of the active schema.
 
+The older one-row `profiles.resume_data` design is intentionally removed. If DaliJob later needs account-level career preferences, add a clearly named table such as `career_preferences` instead of reintroducing ambiguous resume storage.
+
 ### companies
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| workspace_id | uuid | FK |
+| id | integer | Primary key |
+| workspace_id | integer | FK |
 | name | text | Required |
 | website_url | text | Nullable |
 | industry | text | Nullable |
@@ -214,33 +223,28 @@ The old normalized profile-section tables (`skills`, `experiences`, `education`,
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| workspace_id | uuid | FK |
-| company_id | uuid | Nullable FK |
+| id | integer | Primary key |
+| workspace_id | integer | FK |
+| company_id | integer | Nullable FK |
 | name | text | Required |
 | email | text | Nullable |
 | phone | text | Nullable |
 | title | text | Nullable |
 | notes | text | Nullable |
 
-### jobs
+### jobs_cache
 
-The initial implemented jobs table stores a cleaned raw posting snapshot plus a structured `job_data` JSON document. Later application tracking can add richer workflow columns or normalize selected fields, but matching should use `job_data` instead of parsing raw text repeatedly.
+The implemented `jobs_cache` table stores the shared canonical job posting cache: cleaned raw posting text plus structured `job_data` JSON. It does not contain `user_id`, `workspace_id`, notes, or match scores. It is used to avoid repeated scraping and OpenAI parsing for the same URL. User-facing editable job data lives in `user_jobs`, and resume-specific match scores live in `job_resume_matches`.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| workspace_id | uuid | FK |
-| user_id | uuid | FK owner |
+| id | integer | Primary key |
 | title | text | Copied from `job_data.title` for list/filter display |
 | company | text | Copied from `job_data.company` for list/filter display |
 | source_url | text | Nullable |
+| source_url_hash | text | Nullable SHA-256 hash used for efficient URL cache lookup |
 | raw_description_text | text | Cleaned text from pasted input or broad URL scraping |
 | job_data | jsonb | Structured job description JSON used for matching |
-| notes | text | Nullable user notes |
-| match_score | integer | Nullable 0-10 score from the latest resume/job match that saved this job |
-| matched_resume_document_id | uuid | Nullable FK to the uploaded resume document used for the saved match |
-| matched_resume_source | text | Nullable source label such as `document` or `pasted_text` |
 | created_at | timestamptz | Required |
 | updated_at | timestamptz | Required |
 | deleted_at | timestamptz | Nullable soft delete |
@@ -270,16 +274,55 @@ The initial implemented jobs table stores a cleaned raw posting snapshot plus a 
 }
 ```
 
-Future application tracking may add or derive columns such as `remote_policy`, `closing_date`, `compensation_min`, and `compensation_max` when those fields need filtering/sorting. The raw JSON remains the canonical parsed job description for AI matching.
+Future application tracking may add or derive columns such as `remote_policy`, `closing_date`, `compensation_min`, and `compensation_max` when those fields need filtering/sorting. The cache JSON remains the canonical parsed job description from the original source URL. When a URL has already been parsed, matching and import flows should reuse `jobs_cache.job_data` and `raw_description_text` as the starting point instead of spending another OpenAI job parsing call.
+
+### user_jobs
+
+Stores the current user's editable saved job copy. The Jobs page should query `user_jobs` directly. If the saved job came from a cached URL, `user_jobs.jobs_cache_id` links back to `jobs_cache`, but user edits must update only `user_jobs`.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | integer | Primary key |
+| workspace_id | integer | FK |
+| user_id | integer | FK user who saved the job |
+| jobs_cache_id | integer | Nullable FK to shared `jobs_cache` row |
+| title | text | User-editable title |
+| company | text | User-editable company |
+| source_url | text | Nullable user-editable source URL |
+| raw_description_text | text | User-editable raw job description |
+| job_data | jsonb | User-editable structured job description JSON used by the app |
+| notes | text | Nullable user-specific notes |
+| saved_at | timestamptz | Required |
+| created_at | timestamptz | Required |
+| updated_at | timestamptz | Required |
+| deleted_at | timestamptz | Nullable soft delete |
+
+### job_resume_matches
+
+Stores each saved resume-to-job comparison. This table is user-specific and lets multiple resumes or users have different match scores for the same cached job.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | integer | Primary key |
+| workspace_id | integer | FK |
+| user_id | integer | FK user who ran or saved the match |
+| user_job_id | integer | FK to the user's saved editable job |
+| jobs_cache_id | integer | Nullable FK to source cache row |
+| resume_profile_id | integer | Nullable FK to structured resume profile |
+| resume_document_id | integer | Nullable FK to uploaded resume document |
+| resume_source | text | `resume_profile`, `document`, `pasted_text`, or future source label |
+| match_score | integer | Required 0-10 |
+| match_data | jsonb | Structured match details, including matched/missing skills and recommendations when available |
+| created_at | timestamptz | Required |
 
 ### applications
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| workspace_id | uuid | FK |
-| job_id | uuid | FK |
-| company_id | uuid | Nullable FK |
+| id | integer | Primary key |
+| workspace_id | integer | FK |
+| user_job_id | integer | FK to user's saved editable job |
+| company_id | integer | Nullable FK |
 | status | application_status | Required |
 | priority | text | `low`, `normal`, `high` |
 | match_score | integer | Nullable 0-10 |
@@ -296,8 +339,8 @@ Future application tracking may add or derive columns such as `remote_policy`, `
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| application_id | uuid | FK |
+| id | integer | Primary key |
+| application_id | integer | FK |
 | from_status | application_status | Nullable |
 | to_status | application_status | Required |
 | source | text | `user`, `email`, `ai`, `system` |
@@ -306,16 +349,16 @@ Future application tracking may add or derive columns such as `remote_policy`, `
 
 ### resume_job_matches
 
-Stores ad hoc or saved resume-to-job comparison results. This supports the first functional prototype and can later power job analysis, application recommendations, and resume tailoring.
+Future extended comparison result table for application-aware matching, generated resume versions, and AI job traceability. The implemented MVP score persistence uses `job_resume_matches`; this broader table remains a future design target if comparison history needs application links, snapshots, and generation job traceability.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| workspace_id | uuid | FK |
-| resume_version_id | uuid | Nullable FK |
-| resume_document_id | uuid | Nullable FK to documents |
-| job_id | uuid | Nullable FK |
-| application_id | uuid | Nullable FK |
+| id | integer | Primary key |
+| workspace_id | integer | FK |
+| resume_version_id | integer | Nullable FK |
+| resume_document_id | integer | Nullable FK to documents |
+| job_id | integer | Nullable FK |
+| application_id | integer | Nullable FK |
 | source_url | text | Nullable |
 | job_description_snapshot | text | Nullable |
 | resume_text_snapshot | text | Nullable |
@@ -327,15 +370,15 @@ Stores ad hoc or saved resume-to-job comparison results. This supports the first
 | supported_requirements | jsonb | Array |
 | unsupported_requirements | jsonb | Array |
 | recommendations | jsonb | Array |
-| ai_generation_job_id | uuid | Nullable FK |
+| ai_generation_job_id | integer | Nullable FK |
 | created_at | timestamptz | Required |
 
 ### application_events
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| application_id | uuid | FK |
+| id | integer | Primary key |
+| application_id | integer | FK |
 | event_type | text | Required |
 | source | text | Required |
 | payload | jsonb | Event details |
@@ -347,9 +390,9 @@ Stores uploaded and generated document containers. For a master resume upload, t
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| workspace_id | uuid | FK |
-| user_id | uuid | FK to users |
+| id | integer | Primary key |
+| workspace_id | integer | FK |
+| user_id | integer | FK to users |
 | document_type | document_type | Required |
 | title | text | Required |
 | created_at | timestamptz | Required |
@@ -362,8 +405,8 @@ Stores immutable file versions. The first implementation uses local server stora
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| document_id | uuid | FK |
+| id | integer | Primary key |
+| document_id | integer | FK |
 | version_number | integer | Required |
 | file_name | text | Required |
 | content_type | text | Required |
@@ -379,15 +422,15 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| workspace_id | uuid | FK |
-| profile_id | uuid | FK |
-| application_id | uuid | Nullable FK |
+| id | integer | Primary key |
+| workspace_id | integer | FK |
+| resume_profile_id | integer | Nullable FK to source resume profile |
+| application_id | integer | Nullable FK |
 | version_number | integer | Required |
 | label | text | Nullable |
 | structured_resume | jsonb | Required |
-| source_document_version_id | uuid | Nullable FK |
-| ai_generation_job_id | uuid | Nullable FK |
+| source_document_version_id | integer | Nullable FK |
+| ai_generation_job_id | integer | Nullable FK |
 | created_by | text | Required |
 | created_at | timestamptz | Required |
 
@@ -395,15 +438,15 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| workspace_id | uuid | FK |
-| application_id | uuid | FK |
-| resume_version_id | uuid | Nullable FK |
+| id | integer | Primary key |
+| workspace_id | integer | FK |
+| application_id | integer | FK |
+| resume_version_id | integer | Nullable FK |
 | version_number | integer | Required |
 | title | text | Required |
 | content | text | Required |
-| ai_generation_job_id | uuid | Nullable FK |
-| document_version_id | uuid | Nullable FK |
+| ai_generation_job_id | integer | Nullable FK |
+| document_version_id | integer | Nullable FK |
 | created_by | text | Required |
 | created_at | timestamptz | Required |
 
@@ -411,10 +454,10 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| application_id | uuid | FK |
-| document_id | uuid | FK |
-| document_version_id | uuid | FK |
+| id | integer | Primary key |
+| application_id | integer | FK |
+| document_id | integer | FK |
+| document_version_id | integer | FK |
 | purpose | text | `draft`, `submitted`, `interview_reference`, `other` |
 | submitted_at | timestamptz | Nullable |
 | created_at | timestamptz | Required |
@@ -423,8 +466,8 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| application_id | uuid | FK |
+| id | integer | Primary key |
+| application_id | integer | FK |
 | interview_type | text | Recruiter, phone, technical, final, mock |
 | scheduled_at | timestamptz | Nullable |
 | duration_minutes | integer | Nullable |
@@ -437,9 +480,9 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| interview_id | uuid | Nullable FK |
-| application_id | uuid | FK |
+| id | integer | Primary key |
+| interview_id | integer | Nullable FK |
+| application_id | integer | FK |
 | category | text | Behavioral, technical, coding, etc. |
 | question | text | Required |
 | suggested_answer | text | Nullable |
@@ -450,8 +493,8 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| interview_id | uuid | FK |
+| id | integer | Primary key |
+| interview_id | integer | FK |
 | notes | text | Required |
 | lessons_learned | text | Nullable |
 | follow_up_actions | jsonb | Array |
@@ -461,14 +504,14 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| application_id | uuid | FK |
-| resume_version_id | uuid | Nullable FK |
+| id | integer | Primary key |
+| application_id | integer | FK |
+| resume_version_id | integer | Nullable FK |
 | company_research | jsonb | Required |
 | role_analysis | jsonb | Required |
 | study_guide | jsonb | Required |
 | question_bank | jsonb | Required |
-| ai_generation_job_id | uuid | Nullable FK |
+| ai_generation_job_id | integer | Nullable FK |
 | created_at | timestamptz | Required |
 | updated_at | timestamptz | Required |
 
@@ -476,9 +519,9 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| workspace_id | uuid | FK |
-| application_id | uuid | Nullable FK |
+| id | integer | Primary key |
+| workspace_id | integer | FK |
+| application_id | integer | Nullable FK |
 | title | text | Required |
 | description | text | Nullable |
 | due_at | timestamptz | Nullable |
@@ -489,9 +532,9 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| task_id | uuid | Nullable FK |
-| application_id | uuid | Nullable FK |
+| id | integer | Primary key |
+| task_id | integer | Nullable FK |
+| application_id | integer | Nullable FK |
 | remind_at | timestamptz | Required |
 | channel | text | In-app, email, calendar |
 | sent_at | timestamptz | Nullable |
@@ -500,8 +543,8 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| application_id | uuid | FK |
+| id | integer | Primary key |
+| application_id | integer | FK |
 | salary_amount | numeric | Nullable |
 | salary_currency | text | Nullable |
 | equity | text | Nullable |
@@ -516,8 +559,8 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| workspace_id | uuid | FK |
+| id | integer | Primary key |
+| workspace_id | integer | FK |
 | snapshot_type | text | Funnel, skills, resume performance |
 | metrics | jsonb | Required |
 | period_start | date | Nullable |
@@ -528,8 +571,8 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| workspace_id | uuid | FK |
+| id | integer | Primary key |
+| workspace_id | integer | FK |
 | provider | integration_provider | Required |
 | status | text | `active`, `paused`, `error`, `revoked` |
 | account_identifier | text | Nullable |
@@ -543,9 +586,9 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| workspace_id | uuid | FK |
-| integration_id | uuid | FK |
+| id | integer | Primary key |
+| workspace_id | integer | FK |
+| integration_id | integer | FK |
 | provider_message_id | text | Required |
 | thread_id | text | Nullable |
 | from_address | text | Required |
@@ -561,9 +604,9 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| email_message_id | uuid | FK |
-| application_id | uuid | FK |
+| id | integer | Primary key |
+| email_message_id | integer | FK |
+| application_id | integer | FK |
 | match_method | text | Exact, inferred, user confirmed |
 | confidence | numeric | Required |
 | user_confirmed_at | timestamptz | Nullable |
@@ -572,11 +615,11 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| workspace_id | uuid | FK |
-| integration_id | uuid | Nullable FK |
-| application_id | uuid | Nullable FK |
-| interview_id | uuid | Nullable FK |
+| id | integer | Primary key |
+| workspace_id | integer | FK |
+| integration_id | integer | Nullable FK |
+| application_id | integer | Nullable FK |
+| interview_id | integer | Nullable FK |
 | provider_event_id | text | Nullable |
 | title | text | Required |
 | starts_at | timestamptz | Required |
@@ -588,8 +631,8 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| id | uuid | Primary key |
-| workspace_id | uuid | FK |
+| id | integer | Primary key |
+| workspace_id | integer | FK |
 | job_type | ai_job_type | Required |
 | status | text | `queued`, `running`, `succeeded`, `failed`, `cancelled` |
 | provider | text | Required |
@@ -608,8 +651,13 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 
 - `users.email` unique.
 - `workspaces.owner_user_id`.
-- `jobs.workspace_id, title`.
-- `jobs.workspace_id, company_id`.
+- `jobs_cache.source_url_hash`.
+- `user_jobs.workspace_id, user_id`.
+- `user_jobs.jobs_cache_id`.
+- `job_resume_matches.workspace_id, user_id, created_at`.
+- `job_resume_matches.user_job_id`.
+- `job_resume_matches.resume_profile_id`.
+- `job_resume_matches.resume_document_id`.
 - `applications.workspace_id, status`.
 - `applications.workspace_id, applied_at`.
 - `resume_job_matches.workspace_id, created_at`.
@@ -617,18 +665,19 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 - `resume_job_matches.application_id`.
 - `application_events.application_id, created_at`.
 - `document_versions.document_id, version_number` unique.
-- `resume_versions.workspace_id, profile_id, version_number`.
+- `resume_profiles.workspace_id, user_id, is_favorite, updated_at`.
+- `resume_versions.workspace_id, resume_profile_id, version_number`.
 - `cover_letter_versions.application_id, version_number`.
 - `email_messages.integration_id, provider_message_id` unique.
 - `email_application_links.email_message_id, application_id` unique.
-- JSON indexes on `jobs.description_structured`, selected `profiles.resume_data` paths, and analytics JSON fields if needed.
+- JSON indexes on `jobs_cache.job_data`, `user_jobs.job_data`, selected `resume_profiles.resume_data` paths, and analytics JSON fields if needed.
 
 ## 6. Versioning Rules
 
 - `resume_versions` are immutable.
 - `cover_letter_versions` are immutable.
 - `document_versions` are immutable.
-- Updating the profile does not mutate existing generated resumes.
+- Updating a resume profile does not mutate existing generated resumes.
 - Submitted application documents always point to exact version IDs.
 - AI-generated versions must link to `ai_generation_jobs`.
 
@@ -644,3 +693,4 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 Sharing is intentionally excluded from the MVP. If DaliJob later supports career coaches, mentors, school career centers, or paid resume reviewers, add a separate sharing model at that time.
 
 Do not add membership tables, shared roles, invitations, or viewer permissions until the product has a clear sharing workflow and privacy model.
+

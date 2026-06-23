@@ -12,8 +12,9 @@ export type UnsupportedRequirement = {
 };
 
 export type ResumeJobMatchResponse = {
-  id: string | null;
-  saved_job_id: string | null;
+  id: number | null;
+  saved_job_id: number | null;
+  saved_match_id: number | null;
   job_saved: boolean;
   pending_job: PendingMatchedJob | null;
   match_score: number;
@@ -30,7 +31,8 @@ export type ResumeJobMatchResponse = {
 
 export type ResumeJobMatchRequest = {
   resume_text?: string;
-  resume_document_id?: string;
+  resume_profile_id?: number;
+  resume_document_id?: number;
   job_description_text?: string;
   job_url?: string;
 };
@@ -63,9 +65,10 @@ export type JobDescriptionData = {
 };
 
 export type StoredJob = {
-  id: string;
-  workspace_id: string;
-  user_id: string;
+  id: number;
+  workspace_id: number;
+  user_id: number;
+  jobs_cache_id: number | null;
   title: string;
   company: string;
   source_url: string | null;
@@ -73,7 +76,8 @@ export type StoredJob = {
   job_data: JobDescriptionData;
   notes: string | null;
   match_score: number | null;
-  matched_resume_document_id: string | null;
+  matched_resume_profile_id: number | null;
+  matched_resume_document_id: number | null;
   matched_resume_source: string | null;
   created_at: string;
   updated_at: string;
@@ -93,15 +97,18 @@ export type JobSavePayload = {
   raw_description_text: string;
   job_data: JobDescriptionData;
   notes?: string | null;
-  match_score?: number | null;
-  matched_resume_document_id?: string | null;
-  matched_resume_source?: string | null;
 };
 
 export type PendingMatchedJob = JobSavePayload & {
   match_score: number;
-  matched_resume_document_id: string | null;
+  matched_resume_profile_id: number | null;
+  matched_resume_document_id: number | null;
   matched_resume_source: string;
+};
+
+export type SavePendingMatchedJobResponse = {
+  saved_job_id: number;
+  saved_match_id: number;
 };
 
 export type ResumeData = {
@@ -120,13 +127,33 @@ export type ResumeData = {
   notes: string[];
 };
 
-export type Profile = {
-  id: string;
-  workspace_id: string;
-  user_id: string;
+export type ResumeProfile = {
+  id: number;
+  workspace_id: number;
+  user_id: number;
+  title: string;
   resume_data: ResumeData;
+  source_document_id: number | null;
+  source_document_version_id: number | null;
+  is_favorite: boolean;
   created_at: string;
   updated_at: string;
+};
+
+export type ResumeProfileListResponse = {
+  resume_profiles: ResumeProfile[];
+};
+
+export type ResumeProfileCreatePayload = {
+  title: string;
+  resume_data: ResumeData;
+  is_favorite?: boolean;
+};
+
+export type ResumeProfileUpdatePayload = {
+  title?: string;
+  resume_data?: ResumeData;
+  is_favorite?: boolean;
 };
 
 export type ResumeImportResponse = {
@@ -150,8 +177,8 @@ export type AuthResponse = {
 };
 
 export type DocumentVersion = {
-  id: string;
-  document_id: string;
+  id: number;
+  document_id: number;
   version_number: number;
   file_name: string;
   content_type: string;
@@ -162,9 +189,9 @@ export type DocumentVersion = {
 };
 
 export type StoredDocument = {
-  id: string;
-  workspace_id: string;
-  user_id: string;
+  id: number;
+  workspace_id: number;
+  user_id: number;
   title: string;
   document_type: string;
   created_at: string;
@@ -177,8 +204,8 @@ export type DocumentListResponse = {
 };
 
 export type DocumentTextResponse = {
-  document_id: string;
-  version_id: string;
+  document_id: number;
+  version_id: number;
   extracted_text: string;
 };
 
@@ -339,15 +366,15 @@ export async function uploadDocument(
   return response.json();
 }
 
-export function getDocumentText(documentId: string): Promise<DocumentTextResponse> {
+export function getDocumentText(documentId: number): Promise<DocumentTextResponse> {
   return requestJson<DocumentTextResponse>(`/documents/${documentId}/text`);
 }
 
-export function getDocumentDownloadUrl(documentId: string): string {
+export function getDocumentDownloadUrl(documentId: number): string {
   return `${getApiBaseUrl()}/documents/${documentId}/download`;
 }
 
-export async function downloadDocumentFile(documentId: string, fileName: string): Promise<void> {
+export async function downloadDocumentFile(documentId: number, fileName: string): Promise<void> {
   const response = await fetch(getDocumentDownloadUrl(documentId), {
     headers: authHeaders(),
   });
@@ -379,6 +406,13 @@ export function extractJobUrl(jobUrl: string): Promise<JobUrlExtractResponse> {
   });
 }
 
+export function savePendingMatchedJob(payload: PendingMatchedJob): Promise<SavePendingMatchedJobResponse> {
+  return requestJson<SavePendingMatchedJobResponse>("/resume-job-matches/pending-job", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function listJobs(): Promise<StoredJob[]> {
   return requestJson<StoredJob[]>("/jobs");
 }
@@ -404,21 +438,37 @@ export function createJob(payload: JobSavePayload): Promise<StoredJob> {
   });
 }
 
-export function updateJob(jobId: string, payload: JobSavePayload): Promise<StoredJob> {
+export function updateJob(jobId: number, payload: JobSavePayload): Promise<StoredJob> {
   return requestJson<StoredJob>(`/jobs/${jobId}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
 }
 
-export function getProfile(): Promise<Profile> {
-  return requestJson<Profile>("/profile");
+export function listResumeProfiles(): Promise<ResumeProfileListResponse> {
+  return requestJson<ResumeProfileListResponse>("/resume-profiles");
 }
 
-export function updateProfile(resumeData: ResumeData): Promise<Profile> {
-  return requestJson<Profile>("/profile", {
+export function createResumeProfile(payload: ResumeProfileCreatePayload): Promise<ResumeProfile> {
+  return requestJson<ResumeProfile>("/resume-profiles", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateResumeProfile(
+  resumeProfileId: number,
+  payload: ResumeProfileUpdatePayload,
+): Promise<ResumeProfile> {
+  return requestJson<ResumeProfile>(`/resume-profiles/${resumeProfileId}`, {
     method: "PATCH",
-    body: JSON.stringify({ resume_data: resumeData }),
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteResumeProfile(resumeProfileId: number): Promise<void> {
+  return requestJson<void>(`/resume-profiles/${resumeProfileId}`, {
+    method: "DELETE",
   });
 }
 
@@ -448,8 +498,8 @@ export async function importResumePdf(file: File): Promise<ResumeImportResponse>
   return response.json();
 }
 
-export function applyResumeProfileSuggestions(suggestions: ResumeData): Promise<Profile> {
-  return requestJson<Profile>("/profile/resume-imports/apply", {
+export function applyResumeProfileSuggestions(suggestions: ResumeData): Promise<ResumeProfile> {
+  return requestJson<ResumeProfile>("/profile/resume-imports/apply", {
     method: "POST",
     body: JSON.stringify(suggestions),
   });

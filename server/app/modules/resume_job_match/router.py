@@ -20,6 +20,7 @@ from app.modules.resume_job_match.schemas import (
     PendingMatchedJob,
     ResumeJobMatchRequest,
     ResumeJobMatchResponse,
+    SavePendingMatchedJobResponse,
 )
 from app.modules.resume_job_match.service import OpenAIResumeJobMatcher, ResumeJobMatcher
 
@@ -41,6 +42,11 @@ def resolve_resume_text(
     db: Session,
     identity: AuthenticatedIdentity,
 ) -> str:
+    if payload.resume_profile_id:
+        resume_profile = profile_repository.get_resume_profile_for_identity(db, identity, payload.resume_profile_id)
+        if resume_profile is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume profile not found.")
+        return json.dumps(resume_profile.resume_data, ensure_ascii=False, indent=2)
     if payload.resume_document_id:
         document = document_repository.get_document_for_identity(db, identity, payload.resume_document_id)
         if document is None:
@@ -55,23 +61,16 @@ def resolve_resume_text(
     return (payload.resume_text or "").strip()
 
 
-def _has_resume_facts(resume_data: dict) -> bool:
-    for value in resume_data.values():
-        if isinstance(value, str) and value.strip():
-            return True
-        if isinstance(value, list) and value:
-            return True
-    return False
-
-
 def resolve_resume_data_for_match(
     payload: ResumeJobMatchRequest,
     db: Session,
     identity: AuthenticatedIdentity,
 ) -> dict:
-    profile = profile_repository.get_or_create_profile(db, identity)
-    if _has_resume_facts(profile.resume_data):
-        return profile.resume_data
+    if payload.resume_profile_id:
+        resume_profile = profile_repository.get_resume_profile_for_identity(db, identity, payload.resume_profile_id)
+        if resume_profile is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume profile not found.")
+        return resume_profile.resume_data
     fallback_text = resolve_resume_text(payload, db, identity)
     return {"raw_resume_text": fallback_text}
 
@@ -85,9 +84,21 @@ def resolve_job_description_text(payload: ResumeJobMatchRequest) -> str:
 def import_job_for_match(
     payload: ResumeJobMatchRequest,
     parser: JobDescriptionParser,
+    db: Session,
+    identity: AuthenticatedIdentity,
 ) -> tuple[str | None, str, JobDescriptionData]:
     if payload.job_url:
         source_url = str(payload.job_url)
+        user_job = job_repository.get_user_job_by_source_url(db, identity, source_url)
+        if user_job is not None:
+            return user_job.source_url, user_job.raw_description_text, JobDescriptionData.model_validate(
+                user_job.job_data
+            )
+        cached_job = job_repository.get_cached_job_by_source_url(db, source_url)
+        if cached_job is not None:
+            return cached_job.source_url, cached_job.raw_description_text, JobDescriptionData.model_validate(
+                cached_job.job_data
+            )
         raw_text = fetch_job_page_text_from_url(source_url)
     else:
         source_url = None
@@ -96,10 +107,24 @@ def import_job_for_match(
     return source_url, raw_text, job_data
 
 
-def resume_match_reference(payload: ResumeJobMatchRequest) -> tuple[str | None, str]:
+def resume_match_reference(payload: ResumeJobMatchRequest) -> tuple[int | None, int | None, str]:
+    if payload.resume_profile_id:
+        return payload.resume_profile_id, None, "resume_profile"
     if payload.resume_document_id:
-        return payload.resume_document_id, "document"
-    return None, "pasted_text"
+        return None, payload.resume_document_id, "document"
+    return None, None, "pasted_text"
+
+
+def match_data_from_result(result: ResumeJobMatchResponse) -> dict:
+    return result.model_dump(
+        exclude={
+            "id",
+            "saved_job_id",
+            "saved_match_id",
+            "job_saved",
+            "pending_job",
+        }
+    )
 
 
 @router.post("/job-url-extract", response_model=JobUrlExtractResponse)
@@ -121,7 +146,7 @@ def create_resume_job_match(
     identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> ResumeJobMatchResponse:
     resume_data = resolve_resume_data_for_match(payload, db, identity)
-    source_url, raw_text, job_data_model = import_job_for_match(payload, parser)
+    source_url, raw_text, job_data_model = import_job_for_match(payload, parser, db, identity)
     job_data = job_data_model.model_dump()
     resolved_payload = ResumeJobMatchRequest(
         resume_text=json.dumps(resume_data, ensure_ascii=False, indent=2),
@@ -130,7 +155,7 @@ def create_resume_job_match(
         job_data=job_data,
     )
     result = matcher.compare(resolved_payload)
-    resume_document_id, resume_source = resume_match_reference(payload)
+    resume_profile_id, resume_document_id, resume_source = resume_match_reference(payload)
     pending_job = PendingMatchedJob(
         title=job_data_model.title,
         company=job_data_model.company,
@@ -139,6 +164,7 @@ def create_resume_job_match(
         job_data=job_data_model,
         notes=None,
         match_score=result.match_score,
+        matched_resume_profile_id=resume_profile_id,
         matched_resume_document_id=resume_document_id,
         matched_resume_source=resume_source,
     )
@@ -149,11 +175,20 @@ def create_resume_job_match(
             source_url=source_url,
             raw_description_text=raw_text,
             job_data=job_data_model,
+        )
+        saved_match = job_repository.create_job_resume_match(
+            db,
+            identity,
+            user_job_id=saved_job["id"],
+            jobs_cache_id=saved_job["jobs_cache_id"],
+            resume_profile_id=resume_profile_id,
+            resume_document_id=resume_document_id,
+            resume_source=resume_source,
             match_score=result.match_score,
-            matched_resume_document_id=resume_document_id,
-            matched_resume_source=resume_source,
+            match_data=match_data_from_result(result),
         )
         result.saved_job_id = saved_job["id"]
+        result.saved_match_id = saved_match["id"]
         result.job_saved = True
         result.pending_job = None
     else:
@@ -161,3 +196,33 @@ def create_resume_job_match(
         result.job_saved = False
         result.pending_job = pending_job
     return result
+
+
+@router.post("/pending-job", response_model=SavePendingMatchedJobResponse)
+def save_pending_matched_job(
+    payload: PendingMatchedJob,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> SavePendingMatchedJobResponse:
+    saved_job = job_repository.create_job_from_description(
+        db,
+        identity,
+        source_url=payload.source_url,
+        raw_description_text=payload.raw_description_text,
+        job_data=payload.job_data,
+    )
+    saved_match = job_repository.create_job_resume_match(
+        db,
+        identity,
+        user_job_id=saved_job["id"],
+        jobs_cache_id=saved_job["jobs_cache_id"],
+        resume_profile_id=payload.matched_resume_profile_id,
+        resume_document_id=payload.matched_resume_document_id,
+        resume_source=payload.matched_resume_source,
+        match_score=payload.match_score,
+        match_data={"match_score": payload.match_score},
+    )
+    return SavePendingMatchedJobResponse(
+        saved_job_id=saved_job["id"],
+        saved_match_id=saved_match["id"],
+    )

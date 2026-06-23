@@ -23,16 +23,32 @@ class ResumeData(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
-class ProfileUpdateRequest(BaseModel):
-    resume_data: ResumeData
+class ResumeProfileCreateRequest(BaseModel):
+    title: str = Field(default="Master Resume", min_length=1, max_length=255)
+    resume_data: ResumeData = Field(default_factory=ResumeData)
+    is_favorite: bool = False
 
 
-class ProfileResponse(BaseModel):
+class ResumeProfileUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    resume_data: ResumeData | None = None
+    is_favorite: bool | None = None
+
+
+class ResumeProfileResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: str
-    workspace_id: str
-    user_id: str
+    id: int
+    workspace_id: int
+    user_id: int
+    title: str
     resume_data: ResumeData
+    source_document_id: int | None = None
+    source_document_version_id: int | None = None
+    is_favorite: bool
     created_at: datetime
     updated_at: datetime
+
+
+class ResumeProfileListResponse(BaseModel):
+    resume_profiles: list[ResumeProfileResponse]

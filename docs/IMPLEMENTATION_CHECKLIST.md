@@ -57,10 +57,11 @@ This is the first functional slice. It should happen before the full tracker, co
 - [x] Add job URL extraction input for ad hoc matching.
 - [x] Parse the job description as structured job JSON before matching.
 - [x] Use structured resume JSON and structured job JSON for the OpenAI match request when available.
-- [x] Save pasted job-description fallback text to the jobs table when the match is saved.
+- [x] Save pasted job-description fallback text to `user_jobs` when the match is saved.
 - [x] Auto-save matched jobs only when the score is 5 or higher.
 - [x] Ask the user whether to save low-compatibility jobs below score 5.
-- [x] Store match score and selected resume reference on saved jobs.
+- [x] Store match score and selected resume reference in `job_resume_matches`, not on saved jobs.
+- [x] Link matches to `resume_profile_id` when the selected resume source is a saved structured resume profile.
 - [x] Add OpenAI provider implementation for the comparison.
 - [x] Read OpenAI API key from server environment variable `OPENAI_API_KEY`.
 - [x] Read OpenAI model from `ProcessConfig` `[openai].model`.
@@ -68,7 +69,7 @@ This is the first functional slice. It should happen before the full tracker, co
 - [x] Add prompt/schema for extracting resume skills and job requirements.
 - [x] Add match scoring logic with score range 0-10.
 - [x] Add endpoint for ad hoc resume/job comparison.
-- [ ] Store comparison result if the user is authenticated.
+- [x] Store saved comparison result if the user is authenticated.
 - [x] Add tests for scoring, missing skills, matched skills, document input, URL extraction, and invalid inputs.
 
 ## Phase 1: MVP Core
@@ -76,7 +77,7 @@ This is the first functional slice. It should happen before the full tracker, co
 Recommended implementation order:
 
 1. Database foundation: users, private workspaces, base migrations, seed script, validation script, and migration CI.
-2. Profile foundation: one JSON-backed profile table, resume_data editor, PDF resume import, and basic profile editor UI.
+2. Resume profile foundation: multiple JSON-backed resume profiles, favorite resume sorting, PDF resume import, and basic resume editor UI.
 3. Job import: manual job creation, pasted job descriptions, jobs list, and job detail UI.
 4. Application tracking: application table, status transitions, timeline events, notes, tasks, reminders, tracker UI, and application detail UI.
 5. Document management: documents, document versions, signed upload/download flow, document library, and application attachments.
@@ -99,21 +100,28 @@ The sections below are grouped by product area. The order above should guide imp
 
 ### Profile
 
-- [x] Create profile schema with `profiles.resume_data` JSON as the resume source of truth.
+- [x] Create initial profile schema with JSON-backed resume data.
+- [x] Split structured resume data into `resume_profiles.resume_data` so one user can maintain multiple parsed resumes.
+- [x] Remove the legacy `profiles` table so `resume_profiles` is the only structured resume JSON storage.
+- [x] Add `resume_profiles.is_favorite` so users can star any number of resumes and see favorites first.
 - [x] Replace separate skills, experience, education, projects, certifications, awards, publications, and links tables with one resume JSON document.
-- [x] Add read/update API for the full resume JSON document.
+- [x] Add list/create/read/update/delete API for structured resume profiles.
+- [x] Add favorite/unfavorite support without requiring a single primary resume.
 - [ ] Add master resume upload or paste flow that preserves the original document when a file is provided.
 - [x] Add PDF master resume import prototype that extracts structured profile suggestions.
 - [x] Redact common personal contact information from uploaded resume text before AI parsing.
 - [x] Exclude name, email, phone, location, personal website, and social profile URL fields from saved resume JSON.
 - [x] Extract master resume text into reviewable structured profile suggestions.
-- [x] Let the user accept or reject parsed profile suggestions before updating canonical resume JSON.
+- [x] Let the user accept or reject parsed profile suggestions before saving resume JSON.
+- [x] Let the user apply parsed suggestions into a new resume profile instead of overwriting one global profile JSON.
 - [x] Let the user edit parsed profile suggestions after applying them in the JSON-backed editor.
+- [x] Build resume profile list UI with favorites displayed first.
 - [x] Build profile editor UI.
 
 ### Job Import
 
-- [x] Add backend jobs table for raw scraped/pasted text plus structured job JSON.
+- [x] Add backend `jobs_cache` table for shared URL scrape/parse cache.
+- [x] Store user-editable saved job copies in `user_jobs`.
 - [x] Add backend OpenAI parser contract for the structured job description JSON schema.
 - [x] Add backend endpoint that saves pasted or URL-scraped job descriptions as raw text plus parsed JSON.
 - [x] Add full manual job creation with title, company, description, deadline, location, salary, source URL, and notes.
@@ -121,6 +129,7 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Add URL import that attempts extraction and creates a reviewable draft after the text-only comparison prototype works.
 - [x] Add fallback flow for failed URL extraction so the user can manually complete the job.
 - [x] Store raw and structured job data.
+- [x] Reuse existing parsed job data by URL when a matching job URL is already cached.
 - [x] Build jobs list and detail UI.
 
 ### Application Tracking

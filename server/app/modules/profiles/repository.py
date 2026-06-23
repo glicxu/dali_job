@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.dev_identity import (
@@ -12,8 +12,8 @@ from app.modules.accounts.dev_identity import (
 )
 from app.modules.accounts.models import User, Workspace
 from app.modules.auth.dependencies import AuthenticatedIdentity, get_dev_identity
-from app.modules.profiles.models import Profile, default_resume_data
-from app.modules.profiles.schemas import ResumeData
+from app.modules.profiles.models import ResumeProfile, default_resume_data
+from app.modules.profiles.schemas import ResumeData, ResumeProfileCreateRequest, ResumeProfileUpdateRequest
 
 
 def ensure_dev_account(db: Session) -> tuple[User, Workspace]:
@@ -77,42 +77,97 @@ def normalize_resume_data(value: dict | None) -> dict:
     return ResumeData.model_validate(merged).model_dump()
 
 
-def get_or_create_profile(db: Session, identity: AuthenticatedIdentity | None = None) -> Profile:
+def list_resume_profiles(
+    db: Session,
+    identity: AuthenticatedIdentity | None = None,
+) -> list[ResumeProfile]:
     user, workspace = ensure_account_for_identity(db, identity or get_dev_identity())
-    profile = db.scalar(
-        select(Profile).where(
-            Profile.workspace_id == workspace.id,
-            Profile.user_id == user.id,
+    resume_profiles = db.scalars(
+        select(ResumeProfile)
+        .where(
+            ResumeProfile.workspace_id == workspace.id,
+            ResumeProfile.user_id == user.id,
+            ResumeProfile.deleted_at.is_(None),
+        )
+        .order_by(desc(ResumeProfile.is_favorite), desc(ResumeProfile.updated_at), desc(ResumeProfile.id))
+    ).all()
+    for resume_profile in resume_profiles:
+        resume_profile.resume_data = normalize_resume_data(resume_profile.resume_data)
+    return resume_profiles
+
+
+def get_resume_profile_for_identity(
+    db: Session,
+    identity: AuthenticatedIdentity,
+    resume_profile_id: int,
+) -> ResumeProfile | None:
+    user, workspace = ensure_account_for_identity(db, identity)
+    resume_profile = db.scalar(
+        select(ResumeProfile).where(
+            ResumeProfile.id == resume_profile_id,
+            ResumeProfile.workspace_id == workspace.id,
+            ResumeProfile.user_id == user.id,
+            ResumeProfile.deleted_at.is_(None),
         )
     )
-    if profile is None:
-        profile = Profile(
-            workspace_id=workspace.id,
-            user_id=user.id,
-            resume_data=default_resume_data(),
-        )
-        db.add(profile)
-        db.flush()
-    else:
-        profile.resume_data = normalize_resume_data(profile.resume_data)
-    return profile
+    if resume_profile is not None:
+        resume_profile.resume_data = normalize_resume_data(resume_profile.resume_data)
+    return resume_profile
 
 
-def update_profile_resume_data(
+def create_resume_profile(
     db: Session,
-    resume_data: ResumeData,
+    payload: ResumeProfileCreateRequest,
     identity: AuthenticatedIdentity | None = None,
-) -> Profile:
-    profile = get_or_create_profile(db, identity)
-    profile.resume_data = resume_data.model_dump()
+) -> ResumeProfile:
+    user, workspace = ensure_account_for_identity(db, identity or get_dev_identity())
+    resume_profile = ResumeProfile(
+        workspace_id=workspace.id,
+        user_id=user.id,
+        title=payload.title.strip(),
+        resume_data=payload.resume_data.model_dump(),
+        is_favorite=payload.is_favorite,
+    )
+    db.add(resume_profile)
     db.flush()
-    db.refresh(profile)
-    return profile
+    db.refresh(resume_profile)
+    return resume_profile
+
+
+def update_resume_profile(
+    db: Session,
+    resume_profile: ResumeProfile,
+    payload: ResumeProfileUpdateRequest,
+) -> ResumeProfile:
+    if payload.title is not None:
+        resume_profile.title = payload.title.strip()
+    if payload.resume_data is not None:
+        resume_profile.resume_data = payload.resume_data.model_dump()
+    if payload.is_favorite is not None:
+        resume_profile.is_favorite = payload.is_favorite
+    db.flush()
+    db.refresh(resume_profile)
+    return resume_profile
+
+
+def soft_delete_resume_profile(db: Session, resume_profile: ResumeProfile) -> None:
+    from app.modules.profiles.models import utc_now
+
+    resume_profile.deleted_at = utc_now()
+    db.flush()
 
 
 def apply_resume_suggestions(
     db: Session,
     suggestions: ResumeData,
     identity: AuthenticatedIdentity | None = None,
-) -> Profile:
-    return update_profile_resume_data(db, suggestions, identity)
+) -> ResumeProfile:
+    return create_resume_profile(
+        db,
+        ResumeProfileCreateRequest(
+            title=suggestions.headline or "Imported Resume",
+            resume_data=suggestions,
+            is_favorite=False,
+        ),
+        identity,
+    )

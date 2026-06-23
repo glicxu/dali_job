@@ -12,7 +12,7 @@ import {
 
 type Mode = "login" | "register";
 
-export function AuthForm() {
+export function AuthForm({ onAuthChange }: { onAuthChange?: (user: CurrentUser | null) => void }) {
   const [mode, setMode] = useState<Mode>("login");
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [email, setEmail] = useState("");
@@ -42,6 +42,7 @@ export function AuthForm() {
           ? await registerUser(email, password, displayName)
           : await loginUser(email, password);
       setUser(response.user);
+      onAuthChange?.(response.user);
       setStatus(mode === "register" ? "Account created." : "Signed in.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed.");
@@ -53,6 +54,7 @@ export function AuthForm() {
   function signOut() {
     clearAuthToken();
     setUser(null);
+    onAuthChange?.(null);
     setStatus("Signed out.");
   }
 

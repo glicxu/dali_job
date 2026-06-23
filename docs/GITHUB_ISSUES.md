@@ -96,22 +96,26 @@ Acceptance criteria:
 - Tests cover authorization checks.
 - No `workspace_members` table is required for MVP.
 
-### 5. Build Career Profile Data Model
+### 5. Build Resume Profile Data Model
 
-Add the JSON-backed profile table and APIs for reading/updating the user's structured resume data.
-
-Acceptance criteria:
-
-- User can create and edit all profile sections inside one `resume_data` JSON document.
-- Profile endpoints return validated structured resume JSON.
-
-### 6. Build Profile Editor UI
-
-Create client screens for editing the career profile.
+Add JSON-backed resume profile storage and APIs for reading/updating the user's structured resume data.
 
 Acceptance criteria:
 
-- User can manage skills, experience, projects, education, and certifications through the JSON-backed profile editor.
+- User can create multiple structured resume profiles.
+- Each resume profile stores one validated `resume_data` JSON document.
+- User can favorite zero, one, or many resume profiles.
+- Resume profile list endpoints return favorites first, then most recently updated resumes.
+
+### 6. Build Profile And Resume Editor UI
+
+Create client screens for editing structured resume profiles.
+
+Acceptance criteria:
+
+- User can manage skills, experience, projects, education, and certifications through the JSON-backed resume profile editor.
+- User can star or unstar resumes from the resume profile list.
+- Favorited resumes display first on the profile page and in resume selectors.
 - Form validation prevents invalid dates and empty required fields.
 
 ## Milestone: Jobs And Applications

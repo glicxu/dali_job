@@ -19,7 +19,7 @@ from app.modules.accounts.dev_identity import (  # noqa: E402
     DEV_WORKSPACE_NAME,
 )
 
-DEV_PROFILE_ID = "00000000-0000-4000-8000-000000000201"
+DEV_RESUME_PROFILE_ID = 1
 
 
 def main() -> int:
@@ -96,11 +96,13 @@ def main() -> int:
     )
     DbMan.write(
         """
-        INSERT INTO profiles (
+        INSERT INTO resume_profiles (
             id,
             workspace_id,
             user_id,
+            title,
             resume_data,
+            is_favorite,
             created_at,
             updated_at
         )
@@ -108,9 +110,10 @@ def main() -> int:
             :id,
             :workspace_id,
             :user_id,
+            'Local Master Resume',
             JSON_OBJECT(
-                'headline', 'DaliJob local profile',
-                'summary', 'Seed profile for local development before authentication is implemented.',
+                'headline', 'DaliJob local resume',
+                'summary', 'Seed resume profile for local development.',
                 'experience', JSON_ARRAY(),
                 'skills', JSON_ARRAY(),
                 'education', JSON_ARRAY(),
@@ -123,15 +126,18 @@ def main() -> int:
                 'target_roles', JSON_ARRAY(),
                 'notes', JSON_ARRAY()
             ),
+            1,
             UTC_TIMESTAMP(6),
             UTC_TIMESTAMP(6)
         )
         ON DUPLICATE KEY UPDATE
+            title = VALUES(title),
             resume_data = VALUES(resume_data),
+            is_favorite = VALUES(is_favorite),
             updated_at = UTC_TIMESTAMP(6)
         """,
         {
-            "id": DEV_PROFILE_ID,
+            "id": DEV_RESUME_PROFILE_ID,
             "workspace_id": DEV_WORKSPACE_ID,
             "user_id": DEV_USER_ID,
         },

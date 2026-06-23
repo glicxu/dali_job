@@ -15,8 +15,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("jobs", sa.Column("notes", sa.Text(), nullable=True))
+    # Notes now live on user_jobs, created in 20260619_0004.
+    pass
 
 
 def downgrade() -> None:
-    op.drop_column("jobs", "notes")
+    pass

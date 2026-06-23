@@ -8,6 +8,7 @@ DaliJob is designed as a long-term career operating system, not a job board and 
 
 - [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md) - product architecture, modules, service boundaries, workflows, AI boundaries, security, and non-functional requirements.
 - [DATABASE_DESIGN.md](DATABASE_DESIGN.md) - entities, fields, enums, relationships, indexing, and versioning rules.
+- [ER_MODEL_OVERVIEW.md](ER_MODEL_OVERVIEW.md) - plain-English explanation of current entities, relationships, and database design rules.
 - [API_SPEC.md](API_SPEC.md) - versioned REST API specification for the client, workers, and integrations.
 - [ER_DIAGRAM.md](ER_DIAGRAM.md) - Mermaid ER diagram and relationship notes.
 - [FOLDER_STRUCTURE.md](FOLDER_STRUCTURE.md) - recommended FastAPI, Next.js, worker, plugin, and infrastructure layout.
@@ -19,7 +20,7 @@ DaliJob is designed as a long-term career operating system, not a job board and 
 ## Product Phases
 
 0. Phase 0.5: barebones server/client plus pasted-text resume-to-job matching prototype with OpenAI and a 0-10 score.
-1. Phase 1: accounts, profile, resume storage, job import, application tracking, document management, notes, and basic analytics.
+1. Phase 1: accounts, multiple favorite-able resume profiles, job import, application tracking, document management, notes, and basic analytics.
 2. Phase 2: AI resume tailoring, cover letters, job analysis, match scoring, and gap analysis.
 3. Phase 3: interview preparation, company summaries, study guides, question generation, interview journal, and mock interviews.
 4. Phase 4: email integration, calendar integration, career intelligence, trend analysis, and learning recommendations.

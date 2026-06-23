@@ -8,7 +8,7 @@ from app.modules.documents.models import Document, DocumentVersion
 from app.modules.profiles.repository import ensure_account_for_identity
 
 
-def _latest_version(db: Session, document_id: str) -> DocumentVersion | None:
+def _latest_version(db: Session, document_id: int) -> DocumentVersion | None:
     return db.scalar(
         select(DocumentVersion)
         .where(DocumentVersion.document_id == document_id)
@@ -56,7 +56,7 @@ def list_documents(db: Session, identity: AuthenticatedIdentity) -> list[dict]:
     return [_document_response(document, _latest_version(db, document.id)) for document in documents]
 
 
-def get_document_for_identity(db: Session, identity: AuthenticatedIdentity, document_id: str) -> Document | None:
+def get_document_for_identity(db: Session, identity: AuthenticatedIdentity, document_id: int) -> Document | None:
     user, workspace = ensure_account_for_identity(db, identity)
     return db.scalar(
         select(Document).where(

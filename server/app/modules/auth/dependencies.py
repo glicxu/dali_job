@@ -29,7 +29,7 @@ class AuthenticatedIdentity:
 
 def get_dev_identity() -> AuthenticatedIdentity:
     return AuthenticatedIdentity(
-        external_user_id=DEV_USER_ID,
+        external_user_id=str(DEV_USER_ID),
         email=DEV_USER_EMAIL,
         display_name=DEV_USER_DISPLAY_NAME,
         provider="dev",
@@ -66,7 +66,7 @@ def _identity_from_email(email: str) -> AuthenticatedIdentity:
         if not bool(user.is_active):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="user inactive")
         return AuthenticatedIdentity(
-            external_user_id=user.id,
+            external_user_id=str(user.id),
             email=user.email,
             display_name=user.display_name,
             timezone=user.timezone,

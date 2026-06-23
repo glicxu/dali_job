@@ -57,9 +57,6 @@ class JobSaveRequest(BaseModel):
     raw_description_text: str
     job_data: JobDescriptionData
     notes: str | None = None
-    match_score: int | None = Field(default=None, ge=0, le=10)
-    matched_resume_document_id: str | None = None
-    matched_resume_source: str | None = None
 
 
 class JobUpdateRequest(BaseModel):
@@ -69,15 +66,13 @@ class JobUpdateRequest(BaseModel):
     raw_description_text: str | None = None
     job_data: JobDescriptionData | None = None
     notes: str | None = None
-    match_score: int | None = Field(default=None, ge=0, le=10)
-    matched_resume_document_id: str | None = None
-    matched_resume_source: str | None = None
 
 
 class JobResponse(BaseModel):
-    id: str
-    workspace_id: str
-    user_id: str
+    id: int
+    workspace_id: int
+    user_id: int
+    jobs_cache_id: int | None = None
     title: str
     company: str
     source_url: str | None
@@ -85,7 +80,22 @@ class JobResponse(BaseModel):
     job_data: JobDescriptionData
     notes: str | None = None
     match_score: int | None = None
-    matched_resume_document_id: str | None = None
+    matched_resume_profile_id: int | None = None
+    matched_resume_document_id: int | None = None
     matched_resume_source: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class JobResumeMatchResponse(BaseModel):
+    id: int
+    workspace_id: int
+    user_id: int
+    user_job_id: int
+    jobs_cache_id: int | None = None
+    resume_profile_id: int | None = None
+    resume_document_id: int | None = None
+    resume_source: str
+    match_score: int = Field(..., ge=0, le=10)
+    match_data: dict
+    created_at: datetime

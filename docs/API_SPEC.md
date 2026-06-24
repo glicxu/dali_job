@@ -294,6 +294,96 @@ Response:
 }
 ```
 
+### `POST /jobs/import-list/discover`
+
+Discovers individual job posting URLs from a public job search or listing page. This endpoint should not create `jobs_cache` or `user_jobs` rows. It only returns reviewable candidates for the user to select.
+
+Body:
+
+```json
+{
+  "list_url": "https://example.com/careers/search?query=software",
+  "max_results": 25
+}
+```
+
+Response:
+
+```json
+{
+  "list_url": "https://example.com/careers/search?query=software",
+  "candidates": [
+    {
+      "title": "Software Engineer",
+      "company": "Example Co",
+      "source_url": "https://example.com/careers/jobs/123",
+      "status": "new",
+      "jobs_cache_id": null
+    },
+    {
+      "title": "Data Engineer",
+      "company": "Example Co",
+      "source_url": "https://example.com/careers/jobs/456",
+      "status": "already_cached",
+      "jobs_cache_id": 12
+    }
+  ],
+  "warnings": ["Only the first page was scanned."]
+}
+```
+
+Candidate `status` values:
+
+- `new`
+- `already_cached`
+- `duplicate`
+- `unsupported`
+- `failed`
+
+### `POST /jobs/import-list`
+
+Imports selected candidates from a prior list discovery result. For each selected job URL, the server should use the normal URL import pipeline: check `jobs_cache`, reuse cached parsed data when possible, otherwise scrape the detail page and parse the job JSON, then create a user-specific `user_jobs` copy.
+
+Body:
+
+```json
+{
+  "list_url": "https://example.com/careers/search?query=software",
+  "selected_urls": [
+    "https://example.com/careers/jobs/123",
+    "https://example.com/careers/jobs/456"
+  ],
+  "resume_profile_id": 1,
+  "run_matching": true
+}
+```
+
+Response:
+
+```json
+{
+  "imported": [
+    {
+      "user_job_id": 31,
+      "jobs_cache_id": 12,
+      "source_url": "https://example.com/careers/jobs/456",
+      "title": "Data Engineer",
+      "company": "Example Co",
+      "match_score": 7,
+      "match_id": 44
+    }
+  ],
+  "failed": [
+    {
+      "source_url": "https://example.com/careers/jobs/123",
+      "reason": "The job detail page could not be extracted."
+    }
+  ]
+}
+```
+
+`run_matching` is optional. When it is true, `resume_profile_id` or another supported resume source must be supplied. Bulk import should still work when matching is disabled.
+
 ### `POST /jobs`
 
 Creates a saved job from a reviewed draft or fully manual input. If a source URL already exists in `jobs_cache`, the server reuses that cache row but still saves the reviewed/edited values into a separate `user_jobs` row. This is a core workflow and does not depend on job board APIs, plugins, or URL extraction.

@@ -276,6 +276,8 @@ The implemented `jobs_cache` table stores the shared canonical job posting cache
 
 Future application tracking may add or derive columns such as `remote_policy`, `closing_date`, `compensation_min`, and `compensation_max` when those fields need filtering/sorting. The cache JSON remains the canonical parsed job description from the original source URL. When a URL has already been parsed, matching and import flows should reuse `jobs_cache.job_data` and `raw_description_text` as the starting point instead of spending another OpenAI job parsing call.
 
+Bulk job-list import does not require a separate core job table for the MVP. A listing URL discovery step should extract individual posting URLs, then each selected posting URL should flow through the same `jobs_cache` lookup and `user_jobs` copy pipeline. A future `job_import_runs` table can be added if DaliJob needs persistent import history, retry state, or background progress tracking across many pages.
+
 ### user_jobs
 
 Stores the current user's editable saved job copy. The Jobs page should query `user_jobs` directly. If the saved job came from a cached URL, `user_jobs.jobs_cache_id` links back to `jobs_cache`, but user edits must update only `user_jobs`.

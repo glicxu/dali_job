@@ -131,6 +131,11 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Store raw and structured job data.
 - [x] Reuse existing parsed job data by URL when a matching job URL is already cached.
 - [x] Build jobs list and detail UI.
+- [ ] Add bulk job-list discovery endpoint that extracts individual job posting URLs from a search/listing page without saving them.
+- [ ] Add bulk import review UI where the user selects discovered jobs before import.
+- [ ] Add selected-job bulk import endpoint that reuses `jobs_cache` and creates `user_jobs` copies.
+- [ ] Add optional batch matching for imported jobs after the user selects a resume profile.
+- [ ] Add conservative limits, deduplication, source-access checks, and clear warnings for unsupported listing pages.
 
 ### Application Tracking
 

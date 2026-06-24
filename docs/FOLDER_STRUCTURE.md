@@ -227,6 +227,7 @@ Recommended first-screen app areas:
 - `/applications` - main tracker.
 - `/applications/[id]` - application detail, documents, timeline, interviews.
 - `/jobs` - imported jobs and analysis.
+- `/jobs/import` - bulk job-list import discovery, review, selection, and selected-job import.
 - `/profile` - career source-of-truth editor.
 - `/documents` - uploaded and generated files.
 - `/analytics` - funnel, skills, and resume performance.

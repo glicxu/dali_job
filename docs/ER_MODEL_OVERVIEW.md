@@ -192,6 +192,19 @@ When a user imports a job URL:
 
 When a user manually creates a job without a URL, the app can create a `user_jobs` row without a `jobs_cache_id`.
 
+## Bulk Job-List Import Flow
+
+When a user imports from a job search or listing URL:
+
+1. The server fetches the listing page and extracts candidate individual job posting URLs.
+2. The server normalizes and deduplicates the URLs.
+3. The server checks `jobs_cache` for each candidate URL and marks candidates as already cached or new.
+4. The client shows the candidates in a review table and the user selects which jobs to import.
+5. Each selected detail URL uses the normal Job Import Flow above.
+6. Optional batch matching can create `job_resume_matches` rows after the selected jobs are saved to `user_jobs`.
+
+This flow should not store listing-page results as jobs. Only individual job detail pages should create or reuse `jobs_cache` rows. The listing URL is an import source, not a job entity.
+
 ## Resume Match Flow
 
 When a user matches a resume to a job:

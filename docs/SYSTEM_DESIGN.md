@@ -115,6 +115,7 @@ Job aggregation is optional. DaliJob must support manual import without any aggr
 Supported import methods:
 
 - Paste job URL and let the server attempt to extract the job details from the page.
+- Paste a job search or listing URL, let the server discover individual job posting URLs, review the discovered jobs, and import selected jobs in bulk.
 - Fully manual job entry where the user types or pastes title, company, description, deadline, location, salary, source URL, and notes.
 - Upload PDF job description.
 - Copy and paste job description.
@@ -126,6 +127,19 @@ Manual entry is a core workflow, not a fallback-only feature. A user must be abl
 URL extraction is a convenience feature. If the page cannot be fetched, blocks automated access, requires authentication, renders content client-side, or does not expose parseable job data, DaliJob should keep the URL and let the user manually fill or paste the missing fields. URL extraction must not be required for application tracking.
 
 The implemented job import flow creates reviewable drafts from URL or pasted text before saving. Users can also start with a blank manual job form. Saved jobs are represented by editable `user_jobs` rows that optionally reference shared `jobs_cache` rows, so the same parsed URL can appear in multiple users' job lists without reparsing the posting while still allowing private user edits.
+
+Bulk job-list import should be a separate workflow from the one-job Match page. The Match page remains focused on comparing one resume against one job source. Bulk import belongs on a dedicated page such as `/jobs/import` or a clearly separated Jobs page section because it has a review/select/import workflow.
+
+Bulk import methodology:
+
+1. The user pastes a public job search or job listing URL.
+2. The server fetches the listing page with conservative timeouts, rate limits, and source access checks.
+3. The server extracts candidate individual job posting URLs, normalizes and deduplicates them, and labels each as new, already cached, or failed/unknown when possible.
+4. The client shows a review table so the user can select which jobs to import. DaliJob must not silently import every discovered job.
+5. For each selected job URL, the server uses the normal single-job import pipeline: check `jobs_cache`, reuse existing cached `job_data` when available, otherwise scrape the detail page, parse with OpenAI, save the shared cache row, and create a user-specific `user_jobs` copy.
+6. Optional batch matching can run after import when the user selects a resume profile, but bulk import must also work without matching.
+
+The first implementation should cap the number of discovered/imported jobs per request, for example 10 to 25, and can start with the first listing page only. Pagination and JavaScript-rendered listing support should be added after the basic workflow is reliable.
 
 For AI parsing, DaliJob should preserve two forms of each imported posting:
 

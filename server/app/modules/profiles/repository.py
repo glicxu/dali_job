@@ -126,6 +126,8 @@ def create_resume_profile(
         user_id=user.id,
         title=payload.title.strip(),
         resume_data=payload.resume_data.model_dump(),
+        source_document_id=payload.source_document_id,
+        source_document_version_id=payload.source_document_version_id,
         is_favorite=payload.is_favorite,
     )
     db.add(resume_profile)
@@ -161,12 +163,16 @@ def apply_resume_suggestions(
     db: Session,
     suggestions: ResumeData,
     identity: AuthenticatedIdentity | None = None,
+    source_document_id: int | None = None,
+    source_document_version_id: int | None = None,
 ) -> ResumeProfile:
     return create_resume_profile(
         db,
         ResumeProfileCreateRequest(
             title=suggestions.headline or "Imported Resume",
             resume_data=suggestions,
+            source_document_id=source_document_id,
+            source_document_version_id=source_document_version_id,
             is_favorite=False,
         ),
         identity,

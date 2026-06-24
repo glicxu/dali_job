@@ -8,6 +8,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.session import get_db_session
 from app.main import create_app
+from app.modules.documents.models import Document, DocumentVersion
 from app.modules.profiles.models import ResumeProfile
 import app.modules.profiles.router as profile_router
 from app.modules.profiles.schemas import ResumeData
@@ -22,11 +23,11 @@ class StubResumeParser:
         )
 
 
-async def fake_extract_resume_text(_file) -> str:
-    return "Redacted resume text"
+async def fake_read_supported_upload(_file) -> bytes:
+    return b"fake pdf bytes"
 
 
-def test_resume_import_preview_does_not_update_profile_until_apply(monkeypatch) -> None:
+def test_resume_import_preview_does_not_update_profile_until_apply(monkeypatch, tmp_path) -> None:
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -47,9 +48,16 @@ def test_resume_import_preview_does_not_update_profile_until_apply(monkeypatch) 
         finally:
             session.close()
 
-    monkeypatch.setattr(profile_router, "extract_resume_text", fake_extract_resume_text)
+    monkeypatch.setattr(profile_router, "read_supported_upload", fake_read_supported_upload)
+    monkeypatch.setattr(profile_router, "extract_redacted_text", lambda _content, _content_type: "Redacted resume text")
 
     app = create_app()
+    app.state.runtime = app.state.runtime.__class__(
+        **{
+            **app.state.runtime.__dict__,
+            "document_storage_dir": str(tmp_path),
+        }
+    )
     app.dependency_overrides[get_db_session] = override_db
     app.dependency_overrides[profile_router.get_resume_profile_parser] = lambda: StubResumeParser()
     client = TestClient(app)
@@ -60,12 +68,24 @@ def test_resume_import_preview_does_not_update_profile_until_apply(monkeypatch) 
     )
 
     assert response.status_code == 200
-    assert response.json()["suggestions"]["headline"] == "Parsed Resume"
+    preview_payload = response.json()
+    assert preview_payload["suggestions"]["headline"] == "Parsed Resume"
+    assert preview_payload["document_id"] is not None
+    assert preview_payload["document_version_id"] is not None
 
     with session_factory() as session:
         assert session.query(ResumeProfile).count() == 0
+        assert session.query(Document).count() == 1
+        assert session.query(DocumentVersion).count() == 1
 
-    apply_response = client.post("/api/v1/profile/resume-imports/apply", json=response.json()["suggestions"])
+    apply_response = client.post(
+        "/api/v1/profile/resume-imports/apply",
+        json={
+            "resume_data": preview_payload["suggestions"],
+            "source_document_id": preview_payload["document_id"],
+            "source_document_version_id": preview_payload["document_version_id"],
+        },
+    )
 
     assert apply_response.status_code == 200
     assert apply_response.json()["title"] == "Parsed Resume"
@@ -74,3 +94,5 @@ def test_resume_import_preview_does_not_update_profile_until_apply(monkeypatch) 
         assert len(resume_profiles) == 1
         assert resume_profiles[0].resume_data["headline"] == "Parsed Resume"
         assert resume_profiles[0].resume_data["skills"] == ["Parsed Skill"]
+        assert resume_profiles[0].source_document_id == preview_payload["document_id"]
+        assert resume_profiles[0].source_document_version_id == preview_payload["document_version_id"]

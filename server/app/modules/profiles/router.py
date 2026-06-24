@@ -1,19 +1,29 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db_session
 from app.modules.auth.dependencies import AuthenticatedIdentity, get_current_identity
+from app.modules.documents import repository as document_repository
+from app.modules.documents.storage import (
+    extract_redacted_text,
+    read_supported_upload,
+    safe_file_name,
+    sha256_hex,
+    write_document_file,
+)
 from app.modules.profiles import repository
 from app.modules.profiles.resume_import import (
     OpenAIResumeProfileParser,
     ResumeImportResponse,
     ResumeProfileParser,
-    extract_resume_text,
 )
 from app.modules.profiles.schemas import (
     ResumeData,
+    ResumeImportApplyRequest,
     ResumeProfileCreateRequest,
     ResumeProfileListResponse,
     ResumeProfileResponse,
@@ -31,15 +41,36 @@ def get_resume_profile_parser(request: Request) -> ResumeProfileParser:
 
 @router.post("/resume-imports", response_model=ResumeImportResponse)
 async def import_resume_pdf(
+    request: Request,
     file: UploadFile = File(...),
     parser: ResumeProfileParser = Depends(get_resume_profile_parser),
+    db: Session = Depends(get_db_session),
     identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> ResumeImportResponse:
-    _ = identity
-    resume_text = await extract_resume_text(file)
+    content = await read_supported_upload(file)
+    file_name = safe_file_name(file.filename)
+    content_type = file.content_type or "application/octet-stream"
+    resume_text = extract_redacted_text(content, content_type)
+    if not resume_text:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No resume text could be extracted.")
+    storage_path = write_document_file(request.app.state.runtime.document_storage_dir, content, file_name)
+    created_document = document_repository.create_document_with_version(
+        db,
+        identity,
+        title=Path(file_name).stem or "Resume",
+        document_type="resume",
+        file_name=file_name,
+        content_type=content_type,
+        size_bytes=len(content),
+        sha256=sha256_hex(content),
+        storage_path=storage_path,
+        extracted_text=resume_text,
+    )
     suggestions = parser.parse(resume_text)
     return ResumeImportResponse(
-        file_name=file.filename or "resume.pdf",
+        file_name=file_name,
+        document_id=created_document["id"],
+        document_version_id=created_document["latest_version"]["id"],
         extracted_text_preview=resume_text[:2000],
         suggestions=suggestions,
     )
@@ -47,11 +78,17 @@ async def import_resume_pdf(
 
 @router.post("/resume-imports/apply", response_model=ResumeProfileResponse)
 def apply_resume_import(
-    payload: ResumeData,
+    payload: ResumeImportApplyRequest,
     db: Session = Depends(get_db_session),
     identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> ResumeProfileResponse:
-    return repository.apply_resume_suggestions(db, payload, identity)
+    return repository.apply_resume_suggestions(
+        db,
+        payload.resume_data,
+        identity,
+        source_document_id=payload.source_document_id,
+        source_document_version_id=payload.source_document_version_id,
+    )
 
 
 @resume_profiles_router.get("", response_model=ResumeProfileListResponse)

@@ -699,7 +699,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ResumeData"
+                "$ref": "#/components/schemas/ResumeImportApplyRequest"
               }
             }
           },
@@ -2065,11 +2065,53 @@
         "type": "object",
         "title": "ResumeData"
       },
+      "ResumeImportApplyRequest": {
+        "properties": {
+          "resume_data": {
+            "$ref": "#/components/schemas/ResumeData"
+          },
+          "source_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Document Id"
+          },
+          "source_document_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Document Version Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "resume_data"
+        ],
+        "title": "ResumeImportApplyRequest"
+      },
       "ResumeImportResponse": {
         "properties": {
           "file_name": {
             "type": "string",
             "title": "File Name"
+          },
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "document_version_id": {
+            "type": "integer",
+            "title": "Document Version Id"
           },
           "extracted_text_preview": {
             "type": "string",
@@ -2082,6 +2124,8 @@
         "type": "object",
         "required": [
           "file_name",
+          "document_id",
+          "document_version_id",
           "extracted_text_preview",
           "suggestions"
         ],
@@ -2309,6 +2353,28 @@
           },
           "resume_data": {
             "$ref": "#/components/schemas/ResumeData"
+          },
+          "source_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Document Id"
+          },
+          "source_document_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Document Version Id"
           },
           "is_favorite": {
             "type": "boolean",

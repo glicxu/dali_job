@@ -19,6 +19,8 @@ MAX_RESUME_TEXT_CHARS = 24_000
 
 class ResumeImportResponse(BaseModel):
     file_name: str
+    document_id: int
+    document_version_id: int
     extracted_text_preview: str
     suggestions: ResumeData
 

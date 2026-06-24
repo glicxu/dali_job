@@ -265,7 +265,7 @@ export function ProfileEditor() {
     setStatus(null);
     setIsApplyingResume(true);
     try {
-      const saved = await applyResumeProfileSuggestions(resumeImport.suggestions);
+      const saved = await applyResumeProfileSuggestions(resumeImport);
       setResumeImport(null);
       upsertResumeProfile(saved);
       setStatus("Resume suggestions saved as a new resume profile.");

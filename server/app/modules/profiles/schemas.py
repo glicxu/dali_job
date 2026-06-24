@@ -26,7 +26,15 @@ class ResumeData(BaseModel):
 class ResumeProfileCreateRequest(BaseModel):
     title: str = Field(default="Master Resume", min_length=1, max_length=255)
     resume_data: ResumeData = Field(default_factory=ResumeData)
+    source_document_id: int | None = None
+    source_document_version_id: int | None = None
     is_favorite: bool = False
+
+
+class ResumeImportApplyRequest(BaseModel):
+    resume_data: ResumeData
+    source_document_id: int | None = None
+    source_document_version_id: int | None = None
 
 
 class ResumeProfileUpdateRequest(BaseModel):

@@ -147,6 +147,8 @@ export type ResumeProfileListResponse = {
 export type ResumeProfileCreatePayload = {
   title: string;
   resume_data: ResumeData;
+  source_document_id?: number | null;
+  source_document_version_id?: number | null;
   is_favorite?: boolean;
 };
 
@@ -158,6 +160,8 @@ export type ResumeProfileUpdatePayload = {
 
 export type ResumeImportResponse = {
   file_name: string;
+  document_id: number;
+  document_version_id: number;
   extracted_text_preview: string;
   suggestions: ResumeData;
 };
@@ -498,9 +502,13 @@ export async function importResumePdf(file: File): Promise<ResumeImportResponse>
   return response.json();
 }
 
-export function applyResumeProfileSuggestions(suggestions: ResumeData): Promise<ResumeProfile> {
+export function applyResumeProfileSuggestions(importResult: ResumeImportResponse): Promise<ResumeProfile> {
   return requestJson<ResumeProfile>("/profile/resume-imports/apply", {
     method: "POST",
-    body: JSON.stringify(suggestions),
+    body: JSON.stringify({
+      resume_data: importResult.suggestions,
+      source_document_id: importResult.document_id,
+      source_document_version_id: importResult.document_version_id,
+    }),
   });
 }

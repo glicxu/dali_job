@@ -107,7 +107,7 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Replace separate skills, experience, education, projects, certifications, awards, publications, and links tables with one resume JSON document.
 - [x] Add list/create/read/update/delete API for structured resume profiles.
 - [x] Add favorite/unfavorite support without requiring a single primary resume.
-- [ ] Add master resume upload or paste flow that preserves the original document when a file is provided.
+- [x] Add master resume upload or paste flow that preserves the original document when a file is provided.
 - [x] Add PDF master resume import prototype that extracts structured profile suggestions.
 - [x] Redact common personal contact information from uploaded resume text before AI parsing.
 - [x] Exclude name, email, phone, location, personal website, and social profile URL fields from saved resume JSON.

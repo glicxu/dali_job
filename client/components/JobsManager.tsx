@@ -7,8 +7,12 @@ import {
   emptyJobDescriptionData,
   JobDescriptionData,
   JobSavePayload,
+  listDocuments,
   listJobs,
+  listResumeProfiles,
+  ResumeProfile,
   StoredJob,
+  StoredDocument,
   updateJob,
 } from "../lib/api";
 
@@ -33,6 +37,28 @@ type JobEditorState = {
   job_data: JobDescriptionData;
   notes: string;
   showSaveButton: boolean;
+};
+
+type SupportedRequirementView = {
+  requirement: string;
+  resume_evidence: string;
+};
+
+type UnsupportedRequirementView = {
+  requirement: string;
+  reason: string;
+};
+
+type MatchDataView = {
+  match_score: number | null;
+  summary: string;
+  matched_skills: string[];
+  missing_skills: string[];
+  matched_keywords: string[];
+  missing_keywords: string[];
+  supported_requirements: SupportedRequirementView[];
+  unsupported_requirements: UnsupportedRequirementView[];
+  recommended_resume_updates: string[];
 };
 
 const arrayFieldLabels: Record<ArrayField, string> = {
@@ -95,6 +121,92 @@ function editorFromJob(job: StoredJob, showSaveButton = true): JobEditorState {
   };
 }
 
+function matchPageHref(job: StoredJob): string {
+  const params = new URLSearchParams();
+  if (job.source_url) {
+    params.set("job_url", job.source_url);
+  }
+  if (job.matched_resume_profile_id) {
+    params.set("resume_profile_id", String(job.matched_resume_profile_id));
+  }
+  if (job.matched_resume_document_id) {
+    params.set("resume_document_id", String(job.matched_resume_document_id));
+  }
+  const query = params.toString();
+  return query ? `/?${query}` : "/";
+}
+
+function stringArrayFromUnknown(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
+function matchDataObject(value: Record<string, unknown> | null): Record<string, unknown> {
+  return value ?? {};
+}
+
+function supportedRequirementsFromUnknown(value: unknown): SupportedRequirementView[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const requirement = "requirement" in item ? item.requirement : "";
+      const resumeEvidence = "resume_evidence" in item ? item.resume_evidence : "";
+      if (typeof requirement !== "string" || typeof resumeEvidence !== "string") return null;
+      return { requirement, resume_evidence: resumeEvidence };
+    })
+    .filter((item): item is SupportedRequirementView => Boolean(item));
+}
+
+function unsupportedRequirementsFromUnknown(value: unknown): UnsupportedRequirementView[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const requirement = "requirement" in item ? item.requirement : "";
+      const reason = "reason" in item ? item.reason : "";
+      if (typeof requirement !== "string" || typeof reason !== "string") return null;
+      return { requirement, reason };
+    })
+    .filter((item): item is UnsupportedRequirementView => Boolean(item));
+}
+
+function matchDataViewFromJob(job: StoredJob): MatchDataView {
+  const data = matchDataObject(job.match_data);
+  const score = data.match_score;
+  const summary = data.summary;
+  return {
+    match_score: typeof score === "number" ? score : job.match_score,
+    summary: typeof summary === "string" ? summary : "No summary was saved with this match.",
+    matched_skills: stringArrayFromUnknown(data.matched_skills),
+    missing_skills: stringArrayFromUnknown(data.missing_skills),
+    matched_keywords: stringArrayFromUnknown(data.matched_keywords),
+    missing_keywords: stringArrayFromUnknown(data.missing_keywords),
+    supported_requirements: supportedRequirementsFromUnknown(data.supported_requirements),
+    unsupported_requirements: unsupportedRequirementsFromUnknown(data.unsupported_requirements),
+    recommended_resume_updates: stringArrayFromUnknown(data.recommended_resume_updates),
+  };
+}
+
+function resumeReferenceLabel(
+  job: StoredJob,
+  resumeProfiles: ResumeProfile[],
+  documents: StoredDocument[],
+): string {
+  if (job.matched_resume_profile_id) {
+    const profile = resumeProfiles.find((item) => item.id === job.matched_resume_profile_id);
+    return profile ? profile.title : `Resume profile #${job.matched_resume_profile_id}`;
+  }
+  if (job.matched_resume_document_id) {
+    const document = documents.find((item) => item.id === job.matched_resume_document_id);
+    return document ? document.title : `Resume document #${job.matched_resume_document_id}`;
+  }
+  if (job.matched_resume_source === "pasted_text") {
+    return "Pasted resume text";
+  }
+  return "Resume source not saved";
+}
+
 function notePreviewLines(notes: string | null): string[] {
   const cleaned = notes?.trim();
   if (!cleaned) return [];
@@ -127,9 +239,12 @@ function notePreviewLines(notes: string | null): string[] {
 
 export function JobsManager() {
   const [jobs, setJobs] = useState<StoredJob[]>([]);
+  const [resumeProfiles, setResumeProfiles] = useState<ResumeProfile[]>([]);
+  const [documents, setDocuments] = useState<StoredDocument[]>([]);
   const [mode, setMode] = useState<ImportMode>("url");
   const [jobUrl, setJobUrl] = useState("");
   const [editor, setEditor] = useState<JobEditorState | null>(null);
+  const [matchDataJob, setMatchDataJob] = useState<StoredJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -152,6 +267,15 @@ export function JobsManager() {
 
   useEffect(() => {
     void loadJobs();
+    Promise.all([listResumeProfiles(), listDocuments()])
+      .then(([profilePayload, documentPayload]) => {
+        setResumeProfiles(profilePayload.resume_profiles);
+        setDocuments(documentPayload.documents);
+      })
+      .catch(() => {
+        setResumeProfiles([]);
+        setDocuments([]);
+      });
   }, []);
 
   function startManualJob() {
@@ -303,6 +427,14 @@ export function JobsManager() {
         />
       ) : null}
 
+      {matchDataJob ? (
+        <MatchDataViewer
+          job={matchDataJob}
+          resumeLabel={resumeReferenceLabel(matchDataJob, resumeProfiles, documents)}
+          onClose={() => setMatchDataJob(null)}
+        />
+      ) : null}
+
       <section className="profile-card">
         <div className="profile-card-header">
           <h2>Saved Jobs</h2>
@@ -327,14 +459,141 @@ export function JobsManager() {
                 <p className="summary">{job.job_data.summary || "No summary saved."}</p>
                 <JobNotesPreview notes={job.notes} />
               </div>
-              <button type="button" className="secondary-button" onClick={() => setEditor(editorFromJob(job))}>
-                View
-              </button>
+              <div className="button-row job-row-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={!job.source_url}
+                  onClick={() => {
+                    window.location.href = matchPageHref(job);
+                  }}
+                >
+                  Match
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={!job.match_data}
+                  onClick={() => setMatchDataJob(job)}
+                >
+                  Match Data
+                </button>
+                <button type="button" className="secondary-button" onClick={() => setEditor(editorFromJob(job))}>
+                  View
+                </button>
+              </div>
             </article>
           ))}
         </div>
       </section>
     </div>
+  );
+}
+
+function MatchDataViewer({
+  job,
+  resumeLabel,
+  onClose,
+}: {
+  job: StoredJob;
+  resumeLabel: string;
+  onClose: () => void;
+}) {
+  const matchData = matchDataViewFromJob(job);
+
+  return (
+    <section className="profile-card">
+      <div className="profile-card-header">
+        <div>
+          <h2>Match Data</h2>
+          <p className="metadata">
+            {job.title || "Untitled Job"} | {job.company || "Unknown company"}
+          </p>
+          <p className="metadata">Compared resume: {resumeLabel}</p>
+        </div>
+        <button type="button" className="secondary-button" onClick={onClose}>
+          Close
+        </button>
+      </div>
+      {job.match_data ? (
+        <section className="result-panel" aria-live="polite">
+          <div className="score-row">
+            <div className="score">{matchData.match_score ?? "N/A"}</div>
+            <div>
+              <p className="score-label">Match score</p>
+              <p className="summary">{matchData.summary}</p>
+            </div>
+          </div>
+
+          <div className="result-grid">
+            <MatchDataList title="Matched Skills" items={matchData.matched_skills} />
+            <MatchDataList title="Missing Skills" items={matchData.missing_skills} />
+            <MatchDataList title="Matched Keywords" items={matchData.matched_keywords} />
+            <MatchDataList title="Missing Keywords" items={matchData.missing_keywords} />
+          </div>
+
+          <div className="detail-grid">
+            <section>
+              <h2>Supported Requirements</h2>
+              {matchData.supported_requirements.length ? (
+                <ul>
+                  {matchData.supported_requirements.map((item) => (
+                    <li key={`${item.requirement}-${item.resume_evidence}`}>
+                      <strong>{item.requirement}</strong>
+                      <span>{item.resume_evidence}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="empty">No supported requirements returned.</p>
+              )}
+            </section>
+
+            <section>
+              <h2>Unsupported Requirements</h2>
+              {matchData.unsupported_requirements.length ? (
+                <ul>
+                  {matchData.unsupported_requirements.map((item) => (
+                    <li key={`${item.requirement}-${item.reason}`}>
+                      <strong>{item.requirement}</strong>
+                      <span>{item.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="empty">No unsupported requirements returned.</p>
+              )}
+            </section>
+          </div>
+
+          <MatchDataList title="Recommended Resume Updates" items={matchData.recommended_resume_updates} />
+
+          <details>
+            <summary>Raw Match JSON</summary>
+            <pre className="text-preview">{JSON.stringify(job.match_data, null, 2)}</pre>
+          </details>
+        </section>
+      ) : (
+        <p className="empty">No match data has been saved for this job.</p>
+      )}
+    </section>
+  );
+}
+
+function MatchDataList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <section className="result-list">
+      <h2>{title}</h2>
+      {items.length ? (
+        <ul>
+          {items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="empty">None returned.</p>
+      )}
+    </section>
   );
 }
 

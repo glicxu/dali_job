@@ -540,6 +540,93 @@
         ]
       }
     },
+    "/api/v1/jobs/import-list/discover": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Discover Job List",
+        "operationId": "discover_job_list_api_v1_jobs_import_list_discover_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobListDiscoverRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobListDiscoverResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/import-list": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Import Job List",
+        "operationId": "import_job_list_api_v1_jobs_import_list_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobListImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobListImportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/jobs/{job_id}": {
       "get": {
         "tags": [
@@ -1522,6 +1609,264 @@
         "type": "object",
         "title": "JobImportRequest"
       },
+      "JobListCandidate": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": ""
+          },
+          "company": {
+            "type": "string",
+            "title": "Company",
+            "default": ""
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "jobs_cache_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jobs Cache Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_url",
+          "status"
+        ],
+        "title": "JobListCandidate"
+      },
+      "JobListDiscoverRequest": {
+        "properties": {
+          "list_url": {
+            "type": "string",
+            "maxLength": 2083,
+            "minLength": 1,
+            "format": "uri",
+            "title": "List Url"
+          },
+          "max_results": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Max Results",
+            "default": 25
+          }
+        },
+        "type": "object",
+        "required": [
+          "list_url"
+        ],
+        "title": "JobListDiscoverRequest"
+      },
+      "JobListDiscoverResponse": {
+        "properties": {
+          "list_url": {
+            "type": "string",
+            "title": "List Url"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/JobListCandidate"
+            },
+            "type": "array",
+            "title": "Candidates"
+          },
+          "next_page_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Page Url"
+          },
+          "next_page_confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Next Page Confidence",
+            "default": 0.0
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "list_url",
+          "candidates"
+        ],
+        "title": "JobListDiscoverResponse"
+      },
+      "JobListImportFailure": {
+        "properties": {
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_url",
+          "reason"
+        ],
+        "title": "JobListImportFailure"
+      },
+      "JobListImportItem": {
+        "properties": {
+          "user_job_id": {
+            "type": "integer",
+            "title": "User Job Id"
+          },
+          "jobs_cache_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jobs Cache Id"
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "company": {
+            "type": "string",
+            "title": "Company"
+          },
+          "match_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Score"
+          },
+          "match_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_job_id",
+          "source_url",
+          "title",
+          "company"
+        ],
+        "title": "JobListImportItem"
+      },
+      "JobListImportRequest": {
+        "properties": {
+          "list_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2083,
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "List Url"
+          },
+          "selected_urls": {
+            "items": {
+              "type": "string",
+              "maxLength": 2083,
+              "minLength": 1,
+              "format": "uri"
+            },
+            "type": "array",
+            "maxItems": 25,
+            "minItems": 1,
+            "title": "Selected Urls"
+          },
+          "resume_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Profile Id"
+          },
+          "run_matching": {
+            "type": "boolean",
+            "title": "Run Matching",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "selected_urls"
+        ],
+        "title": "JobListImportRequest"
+      },
+      "JobListImportResponse": {
+        "properties": {
+          "imported": {
+            "items": {
+              "$ref": "#/components/schemas/JobListImportItem"
+            },
+            "type": "array",
+            "title": "Imported"
+          },
+          "failed": {
+            "items": {
+              "$ref": "#/components/schemas/JobListImportFailure"
+            },
+            "type": "array",
+            "title": "Failed"
+          }
+        },
+        "type": "object",
+        "title": "JobListImportResponse"
+      },
       "JobResponse": {
         "properties": {
           "id": {
@@ -1627,6 +1972,18 @@
               }
             ],
             "title": "Matched Resume Source"
+          },
+          "match_data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Data"
           },
           "created_at": {
             "type": "string",
@@ -1911,6 +2268,11 @@
           "matched_resume_source": {
             "type": "string",
             "title": "Matched Resume Source"
+          },
+          "match_data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Match Data"
           }
         },
         "type": "object",

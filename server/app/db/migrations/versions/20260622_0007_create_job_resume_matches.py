@@ -41,7 +41,7 @@ def upgrade() -> None:
             sa.ForeignKeyConstraint(["jobs_cache_id"], ["jobs_cache.id"], ondelete="SET NULL"),
             sa.ForeignKeyConstraint(["resume_document_id"], ["documents.id"], ondelete="SET NULL"),
             sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
-            sa.ForeignKeyConstraint(["user_job_id"], ["user_jobs.id"], ondelete="CASCADE"),
+            sa.ForeignKeyConstraint(["user_job_id"], ["user_saved_jobs.id"], ondelete="CASCADE"),
             sa.ForeignKeyConstraint(["workspace_id"], ["workspaces.id"], ondelete="CASCADE"),
             sa.PrimaryKeyConstraint("id"),
         )

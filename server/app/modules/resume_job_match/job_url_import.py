@@ -7,6 +7,7 @@ import re
 import socket
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
+from urllib.parse import parse_qsl, urlencode, unquote, urldefrag, urljoin, urlunparse
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
@@ -16,6 +17,7 @@ from fastapi import HTTPException, status
 MAX_JOB_PAGE_BYTES = 2 * 1024 * 1024
 MAX_JOB_TEXT_CHARS = 30_000
 FETCH_TIMEOUT_SECONDS = 12
+RENDERED_FETCH_TIMEOUT_MS = 15_000
 BLOCK_TAGS = {"p", "div", "section", "article", "li", "br", "h1", "h2", "h3", "h4"}
 CONTAINER_TAGS = {"main", "article", "section", "div"}
 CONTAINER_ATTR_KEYWORDS = (
@@ -64,6 +66,85 @@ FOOTER_MARKERS = (
     "learn more about our benefits",
     "eeo is the law",
 )
+JOB_LINK_PATH_MARKERS = (
+    "/getjob/viewdetails/",
+    "/job/",
+    "/jobs/",
+    "/careers/",
+    "/career/",
+    "/position/",
+    "/positions/",
+    "/opening/",
+    "/openings/",
+    "jobid=",
+    "job_id=",
+    "requisition",
+    "reqid",
+)
+NON_JOB_LINK_PATH_MARKERS = (
+    "/account",
+    "/applicant/",
+    "/application",
+    "/benefit",
+    "/category",
+    "/categories",
+    "/dashboard",
+    "/help",
+    "/location",
+    "/locations",
+    "/login",
+    "/profile",
+    "/saved",
+    "/search/",
+    "/search?",
+    "/search/results",
+    "/settings",
+    "/team",
+    "/teams",
+    "/user",
+    "savedsearch",
+)
+JOB_DETAIL_PATTERNS = (
+    re.compile(r"/getjob/viewdetails/\d+(?:[/?#]|$)", re.IGNORECASE),
+    re.compile(r"/job/\d+(?:[/?#]|$)", re.IGNORECASE),
+    re.compile(r"/jobs/\d+(?:[/?#]|$)", re.IGNORECASE),
+    re.compile(r"/jobs/[a-z0-9-]*\d[a-z0-9-]*(?:[/?#]|$)", re.IGNORECASE),
+    re.compile(r"[?&](?:jk|jobid|job_id|jobkey|reqid|requisitionid|requisition_id)=[^&]+", re.IGNORECASE),
+)
+JOB_TITLE_WORDS = (
+    "administrator",
+    "analyst",
+    "architect",
+    "associate",
+    "consultant",
+    "developer",
+    "engineer",
+    "manager",
+    "officer",
+    "programmer",
+    "scientist",
+    "specialist",
+    "technician",
+)
+PAGINATION_ATTR_MARKERS = (
+    "pagination",
+    "pager",
+    "page-nav",
+    "page_nav",
+    "page-navigation",
+    "results-pagination",
+    "search-pagination",
+)
+NEXT_TEXT_VALUES = {
+    ">",
+    "next",
+    "next page",
+    "show more",
+    "load more",
+    "more results",
+}
+NEXT_QUERY_PARAMS = {"p", "page", "pg", "pageNumber", "page_number"}
+OFFSET_QUERY_PARAMS = {"start", "offset", "from", "first", "skip"}
 
 
 @dataclass
@@ -183,6 +264,101 @@ class JobHtmlParser(HTMLParser):
                 candidate.parts.append(data)
 
 
+@dataclass
+class JobLinkCandidate:
+    source_url: str
+    title: str = ""
+
+
+@dataclass
+class PaginationCandidate:
+    source_url: str
+    text: str = ""
+    attr_text: str = ""
+    rel: str = ""
+
+
+@dataclass
+class JobListDiscoveryResult:
+    links: list[JobLinkCandidate]
+    next_page_url: str | None = None
+    next_page_confidence: float = 0.0
+
+
+@dataclass
+class _AnchorCandidate:
+    href: str
+    text_parts: list[str] = field(default_factory=list)
+    attr_text: str = ""
+    rel: str = ""
+
+
+class JobListLinkParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self._skip_depth = 0
+        self._active_anchor: _AnchorCandidate | None = None
+        self.links: list[JobLinkCandidate] = []
+        self.pagination_links: list[PaginationCandidate] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        tag = tag.lower()
+        if tag in {"script", "style", "noscript", "svg"}:
+            self._skip_depth += 1
+            return
+        if self._skip_depth > 0:
+            return
+        attrs_dict = {key.lower(): value or "" for key, value in attrs}
+        document_id = attrs_dict.get("data-document-id", "").strip()
+        href = attrs_dict.get("href", "").strip()
+        if document_id.isdigit() and not href:
+            self.links.append(JobLinkCandidate(source_url=f"/job/{document_id}", title=""))
+        if tag == "a":
+            if href:
+                aria_label = attrs_dict.get("aria-label", "").strip()
+                title = attrs_dict.get("title", "").strip()
+                attr_text = " ".join(
+                    value
+                    for key, value in attrs
+                    if key and key.lower() in {"id", "class", "data-test-id", "data-testid", "data-cy"} and value
+                ).lower()
+                self._active_anchor = _AnchorCandidate(
+                    href=href,
+                    text_parts=[aria_label, title],
+                    attr_text=attr_text,
+                    rel=attrs_dict.get("rel", "").lower(),
+                )
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        if tag in {"script", "style", "noscript", "svg"} and self._skip_depth > 0:
+            self._skip_depth -= 1
+            return
+        if tag == "a" and self._active_anchor is not None:
+            title = clean_job_text(" ".join(part for part in self._active_anchor.text_parts if part))
+            self.links.append(
+                JobLinkCandidate(
+                    source_url=self._active_anchor.href,
+                    title=title,
+                )
+            )
+            self.pagination_links.append(
+                PaginationCandidate(
+                    source_url=self._active_anchor.href,
+                    text=title,
+                    attr_text=self._active_anchor.attr_text,
+                    rel=self._active_anchor.rel,
+                )
+            )
+            self._active_anchor = None
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth == 0 and self._active_anchor is not None:
+            text = data.strip()
+            if text:
+                self._active_anchor.text_parts.append(text)
+
+
 def clean_job_text(text: str) -> str:
     text = html.unescape(text)
     text = text.replace("\x00", " ")
@@ -190,6 +366,208 @@ def clean_job_text(text: str) -> str:
     text = re.sub(r"\n[ \t]+", "\n", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()[:MAX_JOB_TEXT_CHARS]
+
+
+def _normalize_discovered_url(base_url: str, href: str) -> str | None:
+    href = href.strip()
+    if not href or href.startswith(("#", "mailto:", "tel:", "javascript:")):
+        return None
+    absolute = urljoin(base_url, href)
+    absolute, _fragment = urldefrag(absolute)
+    parsed = urlparse(absolute)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return None
+    list_host = urlparse(base_url).hostname
+    if list_host and parsed.hostname.lower() != list_host.lower():
+        return None
+    return absolute
+
+
+def _job_detail_link_score(url: str, title: str) -> int:
+    parsed = urlparse(url)
+    searchable = f"{parsed.path.lower()}?{parsed.query.lower()}"
+    if any(marker in searchable for marker in NON_JOB_LINK_PATH_MARKERS):
+        return 0
+    score = 0
+    if any(pattern.search(searchable) for pattern in JOB_DETAIL_PATTERNS):
+        score += 100
+    elif any(marker in searchable for marker in JOB_LINK_PATH_MARKERS):
+        score += 45
+    if parsed.path.lower().rstrip("/").endswith(("/jobs", "/job", "/careers", "/career")):
+        score -= 40
+    title_lower = title.lower()
+    if any(word in title_lower for word in JOB_TITLE_WORDS):
+        score += 20
+    if 8 <= len(title_lower) <= 140 and " " in title_lower:
+        score += 10
+    if title_lower in {"jobs", "job search", "search jobs", "view jobs", "saved searches"}:
+        score -= 60
+    return max(score, 0)
+
+
+def _query_dict(url: str) -> dict[str, str]:
+    return dict(parse_qsl(urlparse(url).query, keep_blank_values=True))
+
+
+def _score_next_page_candidate(base_url: str, candidate: PaginationCandidate) -> tuple[int, str | None]:
+    normalized_url = _normalize_discovered_url(base_url, candidate.source_url)
+    if not normalized_url or normalized_url == base_url:
+        return 0, None
+    if _job_detail_link_score(normalized_url, candidate.text) >= 50:
+        return 0, None
+    parsed = urlparse(normalized_url)
+    searchable = f"{parsed.path.lower()}?{parsed.query.lower()}"
+    if any(marker in searchable for marker in NON_JOB_LINK_PATH_MARKERS if marker not in {"/search/", "/search?"}):
+        return 0, None
+
+    score = 0
+    rel = candidate.rel.lower()
+    text = re.sub(r"\s+", " ", candidate.text.lower()).strip()
+    attr_text = candidate.attr_text.lower()
+    if "next" in rel:
+        score += 100
+    if text in NEXT_TEXT_VALUES or text in {"›", "»"}:
+        score += 80
+    if "next" in text:
+        score += 60
+    if "next" in attr_text:
+        score += 55
+    if any(marker in attr_text for marker in PAGINATION_ATTR_MARKERS):
+        score += 20
+
+    base_query = _query_dict(base_url)
+    next_query = _query_dict(normalized_url)
+    for key in NEXT_QUERY_PARAMS:
+        if key in base_query and key in next_query:
+            try:
+                if int(next_query[key]) == int(base_query[key]) + 1:
+                    score += 70
+            except ValueError:
+                pass
+    for key in OFFSET_QUERY_PARAMS:
+        if key in base_query and key in next_query:
+            try:
+                if int(next_query[key]) > int(base_query[key]):
+                    score += 45
+            except ValueError:
+                pass
+
+    return max(score, 0), normalized_url
+
+
+def _synthetic_next_page_url(base_url: str) -> str | None:
+    parsed = urlparse(base_url)
+    query_items = parse_qsl(parsed.query, keep_blank_values=True)
+    for index, (key, value) in enumerate(query_items):
+        if key in NEXT_QUERY_PARAMS:
+            try:
+                current = int(value)
+            except ValueError:
+                continue
+            next_items = list(query_items)
+            next_items[index] = (key, str(current + 1))
+            return urlunparse(parsed._replace(query=urlencode(next_items, doseq=True)))
+    return None
+
+
+def extract_next_page_url_from_html(base_url: str, content: str) -> tuple[str | None, float]:
+    parser = JobListLinkParser()
+    parser.feed(content)
+    best_score = 0
+    best_url: str | None = None
+    for candidate in parser.pagination_links:
+        score, normalized_url = _score_next_page_candidate(base_url, candidate)
+        if normalized_url and score > best_score:
+            best_score = score
+            best_url = normalized_url
+    if best_url and best_score >= 60:
+        return best_url, min(best_score / 120, 1.0)
+
+    synthetic_url = _synthetic_next_page_url(base_url)
+    if synthetic_url and synthetic_url != base_url:
+        return synthetic_url, 0.55
+    return None, 0.0
+
+
+def _extract_job_link_candidates_from_text(base_url: str, content: str) -> list[JobLinkCandidate]:
+    candidates: list[JobLinkCandidate] = []
+    seen: set[str] = set()
+    searchable_content = html.unescape(content)
+    searchable_content = searchable_content.replace("\\/", "/")
+    searchable_content = searchable_content.replace("\\u002F", "/").replace("\\u002f", "/")
+    searchable_content = unquote(searchable_content)
+    patterns = (
+        r"https?://[^\s\"'<>]+",
+        r"(?<![A-Za-z0-9])/GetJob/ViewDetails/\d+[^\s\"'<>]*",
+        r"(?<![A-Za-z0-9])/job/\d+[^\s\"'<>]*",
+        r"(?<![A-Za-z0-9])/jobs/[A-Za-z0-9][^\s\"'<>]*",
+    )
+    matches = [
+        (match.start(), match.group(0))
+        for pattern in patterns
+        for match in re.finditer(pattern, searchable_content)
+    ]
+    for _position, raw_value in sorted(matches, key=lambda item: item[0]):
+        value = html.unescape(raw_value).rstrip("),.;")
+        normalized_url = _normalize_discovered_url(base_url, value)
+        if not normalized_url or normalized_url in seen:
+            continue
+        if _job_detail_link_score(normalized_url, "") < 50:
+            continue
+        seen.add(normalized_url)
+        candidates.append(JobLinkCandidate(source_url=normalized_url, title=""))
+    return candidates
+
+
+def extract_job_links_from_html(base_url: str, content: str, max_results: int = 25) -> list[JobLinkCandidate]:
+    parser = JobListLinkParser()
+    parser.feed(content)
+    scored_candidates: list[tuple[int, int, JobLinkCandidate]] = []
+    seen: set[str] = set()
+    link_candidates = parser.links + _extract_job_link_candidates_from_text(base_url, content)
+    for index, candidate in enumerate(link_candidates):
+        normalized_url = _normalize_discovered_url(base_url, candidate.source_url)
+        if not normalized_url or normalized_url in seen:
+            continue
+        title = clean_job_text(candidate.title)
+        score = _job_detail_link_score(normalized_url, title)
+        if score < 50:
+            continue
+        seen.add(normalized_url)
+        scored_candidates.append((score, index, JobLinkCandidate(source_url=normalized_url, title=title)))
+    scored_candidates.sort(key=lambda item: (-item[0], item[1]))
+    return [candidate for _score, _index, candidate in scored_candidates[:max_results]]
+
+
+def discover_job_list_from_url(url: str, max_results: int = 25) -> JobListDiscoveryResult:
+    content_type, text = _fetch_url_text(url)
+    if "text/html" not in content_type and "application/xhtml" not in content_type:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Job list URL must return HTML.",
+        )
+    links = extract_job_links_from_html(url, text, max_results=max_results)
+    next_page_url, next_page_confidence = extract_next_page_url_from_html(url, text)
+    if not links:
+        rendered_html = _fetch_rendered_html(url)
+        links = extract_job_links_from_html(url, rendered_html, max_results=max_results)
+        next_page_url, next_page_confidence = extract_next_page_url_from_html(url, rendered_html)
+    if not links:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "No job posting links could be discovered from the list URL after static and rendered-page extraction."
+            ),
+        )
+    return JobListDiscoveryResult(
+        links=links,
+        next_page_url=next_page_url,
+        next_page_confidence=next_page_confidence,
+    )
+
+
+def discover_job_links_from_url(url: str, max_results: int = 25) -> list[JobLinkCandidate]:
+    return discover_job_list_from_url(url, max_results=max_results).links
 
 
 def _unique_lines(text: str) -> str:
@@ -415,6 +793,41 @@ def _fetch_url_text(url: str) -> tuple[str, str]:
         charset = match.group(1)
     text = raw.decode(charset, errors="ignore")
     return content_type, text
+
+
+def _fetch_rendered_html(url: str) -> str:
+    safe_url = validate_public_job_url(url)
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "No job posting links were found in the static HTML. This listing may require JavaScript rendering. "
+                "Install Playwright with `python -m pip install -r requirements.txt` and "
+                "`python -m playwright install chromium`, then restart the server."
+            ),
+        ) from exc
+
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            try:
+                page = browser.new_page(user_agent="DaliJob/0.1 (+https://dalijob.local)")
+                page.goto(safe_url, wait_until="networkidle", timeout=RENDERED_FETCH_TIMEOUT_MS)
+                page.wait_for_timeout(1000)
+                return page.content()
+            finally:
+                browser.close()
+    except PlaywrightError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "No job posting links were found in the static HTML, and the rendered-page fallback failed. "
+                f"Playwright error: {exc}"
+            ),
+        ) from exc
 
 
 def fetch_job_description_from_url(url: str) -> str:

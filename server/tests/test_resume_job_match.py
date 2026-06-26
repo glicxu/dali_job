@@ -11,7 +11,12 @@ from app.main import create_app
 from app.modules.documents.models import Document, DocumentVersion
 from app.modules.jobs.schemas import JobDescriptionData
 from app.modules.resume_job_match import router as match_router
-from app.modules.resume_job_match.job_url_import import extract_job_description_from_html, validate_public_job_url
+from app.modules.resume_job_match.job_url_import import (
+    extract_job_description_from_html,
+    extract_job_links_from_html,
+    extract_next_page_url_from_html,
+    validate_public_job_url,
+)
 from app.modules.resume_job_match.router import get_match_job_description_parser, get_resume_job_matcher
 from app.modules.resume_job_match.schemas import (
     ResumeJobMatchRequest,
@@ -521,6 +526,147 @@ def test_extract_job_description_trims_legal_footer_sections() -> None:
     assert "Basic Qualifications" in text
     assert "Our inclusive culture empowers" not in text
     assert "benefits" not in text
+
+
+def test_job_list_discovery_filters_usajobs_navigation_links() -> None:
+    html = """
+    <html><body>
+      <nav>
+        <a href="/Applicant/Dashboard/savedsearches">Saved searches</a>
+        <a href="/Search/Results?hp=public">Search jobs</a>
+      </nav>
+      <main>
+        <a href="/job/722102800">Cyber Threat Analyst</a>
+        <a href="/job/812345600">Software Developer</a>
+      </main>
+    </body></html>
+    """
+
+    links = extract_job_links_from_html("https://www.usajobs.gov/search/results/?k=software", html)
+
+    assert [link.source_url for link in links] == [
+        "https://www.usajobs.gov/job/722102800",
+        "https://www.usajobs.gov/job/812345600",
+    ]
+
+
+def test_job_list_discovery_accepts_usajobs_result_anchor_shape() -> None:
+    html = """
+    <html><body>
+      <a href="/job/859907200" data-search-result="0" data-document-id="859907200" class="no-underline">Data Solutions Developer</a>
+    </body></html>
+    """
+
+    links = extract_job_links_from_html("https://www.usajobs.gov/search/results/?k=software", html)
+
+    assert [link.source_url for link in links] == ["https://www.usajobs.gov/job/859907200"]
+    assert links[0].title == "Data Solutions Developer"
+
+
+def test_job_list_discovery_can_build_usajobs_link_from_document_id() -> None:
+    html = """
+    <html><body>
+      <div data-search-result="0" data-document-id="859907200">Data Solutions Developer</div>
+    </body></html>
+    """
+
+    links = extract_job_links_from_html("https://www.usajobs.gov/search/results/?k=software", html)
+
+    assert [link.source_url for link in links] == ["https://www.usajobs.gov/job/859907200"]
+
+
+def test_job_list_discovery_prioritizes_amazon_job_detail_links() -> None:
+    html = """
+    <html><body>
+      <header>
+        <a href="/en/job-categories/software-development">Software development category</a>
+        <a href="/en/search?base_query=Software+Development">Search jobs</a>
+      </header>
+      <section>
+        <a href="/en/jobs/10411163/software-development-manager-ring">Software Development Manager, Ring</a>
+        <a href="/en/jobs/2876543/software-development-engineer">Software Development Engineer</a>
+      </section>
+    </body></html>
+    """
+
+    links = extract_job_links_from_html("https://amazon.jobs/en/search?base_query=Software+Development", html)
+
+    assert [link.source_url for link in links] == [
+        "https://amazon.jobs/en/jobs/10411163/software-development-manager-ring",
+        "https://amazon.jobs/en/jobs/2876543/software-development-engineer",
+    ]
+
+
+def test_job_list_discovery_extracts_links_from_embedded_json_text() -> None:
+    html = """
+    <html><body>
+      <script>
+        window.__RESULTS__ = {
+          "items": [
+            {"url": "/job/722102800"},
+            {"PositionURI": "https://www.usajobs.gov/GetJob/ViewDetails/812345600"}
+          ]
+        };
+      </script>
+    </body></html>
+    """
+
+    links = extract_job_links_from_html("https://www.usajobs.gov/search/results/?k=software", html)
+
+    assert [link.source_url for link in links] == [
+        "https://www.usajobs.gov/job/722102800",
+        "https://www.usajobs.gov/GetJob/ViewDetails/812345600",
+    ]
+
+
+def test_job_list_discovery_extracts_escaped_embedded_links() -> None:
+    html = r"""
+    <html><body>
+      <script>
+        window.__RESULTS__ = {
+          "items": [
+            {"url": "https:\/\/www.usajobs.gov\/job\/722102800"},
+            {"url": "\/job\/812345600"}
+          ]
+        };
+      </script>
+    </body></html>
+    """
+
+    links = extract_job_links_from_html("https://www.usajobs.gov/search/results/?k=software", html)
+
+    assert [link.source_url for link in links] == [
+        "https://www.usajobs.gov/job/722102800",
+        "https://www.usajobs.gov/job/812345600",
+    ]
+
+
+def test_job_list_discovery_finds_explicit_next_page_link() -> None:
+    html = """
+    <html><body>
+      <nav class="search-pagination">
+        <a href="/search/results/?p=2" rel="next" aria-label="Next page">Next</a>
+      </nav>
+    </body></html>
+    """
+
+    next_page_url, confidence = extract_next_page_url_from_html(
+        "https://www.usajobs.gov/search/results/?p=1",
+        html,
+    )
+
+    assert next_page_url == "https://www.usajobs.gov/search/results/?p=2"
+    assert confidence > 0.5
+
+
+def test_job_list_discovery_builds_synthetic_next_page_from_query() -> None:
+    next_page_url, confidence = extract_next_page_url_from_html(
+        "https://www.usajobs.gov/search/results/?k=software&p=1&hp=public",
+        "<html><body>No pagination links rendered yet.</body></html>",
+    )
+
+    assert next_page_url == "https://www.usajobs.gov/search/results/?k=software&p=2&hp=public"
+    assert confidence == 0.55
 
 
 def test_job_url_rejects_private_hosts() -> None:

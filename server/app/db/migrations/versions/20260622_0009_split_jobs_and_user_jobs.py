@@ -12,7 +12,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # jobs_cache and user_jobs are created in their final shape by 20260619_0004.
+    # jobs_cache and user_saved_jobs are created in their final shape by 20260619_0004.
     pass
 
 

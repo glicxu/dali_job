@@ -89,10 +89,11 @@ def import_job_for_match(
 ) -> tuple[str | None, str, JobDescriptionData]:
     if payload.job_url:
         source_url = str(payload.job_url)
-        user_job = job_repository.get_user_job_by_source_url(db, identity, source_url)
-        if user_job is not None:
-            return user_job.source_url, user_job.raw_description_text, JobDescriptionData.model_validate(
-                user_job.job_data
+        saved_job = job_repository.get_user_job_by_source_url(db, identity, source_url)
+        if saved_job is not None:
+            _user_saved_job, cached_saved_job = saved_job
+            return cached_saved_job.source_url, cached_saved_job.raw_description_text, JobDescriptionData.model_validate(
+                cached_saved_job.job_data
             )
         cached_job = job_repository.get_cached_job_by_source_url(db, source_url)
         if cached_job is not None:
@@ -167,6 +168,7 @@ def create_resume_job_match(
         matched_resume_profile_id=resume_profile_id,
         matched_resume_document_id=resume_document_id,
         matched_resume_source=resume_source,
+        match_data=match_data_from_result(result),
     )
     if result.match_score >= 5:
         saved_job = job_repository.create_job_from_description(
@@ -220,7 +222,7 @@ def save_pending_matched_job(
         resume_document_id=payload.matched_resume_document_id,
         resume_source=payload.matched_resume_source,
         match_score=payload.match_score,
-        match_data={"match_score": payload.match_score},
+        match_data=payload.match_data or {"match_score": payload.match_score},
     )
     return SavePendingMatchedJobResponse(
         saved_job_id=saved_job["id"],

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
@@ -10,12 +12,19 @@ from app.modules.jobs.schemas import (
     JobDescriptionData,
     JobDraftResponse,
     JobImportRequest,
+    JobListDiscoverRequest,
+    JobListDiscoverResponse,
+    JobListImportRequest,
+    JobListImportResponse,
     JobResponse,
     JobSaveRequest,
     JobUpdateRequest,
 )
 from app.modules.jobs.service import JobDescriptionParser, OpenAIJobDescriptionParser
-from app.modules.resume_job_match.job_url_import import fetch_job_page_text_from_url
+from app.modules.profiles import repository as profile_repository
+from app.modules.resume_job_match.job_url_import import discover_job_list_from_url, fetch_job_page_text_from_url
+from app.modules.resume_job_match.schemas import ResumeJobMatchRequest, ResumeJobMatchResponse
+from app.modules.resume_job_match.service import OpenAIResumeJobMatcher, ResumeJobMatcher
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -23,6 +32,11 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 def get_job_description_parser(request: Request) -> JobDescriptionParser:
     runtime = request.app.state.runtime
     return OpenAIJobDescriptionParser(model=runtime.openai_model)
+
+
+def get_resume_job_matcher(request: Request) -> ResumeJobMatcher:
+    runtime = request.app.state.runtime
+    return OpenAIResumeJobMatcher(model=runtime.openai_model)
 
 
 def resolve_raw_job_text(payload: JobImportRequest) -> str:
@@ -53,6 +67,51 @@ def build_job_draft(payload: JobImportRequest, parser: JobDescriptionParser, db:
         raw_description_text=raw_text,
         job_data=job_data,
         fields_missing=missing_fields,
+    )
+
+
+def _match_data_from_result(result: ResumeJobMatchResponse) -> dict:
+    return result.model_dump(
+        exclude={
+            "id",
+            "saved_job_id",
+            "saved_match_id",
+            "job_saved",
+            "pending_job",
+        }
+    )
+
+
+def _create_resume_profile_match(
+    db: Session,
+    identity: AuthenticatedIdentity,
+    matcher: ResumeJobMatcher,
+    *,
+    resume_profile_id: int,
+    saved_job: dict,
+    job_data: JobDescriptionData,
+) -> dict:
+    resume_profile = profile_repository.get_resume_profile_for_identity(db, identity, resume_profile_id)
+    if resume_profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume profile not found.")
+    result = matcher.compare(
+        ResumeJobMatchRequest(
+            resume_text=json.dumps(resume_profile.resume_data, ensure_ascii=False, indent=2),
+            job_description_text=json.dumps(job_data.model_dump(), ensure_ascii=False, indent=2),
+            resume_data=resume_profile.resume_data,
+            job_data=job_data.model_dump(),
+        )
+    )
+    return repository.create_job_resume_match(
+        db,
+        identity,
+        user_job_id=saved_job["id"],
+        jobs_cache_id=saved_job["jobs_cache_id"],
+        resume_profile_id=resume_profile_id,
+        resume_document_id=None,
+        resume_source="resume_profile",
+        match_score=result.match_score,
+        match_data=_match_data_from_result(result),
     )
 
 
@@ -99,6 +158,98 @@ def import_job_description(
         raw_description_text=raw_text,
         job_data=job_data,
     )
+
+
+@router.post("/import-list/discover", response_model=JobListDiscoverResponse)
+def discover_job_list(
+    payload: JobListDiscoverRequest,
+    db: Session = Depends(get_db_session),
+) -> JobListDiscoverResponse:
+    list_url = str(payload.list_url)
+    discovery = discover_job_list_from_url(list_url, max_results=payload.max_results)
+    discovered = discovery.links
+    candidates = []
+    for candidate in discovered:
+        cached_job = repository.get_cached_job_by_source_url(db, candidate.source_url)
+        candidates.append(
+            {
+                "title": cached_job.title if cached_job else candidate.title,
+                "company": cached_job.company if cached_job else "",
+                "source_url": candidate.source_url,
+                "status": "already_cached" if cached_job else "new",
+                "jobs_cache_id": cached_job.id if cached_job else None,
+            }
+        )
+    return JobListDiscoverResponse(
+        list_url=list_url,
+        candidates=candidates,
+        next_page_url=discovery.next_page_url,
+        next_page_confidence=discovery.next_page_confidence,
+        warnings=[],
+    )
+
+
+@router.post("/import-list", response_model=JobListImportResponse)
+def import_job_list(
+    payload: JobListImportRequest,
+    parser: JobDescriptionParser = Depends(get_job_description_parser),
+    matcher: ResumeJobMatcher = Depends(get_resume_job_matcher),
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> JobListImportResponse:
+    if payload.run_matching and payload.resume_profile_id:
+        resume_profile = profile_repository.get_resume_profile_for_identity(db, identity, payload.resume_profile_id)
+        if resume_profile is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume profile not found.")
+
+    imported = []
+    failed = []
+    selected_urls = list(dict.fromkeys(str(url) for url in payload.selected_urls))
+    for source_url in selected_urls:
+        try:
+            cached_job = repository.get_cached_job_by_source_url(db, source_url)
+            if cached_job is not None:
+                raw_text = cached_job.raw_description_text
+                job_data = JobDescriptionData.model_validate(cached_job.job_data)
+            else:
+                raw_text = fetch_job_page_text_from_url(source_url)
+                job_data = parser.parse(raw_text)
+            saved_job = repository.create_job_from_description(
+                db,
+                identity,
+                source_url=source_url,
+                raw_description_text=raw_text,
+                job_data=job_data,
+            )
+            match_score = None
+            match_id = None
+            if payload.run_matching and payload.resume_profile_id:
+                saved_match = _create_resume_profile_match(
+                    db,
+                    identity,
+                    matcher,
+                    resume_profile_id=payload.resume_profile_id,
+                    saved_job=saved_job,
+                    job_data=job_data,
+                )
+                match_score = saved_match["match_score"]
+                match_id = saved_match["id"]
+            imported.append(
+                {
+                    "user_job_id": saved_job["id"],
+                    "jobs_cache_id": saved_job["jobs_cache_id"],
+                    "source_url": source_url,
+                    "title": saved_job["title"],
+                    "company": saved_job["company"],
+                    "match_score": match_score,
+                    "match_id": match_id,
+                }
+            )
+        except HTTPException as exc:
+            failed.append({"source_url": source_url, "reason": str(exc.detail)})
+        except Exception as exc:
+            failed.append({"source_url": source_url, "reason": str(exc)})
+    return JobListImportResponse(imported=imported, failed=failed)
 
 
 @router.post("", response_model=JobResponse)

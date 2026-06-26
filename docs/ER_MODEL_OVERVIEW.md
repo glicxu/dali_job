@@ -4,14 +4,14 @@ This document explains the current DaliJob database model in plain language. It 
 
 ## Core Design Rule
 
-Shared/cache data and user-editable data must stay separate.
+Shared/cache data and user-specific saved data must stay separate.
 
 - `jobs_cache` stores reusable source data from a job URL.
-- `user_jobs` stores each user's editable saved job copy.
+- `user_saved_jobs` stores each user's saved-job relationship and notes.
 - `job_resume_matches` stores match results for one user's saved job and resume.
 - `resume_profiles` stores each user-owned structured resume, with favorites used only for ordering.
 
-This prevents one user's edits from changing another user's saved job while still letting the app avoid repeated scraping and OpenAI parsing for the same URL.
+This prevents user-specific notes and future application tracking from changing the shared cached job while still letting the app avoid repeated scraping and OpenAI parsing for the same URL.
 
 ## Main Entities
 
@@ -24,7 +24,7 @@ Owns or relates to:
 - `workspaces`
 - `resume_profiles`
 - `documents`
-- `user_jobs`
+- `user_saved_jobs`
 - `job_resume_matches`
 
 For the current MVP, a user effectively has one private workspace.
@@ -37,7 +37,7 @@ Owns or groups:
 
 - `resume_profiles`
 - `documents`
-- `user_jobs`
+- `user_saved_jobs`
 - `job_resume_matches`
 
 Workspace sharing is intentionally deferred. Keeping `workspaces` still gives the app a future boundary for collaboration, exports, or multiple career-search spaces.
@@ -97,7 +97,7 @@ Typical contents:
 Relationship:
 
 ```text
-jobs_cache 1 -> many user_jobs
+jobs_cache 1 -> many user_saved_jobs
 jobs_cache 1 -> many job_resume_matches, optional
 ```
 
@@ -105,35 +105,30 @@ Purpose:
 
 If multiple users import the same URL, DaliJob can reuse this cached parsed job instead of scraping and parsing again.
 
-### user_jobs
+### user_saved_jobs
 
-Stores the user's private editable saved job.
+Stores the user's private saved-job relationship.
 
-This is what the Jobs page should show and edit.
+This is what the Jobs page should use for notes and ownership. Job details are read from `jobs_cache` through `jobs_cache_id`.
 
 Typical contents:
 
 - `workspace_id`
 - `user_id`
 - `jobs_cache_id`
-- `title`
-- `company`
-- `source_url`
-- `raw_description_text`
-- `job_data`
 - `notes`
 
 Relationship:
 
 ```text
-user_jobs belongs to users/workspaces
-user_jobs optionally references jobs_cache
-user_jobs 1 -> many job_resume_matches
+user_saved_jobs belongs to users/workspaces
+user_saved_jobs references jobs_cache
+user_saved_jobs 1 -> many job_resume_matches
 ```
 
 Important behavior:
 
-If a user edits job title, skills, requirements, or raw description, the app updates `user_jobs`, not `jobs_cache`.
+A user can edit notes on `user_saved_jobs`. The user cannot edit the job JSON from the saved Jobs page; `jobs_cache` remains the source for title, company, raw description, and structured `job_data`.
 
 ### job_resume_matches
 
@@ -155,7 +150,7 @@ Relationship:
 
 ```text
 job_resume_matches belongs to users/workspaces
-job_resume_matches belongs to user_jobs
+job_resume_matches belongs to user_saved_jobs
 job_resume_matches optionally references jobs_cache
 job_resume_matches optionally references resume_profiles
 job_resume_matches optionally references documents
@@ -171,11 +166,11 @@ users
   -> resume_profiles
   -> documents
        -> document_versions
-  -> user_jobs
+  -> user_saved_jobs
        -> job_resume_matches
 
 jobs_cache
-  -> user_jobs
+  -> user_saved_jobs
   -> job_resume_matches
 ```
 
@@ -187,10 +182,10 @@ When a user imports a job URL:
 2. If the URL is cached, the server reuses `jobs_cache.job_data` and `jobs_cache.raw_description_text`.
 3. If the URL is not cached, the server scrapes the page and asks OpenAI to parse the job into `job_data`.
 4. The server creates or reuses a `jobs_cache` row.
-5. The server creates a `user_jobs` row by copying the cached data.
-6. The user can edit their `user_jobs` copy without changing the cache.
+5. The server creates a `user_saved_jobs` row that references the cached data.
+6. The user can edit notes without changing the cached job details.
 
-When a user manually creates a job without a URL, the app can create a `user_jobs` row without a `jobs_cache_id`.
+When a user manually creates a job without a URL, the app still creates a `jobs_cache` row with a nullable `source_url`, then creates a `user_saved_jobs` row that references it.
 
 ## Bulk Job-List Import Flow
 
@@ -201,7 +196,7 @@ When a user imports from a job search or listing URL:
 3. The server checks `jobs_cache` for each candidate URL and marks candidates as already cached or new.
 4. The client shows the candidates in a review table and the user selects which jobs to import.
 5. Each selected detail URL uses the normal Job Import Flow above.
-6. Optional batch matching can create `job_resume_matches` rows after the selected jobs are saved to `user_jobs`.
+6. Optional batch matching can create `job_resume_matches` rows after the selected jobs are saved to `user_saved_jobs`.
 
 This flow should not store listing-page results as jobs. Only individual job detail pages should create or reuse `jobs_cache` rows. The listing URL is an import source, not a job entity.
 
@@ -210,19 +205,19 @@ This flow should not store listing-page results as jobs. Only individual job det
 When a user matches a resume to a job:
 
 1. The server resolves the resume from a structured resume profile, uploaded document, or pasted fallback text.
-2. The server resolves the job from URL text, pasted text, or an existing `user_jobs` copy.
-3. OpenAI compares the resume data with the job data.
-4. If the match score is high enough, the job is saved to `user_jobs`.
+2. The server resolves the job from URL text, pasted text, or an existing `user_saved_jobs` row joined to `jobs_cache`.
+3. OpenAI compares the resume data with the cached job data.
+4. If the match score is high enough, the job is saved to `user_saved_jobs`.
 5. The score and details are stored in `job_resume_matches`.
 
-Matches should link to `user_job_id` because matching should respect the user's edited job copy.
+Matches should link to `user_job_id` because matching is tied to the user's saved-job relationship.
 
 ## Design Health Check
 
 The current model is sound for the MVP because:
 
 - Shared URL parsing is cached in `jobs_cache`.
-- User edits are isolated in `user_jobs`.
+- User notes are isolated in `user_saved_jobs`.
 - Resume/job match scores are isolated in `job_resume_matches`.
 - Uploaded files and extracted text are versioned through `documents` and `document_versions`.
 - Resume profile data is flexible through `resume_profiles.resume_data` JSON.
@@ -231,12 +226,12 @@ The main tradeoff is that JSON fields are flexible but harder to query deeply. T
 
 ## Future Application Tracking
 
-When application tracking is implemented, add a separate `applications` table instead of overloading `user_jobs`.
+When application tracking is implemented, add a separate `applications` table instead of overloading `user_saved_jobs`.
 
 Recommended relationship:
 
 ```text
-user_jobs 1 -> many applications
+user_saved_jobs 1 -> many applications
 ```
 
 Example application fields:
@@ -256,7 +251,7 @@ This keeps a saved job separate from a specific application attempt.
 ## Rules To Preserve
 
 - Do not let user edits mutate `jobs_cache`.
-- Use `user_jobs` for the Jobs page and application tracking entry point.
+- Use `user_saved_jobs` joined to `jobs_cache` for the Jobs page and application tracking entry point.
 - Use `job_resume_matches` for scores and match details.
 - Link matches to `user_job_id`, not only `jobs_cache_id`.
 - Prefer linking matches to `resume_profile_id` when the match used a structured saved resume profile.

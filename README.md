@@ -41,10 +41,13 @@ Then edit `server\config.ini` for your local database. Start the server from the
 
 ```powershell
 python -m pip install -r requirements.txt
+python -m playwright install chromium
 cd server
 alembic -x config=config.ini upgrade head
 python -m app.main --config config.ini
 ```
+
+`python -m playwright install chromium` is required for bulk job-list import pages that render job results with JavaScript. Static HTML job pages can still be imported without the rendered-page fallback.
 
 ## Database Setup
 

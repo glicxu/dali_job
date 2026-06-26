@@ -7,7 +7,7 @@ erDiagram
     users ||--o{ workspaces : owns
     workspaces ||--o{ resume_profiles : owns
     workspaces ||--o{ companies : owns
-    workspaces ||--o{ user_jobs : saves
+    workspaces ||--o{ user_saved_jobs : saves
     workspaces ||--o{ applications : owns
     workspaces ||--o{ documents : owns
     workspaces ||--o{ integrations : owns
@@ -22,9 +22,9 @@ erDiagram
     companies ||--o{ recruiters : has
     companies ||--o{ applications : receives
 
-    jobs_cache ||--o{ user_jobs : copied_to
-    user_jobs ||--o{ applications : creates
-    user_jobs ||--o{ job_resume_matches : compared_by
+    jobs_cache ||--o{ user_saved_jobs : saved_by
+    user_saved_jobs ||--o{ applications : creates
+    user_saved_jobs ||--o{ job_resume_matches : compared_by
     applications ||--o{ application_status_history : tracks
     applications ||--o{ application_events : logs
     applications ||--o{ application_documents : attaches
@@ -65,7 +65,7 @@ erDiagram
 
 - In the MVP, each `workspace` is private and has exactly one owning `user`.
 - `resume_profiles.resume_data` holds structured resume facts as JSON. A user may have multiple resume profiles and may favorite any number of them so they appear first in resume selectors.
-- `jobs_cache.raw_description_text` stores the cleaned scraped posting text, and `jobs_cache.job_data` stores the shared structured job description JSON used as a cache. `user_jobs` stores each user's editable job copy, including title, company, raw description, structured JSON, and notes.
+- `jobs_cache.raw_description_text` stores the cleaned scraped posting text, and `jobs_cache.job_data` stores the canonical structured job description JSON. `user_saved_jobs` stores each user's saved-job relationship and notes.
 - `resume_versions`, `cover_letter_versions`, and `document_versions` are immutable.
 - `applications` connect jobs, companies, submitted documents, interviews, notes, tasks, offers, email messages, and calendar events.
 - `job_resume_matches` stores 0-10 resume-to-job comparison results for the initial prototype and later recommendation workflows.

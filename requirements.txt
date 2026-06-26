@@ -3,6 +3,7 @@ alembic
 fastapi
 openai
 pydantic
+playwright
 PyJWT
 pymysql
 pypdf

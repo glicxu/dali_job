@@ -171,11 +171,11 @@ Creates recruiter/contact.
 
 ### `GET /jobs`
 
-Lists jobs saved by the current user. The API returns editable `user_jobs` rows. If the job came from a cached URL, `jobs_cache_id` references the shared `jobs_cache` row used as the original parsed source.
+Lists jobs saved by the current user. The API returns saved-job rows from `user_saved_jobs` joined to canonical job details in `jobs_cache`.
 
 Response fields include `id`, `title`, `company`, `source_url`, `raw_description_text`, `job_data`, `notes`, `match_score`, `matched_resume_profile_id`, `matched_resume_document_id`, `matched_resume_source`, `created_at`, and `updated_at`.
 
-`match_score`, `matched_resume_profile_id`, `matched_resume_document_id`, and `matched_resume_source` are response-only convenience fields computed from the current user's latest `job_resume_matches` row for that `user_jobs` record. They are not stored on `user_jobs` or `jobs_cache`.
+`match_score`, `matched_resume_profile_id`, `matched_resume_document_id`, and `matched_resume_source` are response-only convenience fields computed from the current user's latest `job_resume_matches` row for that `user_saved_jobs` record. They are not stored on `user_saved_jobs` or `jobs_cache`.
 
 Future query params:
 
@@ -239,7 +239,7 @@ Response:
 
 ### `POST /jobs/import-description`
 
-Imports a job description foundation record from pasted text or a public URL. For URLs, the server stores or reuses the cleaned raw text and OpenAI-parsed structured job JSON in `jobs_cache`, then creates a current-user editable copy in `user_jobs`. If the URL is already cached, the server reuses the stored cache JSON instead of parsing again. User edits later update only `user_jobs`.
+Imports a job description foundation record from pasted text or a public URL. The server stores or reuses the cleaned raw text and OpenAI-parsed structured job JSON in `jobs_cache`, then creates a current-user saved-job row in `user_saved_jobs`. If the URL is already cached, the server reuses the stored cache JSON instead of parsing again. User edits later update only notes on `user_saved_jobs`.
 
 Body with pasted text:
 
@@ -296,7 +296,7 @@ Response:
 
 ### `POST /jobs/import-list/discover`
 
-Discovers individual job posting URLs from a public job search or listing page. This endpoint should not create `jobs_cache` or `user_jobs` rows. It only returns reviewable candidates for the user to select.
+Discovers individual job posting URLs from a public job search or listing page. This endpoint should not create `jobs_cache` or `user_saved_jobs` rows. It only returns reviewable candidates for the user to select.
 
 Body:
 
@@ -328,6 +328,8 @@ Response:
       "jobs_cache_id": 12
     }
   ],
+  "next_page_url": "https://example.com/careers/search?query=software&page=2",
+  "next_page_confidence": 0.82,
   "warnings": ["Only the first page was scanned."]
 }
 ```
@@ -340,9 +342,11 @@ Candidate `status` values:
 - `unsupported`
 - `failed`
 
+`next_page_url` is optional. When present, the client can call the same discovery endpoint with that URL to append another page of candidates. The server should derive this using generic pagination signals such as `rel="next"`, next-page labels, pagination containers, and common query parameters like `p`, `page`, `pg`, `start`, and `offset`.
+
 ### `POST /jobs/import-list`
 
-Imports selected candidates from a prior list discovery result. For each selected job URL, the server should use the normal URL import pipeline: check `jobs_cache`, reuse cached parsed data when possible, otherwise scrape the detail page and parse the job JSON, then create a user-specific `user_jobs` copy.
+Imports selected candidates from a prior list discovery result. For each selected job URL, the server should use the normal URL import pipeline: check `jobs_cache`, reuse cached parsed data when possible, otherwise scrape the detail page and parse the job JSON, then create a user-specific `user_saved_jobs` row.
 
 Body:
 
@@ -386,7 +390,7 @@ Response:
 
 ### `POST /jobs`
 
-Creates a saved job from a reviewed draft or fully manual input. If a source URL already exists in `jobs_cache`, the server reuses that cache row but still saves the reviewed/edited values into a separate `user_jobs` row. This is a core workflow and does not depend on job board APIs, plugins, or URL extraction.
+Creates a saved job from a reviewed draft or fully manual input. If a source URL already exists in `jobs_cache`, the server reuses that cache row and creates a `user_saved_jobs` row. Manual jobs without a URL also create a `jobs_cache` row with a nullable `source_url`. This is a core workflow and does not depend on job board APIs, plugins, or URL extraction.
 
 Body:
 
@@ -422,11 +426,11 @@ Body:
 
 ### `GET /jobs/{jobId}`
 
-Returns a job saved by the current user from `user_jobs`.
+Returns a job saved by the current user from `user_saved_jobs` joined to `jobs_cache`.
 
 ### `PATCH /jobs/{jobId}`
 
-Updates saved job metadata, raw text, structured `job_data`, and notes on `user_jobs` only. This never mutates `jobs_cache`.
+Updates saved-job notes on `user_saved_jobs` only. This never mutates `jobs_cache`; saved job JSON is read-only from the Jobs page.
 
 ### `POST /jobs/import-file`
 
@@ -464,7 +468,7 @@ When `job_url` is provided, the server uses broader cleaned visible page extract
 
 Save behavior:
 
-- If `match_score >= 5`, the server automatically saves or reuses `jobs_cache`, creates or reuses a `user_jobs` editable copy for the current user, then creates a `job_resume_matches` row with the current user, `user_job_id`, optional `jobs_cache_id`, optional `resume_profile_id`, optional resume document, resume source, score, and match details.
+- If `match_score >= 5`, the server automatically saves or reuses `jobs_cache`, creates or reuses a `user_saved_jobs` row for the current user, then creates a `job_resume_matches` row with the current user, `user_job_id`, optional `jobs_cache_id`, optional `resume_profile_id`, optional resume document, resume source, score, and match details.
 - If `match_score < 5`, the server does not save the job or match immediately. It returns `pending_job`; the UI asks whether to save or discard the low-compatibility job.
 
 Pasted text body:

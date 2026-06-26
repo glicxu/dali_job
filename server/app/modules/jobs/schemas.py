@@ -43,6 +43,60 @@ class JobImportRequest(BaseModel):
         return self
 
 
+class JobListDiscoverRequest(BaseModel):
+    list_url: HttpUrl
+    max_results: int = Field(default=25, ge=1, le=50)
+
+
+class JobListCandidate(BaseModel):
+    title: str = ""
+    company: str = ""
+    source_url: str
+    status: str
+    jobs_cache_id: int | None = None
+
+
+class JobListDiscoverResponse(BaseModel):
+    list_url: str
+    candidates: list[JobListCandidate]
+    next_page_url: str | None = None
+    next_page_confidence: float = Field(default=0.0, ge=0, le=1)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class JobListImportRequest(BaseModel):
+    list_url: HttpUrl | None = None
+    selected_urls: list[HttpUrl] = Field(..., min_length=1, max_length=25)
+    resume_profile_id: int | None = None
+    run_matching: bool = False
+
+    @model_validator(mode="after")
+    def require_resume_when_matching(self) -> JobListImportRequest:
+        if self.run_matching and not self.resume_profile_id:
+            raise ValueError("resume_profile_id is required when run_matching is true.")
+        return self
+
+
+class JobListImportItem(BaseModel):
+    user_job_id: int
+    jobs_cache_id: int | None = None
+    source_url: str
+    title: str
+    company: str
+    match_score: int | None = None
+    match_id: int | None = None
+
+
+class JobListImportFailure(BaseModel):
+    source_url: str
+    reason: str
+
+
+class JobListImportResponse(BaseModel):
+    imported: list[JobListImportItem] = Field(default_factory=list)
+    failed: list[JobListImportFailure] = Field(default_factory=list)
+
+
 class JobDraftResponse(BaseModel):
     source_url: str | None
     raw_description_text: str
@@ -83,6 +137,7 @@ class JobResponse(BaseModel):
     matched_resume_profile_id: int | None = None
     matched_resume_document_id: int | None = None
     matched_resume_source: str | None = None
+    match_data: dict | None = None
     created_at: datetime
     updated_at: datetime
 

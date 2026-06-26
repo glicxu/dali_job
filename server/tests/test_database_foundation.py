@@ -22,7 +22,7 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "documents",
         "document_versions",
         "jobs_cache",
-        "user_jobs",
+        "user_saved_jobs",
         "job_resume_matches",
     }.issubset(Base.metadata.tables.keys())
     assert "skills" not in Base.metadata.tables
@@ -35,7 +35,7 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
     document_columns = set(Base.metadata.tables["documents"].columns.keys())
     document_version_columns = set(Base.metadata.tables["document_versions"].columns.keys())
     job_cache_columns = set(Base.metadata.tables["jobs_cache"].columns.keys())
-    user_job_columns = set(Base.metadata.tables["user_jobs"].columns.keys())
+    user_saved_job_columns = set(Base.metadata.tables["user_saved_jobs"].columns.keys())
     job_resume_match_columns = set(Base.metadata.tables["job_resume_matches"].columns.keys())
 
     assert {
@@ -109,17 +109,17 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "workspace_id",
         "user_id",
         "jobs_cache_id",
-        "title",
-        "company",
-        "source_url",
-        "raw_description_text",
-        "job_data",
         "notes",
-        "saved_at",
         "created_at",
         "updated_at",
         "deleted_at",
-    }.issubset(user_job_columns)
+    }.issubset(user_saved_job_columns)
+    assert "title" not in user_saved_job_columns
+    assert "company" not in user_saved_job_columns
+    assert "source_url" not in user_saved_job_columns
+    assert "raw_description_text" not in user_saved_job_columns
+    assert "job_data" not in user_saved_job_columns
+    assert "saved_at" not in user_saved_job_columns
     assert "workspace_id" not in job_cache_columns
     assert "user_id" not in job_cache_columns
     assert "notes" not in job_cache_columns
@@ -153,7 +153,7 @@ def test_foundation_metadata_can_create_tables() -> None:
     assert inspector.has_table("documents")
     assert inspector.has_table("document_versions")
     assert inspector.has_table("jobs_cache")
-    assert inspector.has_table("user_jobs")
+    assert inspector.has_table("user_saved_jobs")
     assert inspector.has_table("job_resume_matches")
     assert not inspector.has_table("skills")
     assert not inspector.has_table("experiences")
@@ -170,7 +170,7 @@ def test_alembic_has_initial_schema_revision() -> None:
     config.set_main_option("script_location", str(server_dir / "app" / "db" / "migrations"))
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == "20260623_0011"
+    assert script.get_current_head() == "20260626_0012"
 
 
 def test_resume_profile_repository_creates_local_resume_json() -> None:

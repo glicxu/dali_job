@@ -70,11 +70,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav>
           <a href="/">Match</a>
           <a href="/jobs">Jobs</a>
+          <a href="/jobs/import">Bulk Import</a>
           <a href="/profile">Profile</a>
           <a href="/documents">Documents</a>
-          <a href="/job-url-debug">URL Debug</a>
           <a href="/auth">Account</a>
           <a href="/health">Health</a>
+          <a href="/job-url-debug">URL Debug</a>
           <button type="button" className="sidebar-link" onClick={signOut}>
             Sign Out
           </button>

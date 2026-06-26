@@ -234,7 +234,7 @@ The older one-row `profiles.resume_data` design is intentionally removed. If Dal
 
 ### jobs_cache
 
-The implemented `jobs_cache` table stores the shared canonical job posting cache: cleaned raw posting text plus structured `job_data` JSON. It does not contain `user_id`, `workspace_id`, notes, or match scores. It is used to avoid repeated scraping and OpenAI parsing for the same URL. User-facing editable job data lives in `user_jobs`, and resume-specific match scores live in `job_resume_matches`.
+The implemented `jobs_cache` table stores the canonical job posting data: cleaned raw posting text plus structured `job_data` JSON. It does not contain `user_id`, `workspace_id`, notes, or match scores. It is used to avoid repeated scraping and OpenAI parsing for the same URL. User-facing saved-job ownership and notes live in `user_saved_jobs`, and resume-specific match scores live in `job_resume_matches`.
 
 | Field | Type | Notes |
 | --- | --- | --- |
@@ -276,25 +276,19 @@ The implemented `jobs_cache` table stores the shared canonical job posting cache
 
 Future application tracking may add or derive columns such as `remote_policy`, `closing_date`, `compensation_min`, and `compensation_max` when those fields need filtering/sorting. The cache JSON remains the canonical parsed job description from the original source URL. When a URL has already been parsed, matching and import flows should reuse `jobs_cache.job_data` and `raw_description_text` as the starting point instead of spending another OpenAI job parsing call.
 
-Bulk job-list import does not require a separate core job table for the MVP. A listing URL discovery step should extract individual posting URLs, then each selected posting URL should flow through the same `jobs_cache` lookup and `user_jobs` copy pipeline. A future `job_import_runs` table can be added if DaliJob needs persistent import history, retry state, or background progress tracking across many pages.
+Bulk job-list import does not require a separate core job table for the MVP. A listing URL discovery step should extract individual posting URLs, then each selected posting URL should flow through the same `jobs_cache` lookup and `user_saved_jobs` relationship pipeline. A future `job_import_runs` table can be added if DaliJob needs persistent import history, retry state, or background progress tracking across many pages.
 
-### user_jobs
+### user_saved_jobs
 
-Stores the current user's editable saved job copy. The Jobs page should query `user_jobs` directly. If the saved job came from a cached URL, `user_jobs.jobs_cache_id` links back to `jobs_cache`, but user edits must update only `user_jobs`.
+Stores the current user's saved-job relationship and notes. The Jobs page should query `user_saved_jobs` joined to `jobs_cache`, so the API can return notes and canonical job details in one database query. Users cannot modify `jobs_cache.job_data` from the saved Jobs page.
 
 | Field | Type | Notes |
 | --- | --- | --- |
 | id | integer | Primary key |
 | workspace_id | integer | FK |
 | user_id | integer | FK user who saved the job |
-| jobs_cache_id | integer | Nullable FK to shared `jobs_cache` row |
-| title | text | User-editable title |
-| company | text | User-editable company |
-| source_url | text | Nullable user-editable source URL |
-| raw_description_text | text | User-editable raw job description |
-| job_data | jsonb | User-editable structured job description JSON used by the app |
+| jobs_cache_id | integer | Required FK to `jobs_cache` |
 | notes | text | Nullable user-specific notes |
-| saved_at | timestamptz | Required |
 | created_at | timestamptz | Required |
 | updated_at | timestamptz | Required |
 | deleted_at | timestamptz | Nullable soft delete |
@@ -308,7 +302,7 @@ Stores each saved resume-to-job comparison. This table is user-specific and lets
 | id | integer | Primary key |
 | workspace_id | integer | FK |
 | user_id | integer | FK user who ran or saved the match |
-| user_job_id | integer | FK to the user's saved editable job |
+| user_job_id | integer | FK to the user's saved job in `user_saved_jobs` |
 | jobs_cache_id | integer | Nullable FK to source cache row |
 | resume_profile_id | integer | Nullable FK to structured resume profile |
 | resume_document_id | integer | Nullable FK to uploaded resume document |
@@ -654,8 +648,8 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 - `users.email` unique.
 - `workspaces.owner_user_id`.
 - `jobs_cache.source_url_hash`.
-- `user_jobs.workspace_id, user_id`.
-- `user_jobs.jobs_cache_id`.
+- `user_saved_jobs.workspace_id, user_id`.
+- `user_saved_jobs.jobs_cache_id`.
 - `job_resume_matches.workspace_id, user_id, created_at`.
 - `job_resume_matches.user_job_id`.
 - `job_resume_matches.resume_profile_id`.
@@ -672,7 +666,7 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 - `cover_letter_versions.application_id, version_number`.
 - `email_messages.integration_id, provider_message_id` unique.
 - `email_application_links.email_message_id, application_id` unique.
-- JSON indexes on `jobs_cache.job_data`, `user_jobs.job_data`, selected `resume_profiles.resume_data` paths, and analytics JSON fields if needed.
+- JSON indexes on `jobs_cache.job_data`, selected `resume_profiles.resume_data` paths, and analytics JSON fields if needed.
 
 ## 6. Versioning Rules
 

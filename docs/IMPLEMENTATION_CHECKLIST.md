@@ -57,7 +57,7 @@ This is the first functional slice. It should happen before the full tracker, co
 - [x] Add job URL extraction input for ad hoc matching.
 - [x] Parse the job description as structured job JSON before matching.
 - [x] Use structured resume JSON and structured job JSON for the OpenAI match request when available.
-- [x] Save pasted job-description fallback text to `user_jobs` when the match is saved.
+- [x] Save pasted job-description fallback text to `jobs_cache` and create a `user_saved_jobs` row when the match is saved.
 - [x] Auto-save matched jobs only when the score is 5 or higher.
 - [x] Ask the user whether to save low-compatibility jobs below score 5.
 - [x] Store match score and selected resume reference in `job_resume_matches`, not on saved jobs.
@@ -121,7 +121,7 @@ The sections below are grouped by product area. The order above should guide imp
 ### Job Import
 
 - [x] Add backend `jobs_cache` table for shared URL scrape/parse cache.
-- [x] Store user-editable saved job copies in `user_jobs`.
+- [x] Store user saved-job relationships and notes in `user_saved_jobs`.
 - [x] Add backend OpenAI parser contract for the structured job description JSON schema.
 - [x] Add backend endpoint that saves pasted or URL-scraped job descriptions as raw text plus parsed JSON.
 - [x] Add full manual job creation with title, company, description, deadline, location, salary, source URL, and notes.
@@ -131,11 +131,12 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Store raw and structured job data.
 - [x] Reuse existing parsed job data by URL when a matching job URL is already cached.
 - [x] Build jobs list and detail UI.
-- [ ] Add bulk job-list discovery endpoint that extracts individual job posting URLs from a search/listing page without saving them.
-- [ ] Add bulk import review UI where the user selects discovered jobs before import.
-- [ ] Add selected-job bulk import endpoint that reuses `jobs_cache` and creates `user_jobs` copies.
-- [ ] Add optional batch matching for imported jobs after the user selects a resume profile.
-- [ ] Add conservative limits, deduplication, source-access checks, and clear warnings for unsupported listing pages.
+- [x] Add bulk job-list discovery endpoint that extracts individual job posting URLs from a search/listing page without saving them.
+- [x] Add bulk import review UI where the user selects discovered jobs before import.
+- [x] Add selected-job bulk import endpoint that reuses `jobs_cache` and creates `user_saved_jobs` rows.
+- [x] Add optional batch matching for imported jobs after the user selects a resume profile.
+- [x] Add conservative limits, deduplication, source-access checks, and clear warnings for unsupported listing pages.
+- [x] Add incremental Load More pagination for bulk job-list discovery using generalized next-page heuristics.
 
 ### Application Tracking
 

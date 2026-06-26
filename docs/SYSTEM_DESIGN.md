@@ -48,7 +48,7 @@ User opens barebones client UI
   -> Server reuses cached job_data when the URL is already stored, otherwise OpenAI parses the job text into structured job_data JSON
   -> OpenAI-backed comparison service compares resume JSON against job_data JSON
   -> Match engine returns score from 0 to 10
-  -> If score is 5 or higher, server saves or reuses jobs_cache, creates a user_jobs editable copy, and stores the score/resume reference in job_resume_matches
+  -> If score is 5 or higher, server saves or reuses jobs_cache, creates a user_saved_jobs row, and stores the score/resume reference in job_resume_matches
   -> If score is below 5, UI asks whether to save or discard the low-compatibility job
   -> UI displays score, matched skills, missing skills, keyword overlap, and recommendations
 ```
@@ -59,7 +59,7 @@ Score meaning:
 - `5`: partial match with several important gaps.
 - `10`: excellent match where the resume strongly supports the job's core requirements.
 
-The first prototype started with pasted text only. After document management is available, the matcher should support selecting a structured resume profile or uploaded resume document and pasting a job URL, while retaining pasted text fallbacks for pages that block extraction. The resume selector should list favorited resume profiles first, followed by other resume profiles, uploaded resume documents, and pasted-text fallback. The job URL field and pasted job description field should be mutually exclusive. In either mode, the server should save high-compatibility jobs automatically and let the user decide whether to save jobs with a score below 5. `jobs_cache` is a shared posting cache, `user_jobs` stores each user's editable job copy, and match scores are user/resume-specific in `job_resume_matches`.
+The first prototype started with pasted text only. After document management is available, the matcher should support selecting a structured resume profile or uploaded resume document and pasting a job URL, while retaining pasted text fallbacks for pages that block extraction. The resume selector should list favorited resume profiles first, followed by other resume profiles, uploaded resume documents, and pasted-text fallback. The job URL field and pasted job description field should be mutually exclusive. In either mode, the server should save high-compatibility jobs automatically and let the user decide whether to save jobs with a score below 5. `jobs_cache` is the canonical job detail cache, `user_saved_jobs` stores each user's saved-job relationship and notes, and match scores are user/resume-specific in `job_resume_matches`.
 
 The comparison should use the OpenAI API through the server-side AI provider abstraction. The OpenAI API key must be read from the server process environment variable `OPENAI_API_KEY`, never from the client and never from a committed config file. The model name should be configurable through `ProcessConfig` so it can be changed without code edits.
 
@@ -126,7 +126,7 @@ Manual entry is a core workflow, not a fallback-only feature. A user must be abl
 
 URL extraction is a convenience feature. If the page cannot be fetched, blocks automated access, requires authentication, renders content client-side, or does not expose parseable job data, DaliJob should keep the URL and let the user manually fill or paste the missing fields. URL extraction must not be required for application tracking.
 
-The implemented job import flow creates reviewable drafts from URL or pasted text before saving. Users can also start with a blank manual job form. Saved jobs are represented by editable `user_jobs` rows that optionally reference shared `jobs_cache` rows, so the same parsed URL can appear in multiple users' job lists without reparsing the posting while still allowing private user edits.
+The implemented job import flow creates reviewable drafts from URL or pasted text before saving. Users can also start with a blank manual job form. Saved jobs are represented by `user_saved_jobs` rows that reference `jobs_cache` rows, so the same parsed URL can appear in multiple users' job lists without reparsing the posting while still allowing private user notes.
 
 Bulk job-list import should be a separate workflow from the one-job Match page. The Match page remains focused on comparing one resume against one job source. Bulk import belongs on a dedicated page such as `/jobs/import` or a clearly separated Jobs page section because it has a review/select/import workflow.
 
@@ -136,10 +136,12 @@ Bulk import methodology:
 2. The server fetches the listing page with conservative timeouts, rate limits, and source access checks.
 3. The server extracts candidate individual job posting URLs, normalizes and deduplicates them, and labels each as new, already cached, or failed/unknown when possible.
 4. The client shows a review table so the user can select which jobs to import. DaliJob must not silently import every discovered job.
-5. For each selected job URL, the server uses the normal single-job import pipeline: check `jobs_cache`, reuse existing cached `job_data` when available, otherwise scrape the detail page, parse with OpenAI, save the shared cache row, and create a user-specific `user_jobs` copy.
+5. For each selected job URL, the server uses the normal single-job import pipeline: check `jobs_cache`, reuse existing cached `job_data` when available, otherwise scrape the detail page, parse with OpenAI, save the cache row, and create a user-specific `user_saved_jobs` row.
 6. Optional batch matching can run after import when the user selects a resume profile, but bulk import must also work without matching.
 
 The first implementation should cap the number of discovered/imported jobs per request, for example 10 to 25, and can start with the first listing page only. Pagination and JavaScript-rendered listing support should be added after the basic workflow is reliable.
+
+Incremental pagination should use a generalized "Load More" workflow instead of scraping every page automatically. The discovery endpoint returns the best `next_page_url` it can infer from generic signals such as `rel="next"`, next-page text, pagination container classes, and common query parameters like `p`, `page`, `pg`, `start`, and `offset`. The client appends newly discovered candidates, dedupes by `source_url`, and keeps user selection explicit. The scraper must stop when no next page is found, the next URL repeats, no new job URLs are discovered, or a configured page/job limit is reached.
 
 For AI parsing, DaliJob should preserve two forms of each imported posting:
 

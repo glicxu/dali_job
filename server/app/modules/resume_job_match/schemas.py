@@ -58,6 +58,7 @@ class PendingMatchedJob(BaseModel):
     matched_resume_profile_id: int | None = None
     matched_resume_document_id: int | None = None
     matched_resume_source: str
+    match_data: dict[str, Any] = Field(default_factory=dict)
 
 
 class ResumeJobMatchResponse(BaseModel):

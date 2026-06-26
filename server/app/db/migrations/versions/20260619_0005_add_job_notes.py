@@ -15,7 +15,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Notes now live on user_jobs, created in 20260619_0004.
+    # Notes now live on user_saved_jobs, created in 20260619_0004.
     pass
 
 

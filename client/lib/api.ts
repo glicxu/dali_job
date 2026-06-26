@@ -79,6 +79,7 @@ export type StoredJob = {
   matched_resume_profile_id: number | null;
   matched_resume_document_id: number | null;
   matched_resume_source: string | null;
+  match_data: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 };
@@ -88,6 +89,42 @@ export type JobDraftResponse = {
   raw_description_text: string;
   job_data: JobDescriptionData;
   fields_missing: string[];
+};
+
+export type JobListCandidate = {
+  title: string;
+  company: string;
+  source_url: string;
+  status: "new" | "already_cached" | "duplicate" | "unsupported" | "failed";
+  jobs_cache_id: number | null;
+};
+
+export type JobListDiscoverResponse = {
+  list_url: string;
+  candidates: JobListCandidate[];
+  next_page_url: string | null;
+  next_page_confidence: number;
+  warnings: string[];
+};
+
+export type JobListImportItem = {
+  user_job_id: number;
+  jobs_cache_id: number | null;
+  source_url: string;
+  title: string;
+  company: string;
+  match_score: number | null;
+  match_id: number | null;
+};
+
+export type JobListImportFailure = {
+  source_url: string;
+  reason: string;
+};
+
+export type JobListImportResponse = {
+  imported: JobListImportItem[];
+  failed: JobListImportFailure[];
 };
 
 export type JobSavePayload = {
@@ -104,6 +141,7 @@ export type PendingMatchedJob = JobSavePayload & {
   matched_resume_profile_id: number | null;
   matched_resume_document_id: number | null;
   matched_resume_source: string;
+  match_data?: Record<string, unknown>;
 };
 
 export type SavePendingMatchedJobResponse = {
@@ -432,6 +470,28 @@ export function draftJobFromText(jobDescriptionText: string): Promise<JobDraftRe
   return requestJson<JobDraftResponse>("/jobs/draft", {
     method: "POST",
     body: JSON.stringify({ job_description_text: jobDescriptionText }),
+  });
+}
+
+export function discoverJobList(listUrl: string, maxResults = 25): Promise<JobListDiscoverResponse> {
+  return requestJson<JobListDiscoverResponse>("/jobs/import-list/discover", {
+    method: "POST",
+    body: JSON.stringify({ list_url: listUrl, max_results: maxResults }),
+  });
+}
+
+export function importJobList(
+  selectedUrls: string[],
+  options?: { listUrl?: string; resumeProfileId?: number; runMatching?: boolean },
+): Promise<JobListImportResponse> {
+  return requestJson<JobListImportResponse>("/jobs/import-list", {
+    method: "POST",
+    body: JSON.stringify({
+      list_url: options?.listUrl || undefined,
+      selected_urls: selectedUrls,
+      resume_profile_id: options?.resumeProfileId || undefined,
+      run_matching: Boolean(options?.runMatching),
+    }),
   });
 }
 

@@ -62,6 +62,10 @@ export function ResumeJobMatchForm() {
           (document) =>
             document.document_type === "resume" && Boolean(document.latest_version?.extracted_text_available),
         );
+        const params = new URLSearchParams(window.location.search);
+        const initialJobUrl = params.get("job_url");
+        const initialResumeProfileId = params.get("resume_profile_id");
+        const initialResumeDocumentId = params.get("resume_document_id");
         if (firstProfile) {
           setSelectedResumeProfileId(String(firstProfile.id));
           setResumeSourceMode("profile");
@@ -70,6 +74,22 @@ export function ResumeJobMatchForm() {
           setResumeSourceMode("document");
         } else {
           setResumeSourceMode("paste");
+        }
+        if (initialJobUrl) {
+          setJobSourceMode("url");
+          setJobUrl(initialJobUrl);
+          setJobText("");
+        }
+        if (initialResumeProfileId) {
+          setResumeSourceMode("profile");
+          setSelectedResumeProfileId(initialResumeProfileId);
+          setSelectedDocumentId("");
+          setResumeText("");
+        } else if (initialResumeDocumentId) {
+          setResumeSourceMode("document");
+          setSelectedDocumentId(initialResumeDocumentId);
+          setSelectedResumeProfileId("");
+          setResumeText("");
         }
       })
       .catch((err) => {

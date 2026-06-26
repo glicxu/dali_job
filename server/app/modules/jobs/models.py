@@ -54,8 +54,8 @@ class JobCache(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
-class UserJob(Base):
-    __tablename__ = "user_jobs"
+class UserSavedJob(Base):
+    __tablename__ = "user_saved_jobs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     workspace_id: Mapped[int] = mapped_column(
@@ -70,19 +70,13 @@ class UserJob(Base):
         nullable=False,
         index=True,
     )
-    jobs_cache_id: Mapped[int | None] = mapped_column(
+    jobs_cache_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("jobs_cache.id", ondelete="SET NULL"),
-        nullable=True,
+        ForeignKey("jobs_cache.id", ondelete="CASCADE"),
+        nullable=False,
         index=True,
     )
-    title: Mapped[str] = mapped_column(String(255), nullable=False, default="")
-    company: Mapped[str] = mapped_column(String(255), nullable=False, default="")
-    source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    raw_description_text: Mapped[str] = mapped_column(Text, nullable=False)
-    job_data: Mapped[dict] = mapped_column(JSON, nullable=False, default=default_job_data)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -111,7 +105,7 @@ class JobResumeMatch(Base):
     )
     user_job_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("user_jobs.id", ondelete="CASCADE"),
+        ForeignKey("user_saved_jobs.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )

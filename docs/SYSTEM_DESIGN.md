@@ -181,7 +181,7 @@ URL extraction should respect site terms and use conservative fetching. The prod
 
 #### Apify Indeed Job Search
 
-Indeed blocks or gates many direct scraper requests. DaliJob should not try to bypass sign-in, verification, or bot-detection pages. Instead, an optional Apify-backed Indeed search workflow can be added as a separate job search experience.
+Indeed blocks or gates many direct scraper requests. DaliJob should not try to bypass sign-in, verification, or bot-detection pages. Instead, DaliJob provides an optional Apify-backed Indeed search workflow as a separate job search experience.
 
 Apify Indeed search workflow:
 
@@ -190,7 +190,7 @@ Apify Indeed search workflow:
 3. The client sends the search request to the DaliJob server.
 4. The server calls the configured Apify Indeed scraper actor using `APIFY_API_TOKEN` from the server environment.
 5. The server normalizes Apify results into DaliJob search result objects.
-6. The client displays up to 20 returned jobs in a reviewable list.
+6. The client displays up to 5 returned jobs in a reviewable list.
 7. The user can open a job result to inspect the full description.
 8. The user selects one or more jobs to import.
 9. Imported jobs flow through the existing `jobs_cache` and `user_saved_jobs` pipeline.
@@ -200,12 +200,12 @@ The Apify API token must stay server-side and must never be exposed to the clien
 
 The first implementation targets Apify actor `misceres/indeed-scraper`. In Apify API paths, the actor ID is encoded as `misceres~indeed-scraper`.
 
-Apify API endpoints to use:
+Apify API endpoints:
 
 - Async actor run: `POST https://api.apify.com/v2/acts/misceres~indeed-scraper/runs?token=<APIFY_API_TOKEN>`.
 - Synchronous run returning dataset items: `POST https://api.apify.com/v2/acts/misceres~indeed-scraper/run-sync-get-dataset-items?token=<APIFY_API_TOKEN>`.
 
-The MVP should prefer the synchronous dataset-items endpoint if the actor reliably completes within the request timeout for 20 results. If not, use the async run endpoint, poll the run status, and then fetch the default dataset items. Before coding, confirm the exact actor input field names in the Apify actor console because Apify actors are third-party components and their input schema can change.
+The current implementation uses the synchronous dataset-items endpoint for the 5-result MVP. If searches regularly exceed the request timeout, switch to the async run endpoint, poll the run status, and then fetch the default dataset items. The actor input shape should be rechecked during maintenance because Apify actors are third-party components and their input schema can change.
 
 Actor input shape for `misceres/indeed-scraper`:
 
@@ -226,7 +226,7 @@ Actor input shape for `misceres/indeed-scraper`:
 }
 ```
 
-DaliJob's client-facing `keyword` should map to Apify `position`, `location` should map to Apify `location`, and the first implementation should use `country: "US"`. DaliJob should cap `maxItemsPerSearch` to 20 by default for the first UI. Keep `parseCompanyDetails: false` and `followApplyRedirects: false` to reduce runtime, cost, and redirect risk. Keep `saveOnlyUniqueItems: true`.
+DaliJob's client-facing `keyword` maps to Apify `position`, `location` maps to Apify `location`, and the first implementation uses `country: "US"`. DaliJob caps `maxItemsPerSearch` to 5 for the first UI. Keep `parseCompanyDetails: false` and `followApplyRedirects: false` to reduce runtime, cost, and redirect risk. Keep `saveOnlyUniqueItems: true`.
 
 Apify results are external data and should be normalized into DaliJob's internal job model before storage. The client should not depend directly on Apify field names. If Apify returns a `source_url` already present in `jobs_cache`, DaliJob should reuse the cached job rather than creating duplicate canonical job rows.
 

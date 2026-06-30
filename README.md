@@ -29,7 +29,7 @@ Key documents:
 
 ## Run Locally
 
-Server settings come from a `ProcessConfig` ini file. Server secrets, including `OPENAI_API_KEY`, belong in `server/.env`, which is ignored by git.
+Server settings come from a `ProcessConfig` ini file. Server secrets, including `OPENAI_API_KEY` and `APIFY_API_TOKEN`, belong in `server/.env`, which is ignored by git.
 
 Create a local server config from the safe example:
 
@@ -48,6 +48,14 @@ python -m app.main --config config.ini
 ```
 
 `python -m playwright install chromium firefox` is required for rendered scraping. Chromium is the default browser for bulk job-list import pages that render job results with JavaScript. Firefox is installed as a secondary fallback for sites that behave differently in Chromium, such as some Indeed pages. Static HTML job pages can still be imported without the rendered-page fallback.
+
+The Indeed Job Search page uses Apify actor `misceres/indeed-scraper`. Add this to `server\.env` before using that page:
+
+```powershell
+APIFY_API_TOKEN=your_apify_token_here
+```
+
+The Apify token is read only by the FastAPI server and is never sent to the client.
 
 ## Database Setup
 

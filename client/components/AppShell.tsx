@@ -70,6 +70,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav>
           <a href="/">Match</a>
           <a href="/jobs">Jobs</a>
+          <a href="/jobs/search">Job Search</a>
           <a href="/jobs/import">Bulk Import</a>
           <a href="/profile">Profile</a>
           <a href="/documents">Documents</a>

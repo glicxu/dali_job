@@ -97,6 +97,47 @@ class JobListImportResponse(BaseModel):
     failed: list[JobListImportFailure] = Field(default_factory=list)
 
 
+class IndeedJobSearchRequest(BaseModel):
+    keyword: str = Field(..., min_length=1, max_length=255)
+    location: str = Field(..., min_length=1, max_length=255)
+    max_results: int = Field(default=5, ge=1, le=5)
+
+
+class IndeedJobSearchResult(BaseModel):
+    external_id: str = ""
+    title: str = ""
+    company: str = ""
+    location: str = ""
+    source_url: str | None = None
+    summary: str = ""
+    raw_description_text: str = ""
+    salary_range: str = ""
+    employment_type: str = ""
+    posted_at: str = ""
+    status: str = "new"
+    jobs_cache_id: int | None = None
+
+
+class IndeedJobSearchResponse(BaseModel):
+    provider: str = "apify_indeed"
+    keyword: str
+    location: str
+    results: list[IndeedJobSearchResult]
+    warnings: list[str] = Field(default_factory=list)
+
+
+class IndeedJobSearchImportRequest(BaseModel):
+    selected_results: list[IndeedJobSearchResult] = Field(..., min_length=1, max_length=25)
+    resume_profile_id: int | None = None
+    run_matching: bool = False
+
+    @model_validator(mode="after")
+    def require_resume_when_matching(self) -> IndeedJobSearchImportRequest:
+        if self.run_matching and not self.resume_profile_id:
+            raise ValueError("resume_profile_id is required when run_matching is true.")
+        return self
+
+
 class JobDraftResponse(BaseModel):
     source_url: str | None
     raw_description_text: str

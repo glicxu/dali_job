@@ -127,6 +127,29 @@ export type JobListImportResponse = {
   failed: JobListImportFailure[];
 };
 
+export type IndeedJobSearchResult = {
+  external_id: string;
+  title: string;
+  company: string;
+  location: string;
+  source_url: string | null;
+  summary: string;
+  raw_description_text: string;
+  salary_range: string;
+  employment_type: string;
+  posted_at: string;
+  status: "new" | "already_cached";
+  jobs_cache_id: number | null;
+};
+
+export type IndeedJobSearchResponse = {
+  provider: "apify_indeed";
+  keyword: string;
+  location: string;
+  results: IndeedJobSearchResult[];
+  warnings: string[];
+};
+
 export type JobSavePayload = {
   title: string;
   company: string;
@@ -489,6 +512,35 @@ export function importJobList(
     body: JSON.stringify({
       list_url: options?.listUrl || undefined,
       selected_urls: selectedUrls,
+      resume_profile_id: options?.resumeProfileId || undefined,
+      run_matching: Boolean(options?.runMatching),
+    }),
+  });
+}
+
+export function searchIndeedJobs(
+  keyword: string,
+  location: string,
+  maxResults = 5,
+): Promise<IndeedJobSearchResponse> {
+  return requestJson<IndeedJobSearchResponse>("/job-search/indeed", {
+    method: "POST",
+    body: JSON.stringify({
+      keyword,
+      location,
+      max_results: maxResults,
+    }),
+  });
+}
+
+export function importIndeedSearchResults(
+  selectedResults: IndeedJobSearchResult[],
+  options?: { resumeProfileId?: number; runMatching?: boolean },
+): Promise<JobListImportResponse> {
+  return requestJson<JobListImportResponse>("/job-search/indeed/import", {
+    method: "POST",
+    body: JSON.stringify({
+      selected_results: selectedResults,
       resume_profile_id: options?.resumeProfileId || undefined,
       run_matching: Boolean(options?.runMatching),
     }),

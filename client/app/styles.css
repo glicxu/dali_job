@@ -603,6 +603,10 @@ li span {
   padding: 12px 14px;
 }
 
+.indeed-search-row {
+  grid-template-columns: 64px minmax(0, 1fr) 140px 100px;
+}
+
 .bulk-import-row:last-child {
   border-bottom: 0;
 }

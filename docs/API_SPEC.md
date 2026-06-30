@@ -403,7 +403,7 @@ POST https://api.apify.com/v2/acts/misceres~indeed-scraper/runs?token=<APIFY_API
 POST https://api.apify.com/v2/acts/misceres~indeed-scraper/run-sync-get-dataset-items?token=<APIFY_API_TOKEN>
 ```
 
-The synchronous dataset-items endpoint is preferred for the MVP if 20-result searches complete within the server timeout. Otherwise the server should use the async `/runs` endpoint, poll the run, then fetch dataset items.
+The current MVP uses the synchronous dataset-items endpoint for 5-result searches. If Apify runs regularly exceed the server timeout, switch to the async `/runs` endpoint, poll the run, then fetch dataset items.
 
 Apify actor input body:
 
@@ -424,7 +424,7 @@ Apify actor input body:
 }
 ```
 
-DaliJob request `keyword` maps to Apify `position`, and DaliJob request `location` maps to Apify `location`. The first implementation should use `country: "US"`, `saveOnlyUniqueItems: true`, `parseCompanyDetails: false`, and `followApplyRedirects: false`. DaliJob should cap `maxItemsPerSearch`; the UI default is 20.
+DaliJob request `keyword` maps to Apify `position`, and DaliJob request `location` maps to Apify `location`. The first implementation uses `country: "US"`, `saveOnlyUniqueItems: true`, `parseCompanyDetails: false`, and `followApplyRedirects: false`. DaliJob caps `maxItemsPerSearch`; the UI default is 5.
 
 Body:
 
@@ -432,7 +432,7 @@ Body:
 {
   "keyword": "software engineer",
   "location": "Maryland",
-  "max_results": 20
+  "max_results": 5
 }
 ```
 
@@ -470,11 +470,11 @@ Result `status` values:
 - `duplicate`
 - `failed`
 
-The server should cap `max_results`; the first implementation should default to 20. Empty Apify datasets, missing `APIFY_API_TOKEN`, actor failures, Apify quota errors, and timeouts should return clear structured errors.
+The server caps `max_results`; the first implementation defaults to 5. Empty Apify datasets, missing `APIFY_API_TOKEN`, actor failures, Apify quota errors, and timeouts return clear structured errors.
 
 ### `POST /job-search/indeed/import`
 
-Imports selected Apify Indeed search results. The server should normalize each selected result into `raw_description_text` and `job_data`, reuse an existing `jobs_cache` row by `source_url` when possible, and create a `user_saved_jobs` row for the current user.
+Imports selected Apify Indeed search results. The server normalizes each selected result into `raw_description_text` and `job_data`, reuses an existing `jobs_cache` row by `source_url` when possible, and creates a `user_saved_jobs` row for the current user.
 
 Body:
 

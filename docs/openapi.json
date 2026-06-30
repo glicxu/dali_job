@@ -379,6 +379,98 @@
         }
       }
     },
+    "/api/v1/job-search/indeed": {
+      "post": {
+        "tags": [
+          "job-search"
+        ],
+        "summary": "Search Indeed Jobs",
+        "operationId": "search_indeed_jobs_api_v1_job_search_indeed_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IndeedJobSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndeedJobSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/job-search/indeed/import": {
+      "post": {
+        "tags": [
+          "job-search"
+        ],
+        "summary": "Import Indeed Search Results",
+        "operationId": "import_indeed_search_results_api_v1_job_search_indeed_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IndeedJobSearchImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobListImportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/jobs": {
       "get": {
         "tags": [
@@ -1426,6 +1518,185 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "IndeedJobSearchImportRequest": {
+        "properties": {
+          "selected_results": {
+            "items": {
+              "$ref": "#/components/schemas/IndeedJobSearchResult"
+            },
+            "type": "array",
+            "maxItems": 25,
+            "minItems": 1,
+            "title": "Selected Results"
+          },
+          "resume_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Profile Id"
+          },
+          "run_matching": {
+            "type": "boolean",
+            "title": "Run Matching",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "selected_results"
+        ],
+        "title": "IndeedJobSearchImportRequest"
+      },
+      "IndeedJobSearchRequest": {
+        "properties": {
+          "keyword": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Keyword"
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Location"
+          },
+          "max_results": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Max Results",
+            "default": 5
+          }
+        },
+        "type": "object",
+        "required": [
+          "keyword",
+          "location"
+        ],
+        "title": "IndeedJobSearchRequest"
+      },
+      "IndeedJobSearchResponse": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider",
+            "default": "apify_indeed"
+          },
+          "keyword": {
+            "type": "string",
+            "title": "Keyword"
+          },
+          "location": {
+            "type": "string",
+            "title": "Location"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/IndeedJobSearchResult"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "keyword",
+          "location",
+          "results"
+        ],
+        "title": "IndeedJobSearchResponse"
+      },
+      "IndeedJobSearchResult": {
+        "properties": {
+          "external_id": {
+            "type": "string",
+            "title": "External Id",
+            "default": ""
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": ""
+          },
+          "company": {
+            "type": "string",
+            "title": "Company",
+            "default": ""
+          },
+          "location": {
+            "type": "string",
+            "title": "Location",
+            "default": ""
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "default": ""
+          },
+          "raw_description_text": {
+            "type": "string",
+            "title": "Raw Description Text",
+            "default": ""
+          },
+          "salary_range": {
+            "type": "string",
+            "title": "Salary Range",
+            "default": ""
+          },
+          "employment_type": {
+            "type": "string",
+            "title": "Employment Type",
+            "default": ""
+          },
+          "posted_at": {
+            "type": "string",
+            "title": "Posted At",
+            "default": ""
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "new"
+          },
+          "jobs_cache_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jobs Cache Id"
+          }
+        },
+        "type": "object",
+        "title": "IndeedJobSearchResult"
       },
       "JobDescriptionData": {
         "properties": {

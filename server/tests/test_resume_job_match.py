@@ -10,11 +10,16 @@ from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.documents.models import Document, DocumentVersion
 from app.modules.jobs.schemas import JobDescriptionData
+from app.modules.resume_job_match import job_url_import
 from app.modules.resume_job_match import router as match_router
 from app.modules.resume_job_match.job_url_import import (
+    RenderableFetchError,
     extract_job_description_from_html,
+    extract_job_page_text_from_html,
     extract_job_links_from_html,
     extract_next_page_url_from_html,
+    fetch_job_description_from_url,
+    fetch_job_page_text_from_url,
     validate_public_job_url,
 )
 from app.modules.resume_job_match.router import get_match_job_description_parser, get_resume_job_matcher
@@ -412,6 +417,127 @@ def test_job_url_extract_endpoint_returns_scraped_text(monkeypatch) -> None:
     assert payload["character_count"] == len("Backend Engineer job text with PostgreSQL.")
 
 
+def test_fetch_job_description_uses_rendered_fallback_after_blocked_static_fetch(monkeypatch) -> None:
+    def blocked_fetch(_url: str) -> tuple[str, str]:
+        raise RenderableFetchError(401, "Unauthorized")
+
+    rendered_html = """
+    <html><body>
+      <nav>Find salaries Search jobs</nav>
+      <div class="jobsearch-RightPane css-6iabie eu4oa1w0">
+        <h1>Software Engineer</h1>
+        <div id="jobDescriptionText">
+          <p>Build backend services with Python, PostgreSQL, and APIs for production systems.</p>
+          <p>Design reliable software, collaborate with product teams, and improve operational quality.</p>
+          <p>Experience with testing, cloud deployments, and system design is required.</p>
+        </div>
+      </div>
+    </body></html>
+    """
+    monkeypatch.setattr(job_url_import, "_fetch_url_text", blocked_fetch)
+    monkeypatch.setattr(job_url_import, "_fetch_rendered_html", lambda _url: rendered_html)
+
+    text = fetch_job_description_from_url("https://www.indeed.com/viewjob?jk=1cf252337cfd0eae")
+
+    assert "PostgreSQL" in text
+    assert "Design reliable software" in text
+    assert "Find salaries" not in text
+
+
+def test_fetch_job_page_text_uses_rendered_fallback_after_blocked_static_fetch(monkeypatch) -> None:
+    def blocked_fetch(_url: str) -> tuple[str, str]:
+        raise RenderableFetchError(401, "Unauthorized")
+
+    rendered_html = """
+    <html><body>
+      <div class="jobsearch-RightPane css-6iabie eu4oa1w0">
+        <h1>Data Engineer</h1>
+        <div id="jobDescriptionText">
+          <p>Build data pipelines with Python, SQL, orchestration, and warehouse modeling.</p>
+          <p>Partner with analytics, product, and platform teams to deliver reliable datasets.</p>
+          <p>Own monitoring, testing, documentation, incident response, and production support.</p>
+          <p>Use cloud infrastructure, version control, code review, and deployment automation.</p>
+        </div>
+      </div>
+    </body></html>
+    """
+    monkeypatch.setattr(job_url_import, "_fetch_url_text", blocked_fetch)
+    monkeypatch.setattr(job_url_import, "_fetch_rendered_html", lambda _url: rendered_html)
+
+    text = fetch_job_page_text_from_url("https://www.indeed.com/viewjob?jk=1cf252337cfd0eae")
+
+    assert "Data Engineer" in text
+    assert "Build data pipelines" in text
+    assert len(text) >= 200
+
+
+def test_job_page_text_rejects_sign_in_page() -> None:
+    html = """
+    <html><body>
+      <main>
+        <h1>Sign in to your Indeed account</h1>
+        <p>New to Indeed? Create an account.</p>
+        <label>Email address</label>
+        <label>Password</label>
+        <a>Forgot password?</a>
+        <button>Continue</button>
+      </main>
+    </body></html>
+    """
+
+    try:
+        extract_job_page_text_from_html(html)
+    except Exception as exc:
+        assert "sign-in" in str(exc) or "sign-in" in getattr(exc, "detail", "")
+    else:
+        raise AssertionError("sign-in page should not be accepted as job text")
+
+
+def test_job_description_rejects_sign_in_page() -> None:
+    html = """
+    <html><body>
+      <main>
+        <h1>Create an account or sign in</h1>
+        <p>Indeed account authentication is required.</p>
+        <label>Email address</label>
+        <label>Password</label>
+        <a>Forgot password?</a>
+      </main>
+    </body></html>
+    """
+
+    try:
+        extract_job_description_from_html(html)
+    except Exception as exc:
+        assert "sign-in" in str(exc) or "sign-in" in getattr(exc, "detail", "")
+    else:
+        raise AssertionError("sign-in page should not be accepted as job description")
+
+
+def test_job_page_text_rejects_security_check_page() -> None:
+    html = """
+    <html><body>
+      <main>
+        <h1>Security Check - Indeed.com</h1>
+        <a>Find jobs</a>
+        <a>Company Reviews</a>
+        <a>Find salaries</a>
+        <a>Sign in</a>
+        <p>Additional Verification Required</p>
+        <p>Your Ray ID for this request is a13620124b275806.</p>
+        <p>Verification successful. Waiting for security check to complete.</p>
+      </main>
+    </body></html>
+    """
+
+    try:
+        extract_job_page_text_from_html(html)
+    except Exception as exc:
+        assert "sign-in" in str(exc) or "sign-in" in getattr(exc, "detail", "")
+    else:
+        raise AssertionError("security-check page should not be accepted as job text")
+
+
 def test_extract_job_description_from_json_ld_jobposting() -> None:
     html = """
     <html><head>
@@ -597,6 +723,85 @@ def test_job_list_discovery_prioritizes_amazon_job_detail_links() -> None:
     ]
 
 
+def test_job_list_discovery_dedupes_amazon_short_and_long_job_urls() -> None:
+    html = """
+    <html><body>
+      <section>
+        <a href="/en/jobs/10421793/software-development-engineer">Software Development Engineer</a>
+        <a href="/jobs/10421793"></a>
+        <a href="/en/jobs/2876543/software-development-engineer-ii">Software Development Engineer II</a>
+        <a href="/jobs/2876543"></a>
+      </section>
+    </body></html>
+    """
+
+    links = extract_job_links_from_html("https://amazon.jobs/en/search?base_query=Software+Development", html)
+
+    assert [link.source_url for link in links] == [
+        "https://amazon.jobs/en/jobs/10421793/software-development-engineer",
+        "https://amazon.jobs/en/jobs/2876543/software-development-engineer-ii",
+    ]
+    assert [link.title for link in links] == [
+        "Software Development Engineer",
+        "Software Development Engineer II",
+    ]
+
+
+def test_job_list_discovery_extracts_indeed_job_links() -> None:
+    html = """
+    <html><body>
+      <a data-jk="31f81fedecec3218" href="/rc/clk?jk=31f81fedecec3218&from=vj">Software Engineer</a>
+      <a data-jk="abc123def4567890" href="/viewjob?jk=abc123def4567890">Backend Developer</a>
+    </body></html>
+    """
+
+    links = extract_job_links_from_html("https://www.indeed.com/jobs?q=software+engineer&l=Maryland", html)
+
+    assert [link.source_url for link in links] == [
+        "https://www.indeed.com/rc/clk?jk=31f81fedecec3218&from=vj",
+        "https://www.indeed.com/viewjob?jk=abc123def4567890",
+    ]
+    assert [link.title for link in links] == ["Software Engineer", "Backend Developer"]
+
+
+def test_job_list_discovery_extracts_indeed_embedded_job_keys() -> None:
+    html = r"""
+    <html><body>
+      <script>
+        window.mosaic.providerData = {
+          "results": [
+            {"jobkey": "31f81fedecec3218"},
+            {"vjk": "abc123def4567890"}
+          ]
+        };
+      </script>
+    </body></html>
+    """
+
+    links = extract_job_links_from_html("https://www.indeed.com/jobs?q=software+engineer&l=Maryland", html)
+
+    assert [link.source_url for link in links] == [
+        "https://www.indeed.com/viewjob?jk=31f81fedecec3218",
+        "https://www.indeed.com/viewjob?jk=abc123def4567890",
+    ]
+
+
+def test_job_list_discovery_filters_indeed_bot_detection_links() -> None:
+    html = r"""
+    <html><body>
+      <a href="/career/salaries">Find salaries</a>
+      <a href="/account/login?from=bot-detection-anonymous&continue2=https://www.indeed.com/jobs?q=software&vjk=31f81fedecec3218">Continue</a>
+    </body></html>
+    """
+
+    links = extract_job_links_from_html(
+        "https://www.indeed.com/jobs?q=software+engineer&l=Maryland&vjk=31f81fedecec3218",
+        html,
+    )
+
+    assert links == []
+
+
 def test_job_list_discovery_extracts_links_from_embedded_json_text() -> None:
     html = """
     <html><body>
@@ -638,6 +843,28 @@ def test_job_list_discovery_extracts_escaped_embedded_links() -> None:
     assert [link.source_url for link in links] == [
         "https://www.usajobs.gov/job/722102800",
         "https://www.usajobs.gov/job/812345600",
+    ]
+
+
+def test_job_list_discovery_extracts_locale_prefixed_embedded_job_links() -> None:
+    html = r"""
+    <html><body>
+      <script>
+        window.__RESULTS__ = {
+          "jobs": [
+            {"href": "\/en\/jobs\/10411163\/software-development-manager-ring"},
+            {"href": "/en/jobs/2876543/software-development-engineer"}
+          ]
+        };
+      </script>
+    </body></html>
+    """
+
+    links = extract_job_links_from_html("https://amazon.jobs/en/search?base_query=Software+Development", html)
+
+    assert [link.source_url for link in links] == [
+        "https://amazon.jobs/en/jobs/10411163/software-development-manager-ring",
+        "https://amazon.jobs/en/jobs/2876543/software-development-engineer",
     ]
 
 

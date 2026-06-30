@@ -41,13 +41,13 @@ Then edit `server\config.ini` for your local database. Start the server from the
 
 ```powershell
 python -m pip install -r requirements.txt
-python -m playwright install chromium
+python -m playwright install chromium firefox
 cd server
 alembic -x config=config.ini upgrade head
 python -m app.main --config config.ini
 ```
 
-`python -m playwright install chromium` is required for bulk job-list import pages that render job results with JavaScript. Static HTML job pages can still be imported without the rendered-page fallback.
+`python -m playwright install chromium firefox` is required for rendered scraping. Chromium is the default browser for bulk job-list import pages that render job results with JavaScript. Firefox is installed as a secondary fallback for sites that behave differently in Chromium, such as some Indeed pages. Static HTML job pages can still be imported without the rendered-page fallback.
 
 ## Database Setup
 

@@ -291,7 +291,6 @@ export function ResumeJobMatchForm() {
         {isLoading ? "Comparing..." : "Match"}
       </button>
 
-      {result ? <MatchResult result={result} /> : null}
       {pendingLowMatchJob ? (
         <section className="warning-banner">
           <div>
@@ -310,6 +309,7 @@ export function ResumeJobMatchForm() {
           </div>
         </section>
       ) : null}
+      {result ? <MatchResult result={result} /> : null}
     </form>
   );
 }

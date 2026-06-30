@@ -54,7 +54,7 @@ def resolve_resume_text(
         latest = document_repository.get_latest_version(db, document)
         if latest is None or not latest.extracted_text:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Resume document does not have extracted text available.",
             )
         return latest.extracted_text

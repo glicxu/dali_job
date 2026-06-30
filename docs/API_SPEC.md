@@ -388,6 +388,134 @@ Response:
 
 `run_matching` is optional. When it is true, `resume_profile_id` or another supported resume source must be supplied. Bulk import should still work when matching is disabled.
 
+### `POST /job-search/indeed`
+
+Searches Indeed through the server-side Apify integration. This endpoint does not save jobs. It returns normalized reviewable results that the user can inspect before import.
+
+The server reads `APIFY_API_TOKEN` from the server process environment. The token is never accepted from the client and is never returned in responses.
+
+The first implementation targets Apify actor `misceres/indeed-scraper`. In Apify API paths this actor is addressed as `misceres~indeed-scraper`.
+
+Apify run endpoints:
+
+```text
+POST https://api.apify.com/v2/acts/misceres~indeed-scraper/runs?token=<APIFY_API_TOKEN>
+POST https://api.apify.com/v2/acts/misceres~indeed-scraper/run-sync-get-dataset-items?token=<APIFY_API_TOKEN>
+```
+
+The synchronous dataset-items endpoint is preferred for the MVP if 20-result searches complete within the server timeout. Otherwise the server should use the async `/runs` endpoint, poll the run, then fetch dataset items.
+
+Apify actor input body:
+
+```json
+{
+  "position": "web developer",
+  "maxItemsPerSearch": 100,
+  "country": "US",
+  "location": "San Francisco",
+  "parseCompanyDetails": false,
+  "saveOnlyUniqueItems": true,
+  "followApplyRedirects": false,
+  "startUrls": [
+    {
+      "url": "https://www.indeed.com/jobs?q=software+engineer&l=New+York"
+    }
+  ]
+}
+```
+
+DaliJob request `keyword` maps to Apify `position`, and DaliJob request `location` maps to Apify `location`. The first implementation should use `country: "US"`, `saveOnlyUniqueItems: true`, `parseCompanyDetails: false`, and `followApplyRedirects: false`. DaliJob should cap `maxItemsPerSearch`; the UI default is 20.
+
+Body:
+
+```json
+{
+  "keyword": "software engineer",
+  "location": "Maryland",
+  "max_results": 20
+}
+```
+
+Response:
+
+```json
+{
+  "provider": "apify_indeed",
+  "keyword": "software engineer",
+  "location": "Maryland",
+  "results": [
+    {
+      "external_id": "indeed-job-key-or-apify-id",
+      "title": "Software Engineer",
+      "company": "Example Co",
+      "location": "Baltimore, MD",
+      "source_url": "https://www.indeed.com/viewjob?jk=example",
+      "summary": "Short description preview.",
+      "raw_description_text": "Full job description when returned by Apify.",
+      "salary_range": "",
+      "employment_type": "",
+      "posted_at": "",
+      "status": "new",
+      "jobs_cache_id": null
+    }
+  ],
+  "warnings": []
+}
+```
+
+Result `status` values:
+
+- `new`
+- `already_cached`
+- `duplicate`
+- `failed`
+
+The server should cap `max_results`; the first implementation should default to 20. Empty Apify datasets, missing `APIFY_API_TOKEN`, actor failures, Apify quota errors, and timeouts should return clear structured errors.
+
+### `POST /job-search/indeed/import`
+
+Imports selected Apify Indeed search results. The server should normalize each selected result into `raw_description_text` and `job_data`, reuse an existing `jobs_cache` row by `source_url` when possible, and create a `user_saved_jobs` row for the current user.
+
+Body:
+
+```json
+{
+  "selected_results": [
+    {
+      "external_id": "indeed-job-key-or-apify-id",
+      "title": "Software Engineer",
+      "company": "Example Co",
+      "location": "Baltimore, MD",
+      "source_url": "https://www.indeed.com/viewjob?jk=example",
+      "raw_description_text": "Full job description returned by Apify."
+    }
+  ],
+  "resume_profile_id": 1,
+  "run_matching": true
+}
+```
+
+Response:
+
+```json
+{
+  "imported": [
+    {
+      "user_job_id": 31,
+      "jobs_cache_id": 12,
+      "source_url": "https://www.indeed.com/viewjob?jk=example",
+      "title": "Software Engineer",
+      "company": "Example Co",
+      "match_score": 7,
+      "match_id": 44
+    }
+  ],
+  "failed": []
+}
+```
+
+`run_matching` is optional. If it is true, `resume_profile_id` is required for the first implementation.
+
 ### `POST /jobs`
 
 Creates a saved job from a reviewed draft or fully manual input. If a source URL already exists in `jobs_cache`, the server reuses that cache row and creates a `user_saved_jobs` row. Manual jobs without a URL also create a `jobs_cache` row with a nullable `source_url`. This is a core workflow and does not depend on job board APIs, plugins, or URL extraction.

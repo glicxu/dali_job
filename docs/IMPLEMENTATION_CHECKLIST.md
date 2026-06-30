@@ -138,6 +138,26 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Add conservative limits, deduplication, source-access checks, and clear warnings for unsupported listing pages.
 - [x] Add incremental Load More pagination for bulk job-list discovery using generalized next-page heuristics.
 
+### Apify Indeed Job Search
+
+- [x] Add server-side `APIFY_API_TOKEN` environment variable support. The token must never be exposed to the client or committed config.
+- [x] Use Apify actor `misceres/indeed-scraper` for the first Indeed integration.
+- [x] Document the Apify run endpoints for actor `misceres~indeed-scraper`.
+- [x] Document the `misceres/indeed-scraper` input shape using `position`, `location`, `country`, `maxItemsPerSearch`, `parseCompanyDetails`, `saveOnlyUniqueItems`, `followApplyRedirects`, and `startUrls`.
+- [ ] Add Apify service wrapper for starting the actor, waiting for completion, handling failures, and reading dataset results.
+- [ ] Normalize Apify Indeed results into DaliJob job search result DTOs with title, company, location, source URL, raw description text, salary, employment type, posting date, and full description when available.
+- [ ] Add `POST /api/v1/job-search/indeed` endpoint accepting keyword, location, and max results with a default cap of 20.
+- [ ] Add server-side validation, timeouts, rate limiting, and clear errors for Apify token exhaustion, actor failure, empty results, or invalid input.
+- [ ] Add new client Job Search page where the user enters keyword and location.
+- [ ] Display up to 20 Apify-sourced Indeed results in a reviewable list.
+- [ ] Add result detail view so the user can inspect the full job description before importing.
+- [ ] Add selection flow so the user can import one or more Apify search results.
+- [ ] Import selected Apify results through the existing `jobs_cache` and `user_saved_jobs` pipeline.
+- [ ] Reuse existing `jobs_cache` rows by `source_url` when Apify returns a job URL that is already cached.
+- [ ] Optionally support match-on-import after the user selects a resume profile, matching the existing bulk import behavior.
+- [ ] Add tests for Apify result normalization, search endpoint errors, import deduplication, and selected-job import.
+- [ ] Update README setup notes to document `APIFY_API_TOKEN` in `server/.env` after implementation.
+
 ### Application Tracking
 
 - [ ] Create application table and status enum.

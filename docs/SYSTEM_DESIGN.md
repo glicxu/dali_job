@@ -127,7 +127,7 @@ Manual entry is a core workflow, not a fallback-only feature. A user must be abl
 
 URL extraction is a convenience feature. If the page cannot be fetched, blocks automated access, requires authentication, renders content client-side, or does not expose parseable job data, DaliJob should keep the URL and let the user manually fill or paste the missing fields. URL extraction must not be required for application tracking.
 
-The implemented job import flow creates reviewable drafts from URL or pasted text before saving. Users can also start with a blank manual job form. Saved jobs are represented by `user_saved_jobs` rows that reference `jobs_cache` rows, so the same parsed URL can appear in multiple users' job lists without reparsing the posting while still allowing private user notes.
+The implemented job import flow creates reviewable drafts from URL or pasted text before saving. Users can also start with a blank manual job form. Saved jobs are represented by `user_saved_jobs` rows that reference `jobs_cache` rows, so the same URL can appear in multiple users' job lists without refetching or reparsing the posting while still allowing private user notes.
 
 Bulk job-list import should be a separate workflow from the one-job Match page. The Match page remains focused on comparing one resume against one job source. Bulk import belongs on a dedicated page such as `/jobs/import` or a clearly separated Jobs page section because it has a review/select/import workflow.
 
@@ -137,8 +137,9 @@ Bulk import methodology:
 2. The server fetches the listing page with conservative timeouts, rate limits, and source access checks.
 3. The server extracts candidate individual job posting URLs, normalizes and deduplicates them, and labels each as new, already cached, or failed/unknown when possible.
 4. The client shows a review table so the user can select which jobs to import. DaliJob must not silently import every discovered job.
-5. For each selected job URL, the server uses the normal single-job import pipeline: check `jobs_cache`, reuse existing cached `job_data` when available, otherwise scrape the detail page, parse with OpenAI, save the cache row, and create a user-specific `user_saved_jobs` row.
-6. Optional batch matching can run after import when the user selects a resume profile, but bulk import must also work without matching.
+5. For each selected job URL, the server checks `jobs_cache`, reuses existing cached source data when available, otherwise scrapes the detail page, saves `raw_description_text`, title/company when known, and creates a user-specific `user_saved_jobs` row.
+6. Bulk import should not call OpenAI just to save jobs. `jobs_cache.job_data` may remain empty until matching or a structured job-profile action needs it.
+7. Optional batch matching can run after import when the user selects a resume profile. In that case, matching lazily parses any selected job whose `job_data` is missing, then saves `job_data` back to `jobs_cache`.
 
 The first implementation should cap the number of discovered/imported jobs per request, for example 10 to 25, and can start with the first listing page only. Pagination and JavaScript-rendered listing support should be added after the basic workflow is reliable.
 
@@ -147,9 +148,17 @@ Incremental pagination should use a generalized "Load More" workflow instead of 
 For AI parsing, DaliJob should preserve two forms of each imported posting:
 
 - `raw_description_text`: cleaned pasted text or broadly scraped visible page text.
-- `job_data`: structured JSON extracted from `raw_description_text`.
+- `job_data`: nullable structured JSON extracted from `raw_description_text` when matching or structured viewing requires it.
 
-The resume-to-job matching system should eventually compare structured resume JSON against structured job JSON rather than only comparing raw text. URL scraping for this path can be broader than the conservative text-only matcher scraper because OpenAI is responsible for categorizing useful fields and ignoring unrelated page text. The original raw text should still be saved so the job can be reparsed when the schema or prompts improve.
+The resume-to-job matching system should compare structured resume JSON against structured job JSON. URL scraping for this path can be broader than the conservative text-only matcher scraper because OpenAI is responsible for categorizing useful fields and ignoring unrelated page text. The original raw text should still be saved so the job can be reparsed when the schema or prompts improve.
+
+Lazy job parsing rules:
+
+- Single-job draft/manual flows may parse immediately because the user is actively reviewing one job.
+- Bulk job-list import and Apify search import should save source data first and defer OpenAI parsing.
+- Before any match, the backend must ensure structured `job_data` exists. If it does not, parse `raw_description_text`, save `job_data`, and continue matching.
+- If parsing fails, return a clear message so the user can retry or paste cleaner text.
+- Existing parsed cache rows should be reused by URL before making another OpenAI call.
 
 Manual job fields should include:
 
@@ -193,8 +202,8 @@ Apify Indeed search workflow:
 6. The client displays up to 5 returned jobs in a reviewable list.
 7. The user can open a job result to inspect the full description.
 8. The user selects one or more jobs to import.
-9. Imported jobs flow through the existing `jobs_cache` and `user_saved_jobs` pipeline.
-10. Optional match-on-import can run when the user selects a resume profile.
+9. Imported jobs flow through the existing `jobs_cache` and `user_saved_jobs` pipeline without immediate OpenAI parsing unless match-on-import is selected.
+10. Optional match-on-import can run when the user selects a resume profile; this lazily parses missing `job_data` before matching.
 
 The Apify API token must stay server-side and must never be exposed to the client. The integration should handle Apify actor failures, empty datasets, quota/token errors, and timeouts with clear user-facing errors. Since Apify calls can cost credits, the UI must not trigger searches on every keystroke. Searches should require an explicit submit action.
 
@@ -228,14 +237,15 @@ Actor input shape for `misceres/indeed-scraper`:
 
 DaliJob's client-facing `keyword` maps to Apify `position`, `location` maps to Apify `location`, and the first implementation uses `country: "US"`. DaliJob caps `maxItemsPerSearch` to 5 for the first UI. Keep `parseCompanyDetails: false` and `followApplyRedirects: false` to reduce runtime, cost, and redirect risk. Keep `saveOnlyUniqueItems: true`.
 
-Apify results are external data and should be normalized into DaliJob's internal job model before storage. The client should not depend directly on Apify field names. If Apify returns a `source_url` already present in `jobs_cache`, DaliJob should reuse the cached job rather than creating duplicate canonical job rows.
+Apify results are external data and should be normalized into DaliJob's internal source-data model before storage. The client should not depend directly on Apify field names. If Apify returns a `source_url` already present in `jobs_cache`, DaliJob should reuse the cached job rather than creating duplicate canonical job rows. Apify import should store `raw_description_text` and metadata first; structured `job_data` should be generated lazily only when matching or a structured job profile requires it.
 
 ### 4.4 Job Analysis Pipeline
 
 ```text
 Job Description
   -> Cleaned raw_description_text
-  -> OpenAI Parser
+  -> Ensure structured job_data exists, parsing lazily when needed
+  -> OpenAI Parser if jobs_cache.job_data is missing
   -> Structured job_data JSON
   -> Skill Extraction
   -> Requirement Extraction

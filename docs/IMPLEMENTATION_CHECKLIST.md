@@ -137,6 +137,11 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Add optional batch matching for imported jobs after the user selects a resume profile.
 - [x] Add conservative limits, deduplication, source-access checks, and clear warnings for unsupported listing pages.
 - [x] Add incremental Load More pagination for bulk job-list discovery using generalized next-page heuristics.
+- [ ] Make `jobs_cache.job_data` nullable so bulk and provider-backed imports can save source data before OpenAI parsing.
+- [ ] Change bulk job-list import to save `raw_description_text` and metadata without immediate OpenAI parsing unless match-on-import is selected.
+- [ ] Add backend helper that ensures `job_data` exists by lazily parsing `raw_description_text`, saving the result, and reusing cached parsed data later.
+- [ ] Update resume-job matching to call the lazy parse helper before scoring when selected jobs have no `job_data`.
+- [ ] Add parse failure handling that shows a user-facing retry/manual-paste path.
 
 ### Apify Indeed Job Search
 
@@ -158,6 +163,7 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Optionally support match-on-import after the user selects a resume profile, matching the existing bulk import behavior.
 - [x] Add tests for Apify result normalization, search endpoint errors, import deduplication, and selected-job import.
 - [x] Update README setup notes to document `APIFY_API_TOKEN` in `server/.env` after implementation.
+- [ ] Change Apify selected-result import to defer OpenAI job parsing unless match-on-import is selected.
 
 ### Application Tracking
 

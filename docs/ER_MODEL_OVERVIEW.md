@@ -83,7 +83,7 @@ This lets one logical resume document have multiple uploaded versions later.
 
 Stores the shared reusable job posting cache.
 
-This table is for source data from URL scraping and OpenAI job parsing. Users should not directly edit this table.
+This table is for source data from URL scraping and optional OpenAI job parsing. Users should not directly edit this table.
 
 Typical contents:
 
@@ -103,7 +103,7 @@ jobs_cache 1 -> many job_resume_matches, optional
 
 Purpose:
 
-If multiple users import the same URL, DaliJob can reuse this cached parsed job instead of scraping and parsing again.
+If multiple users import the same URL, DaliJob can reuse this cached source data and, once generated, the cached parsed job JSON instead of scraping and parsing again.
 
 ### user_saved_jobs
 
@@ -128,7 +128,7 @@ user_saved_jobs 1 -> many job_resume_matches
 
 Important behavior:
 
-A user can edit notes on `user_saved_jobs`. The user cannot edit the job JSON from the saved Jobs page; `jobs_cache` remains the source for title, company, raw description, and structured `job_data`.
+A user can edit notes on `user_saved_jobs`. The user cannot edit the job JSON from the saved Jobs page; `jobs_cache` remains the source for title, company, raw description, and structured `job_data` when it has been generated.
 
 ### job_resume_matches
 
@@ -176,14 +176,16 @@ jobs_cache
 
 ## Job Import Flow
 
-When a user imports a job URL:
+When a user imports a single job URL:
 
 1. The server hashes the URL and checks `jobs_cache`.
-2. If the URL is cached, the server reuses `jobs_cache.job_data` and `jobs_cache.raw_description_text`.
-3. If the URL is not cached, the server scrapes the page and asks OpenAI to parse the job into `job_data`.
+2. If the URL is cached, the server reuses `jobs_cache.raw_description_text` and `jobs_cache.job_data` when present.
+3. If the URL is not cached, the server scrapes the page and saves source data into `jobs_cache`.
 4. The server creates or reuses a `jobs_cache` row.
 5. The server creates a `user_saved_jobs` row that references the cached data.
 6. The user can edit notes without changing the cached job details.
+
+Single-job draft or manual review flows may parse immediately because the user is actively working on one job. Bulk and provider-backed imports should defer OpenAI parsing until matching or structured viewing needs `job_data`.
 
 When a user manually creates a job without a URL, the app still creates a `jobs_cache` row with a nullable `source_url`, then creates a `user_saved_jobs` row that references it.
 
@@ -195,8 +197,9 @@ When a user imports from a job search or listing URL:
 2. The server normalizes and deduplicates the URLs.
 3. The server checks `jobs_cache` for each candidate URL and marks candidates as already cached or new.
 4. The client shows the candidates in a review table and the user selects which jobs to import.
-5. Each selected detail URL uses the normal Job Import Flow above.
-6. Optional batch matching can create `job_resume_matches` rows after the selected jobs are saved to `user_saved_jobs`.
+5. Each selected detail URL creates or reuses a `jobs_cache` row with source data and a `user_saved_jobs` row.
+6. OpenAI parsing is deferred unless the user also requests match-on-import.
+7. Optional batch matching lazily parses missing `job_data`, then creates `job_resume_matches` rows after the selected jobs are saved to `user_saved_jobs`.
 
 This flow should not store listing-page results as jobs. Only individual job detail pages should create or reuse `jobs_cache` rows. The listing URL is an import source, not a job entity.
 
@@ -206,9 +209,11 @@ When a user matches a resume to a job:
 
 1. The server resolves the resume from a structured resume profile, uploaded document, or pasted fallback text.
 2. The server resolves the job from URL text, pasted text, or an existing `user_saved_jobs` row joined to `jobs_cache`.
-3. OpenAI compares the resume data with the cached job data.
-4. If the match score is high enough, the job is saved to `user_saved_jobs`.
-5. The score and details are stored in `job_resume_matches`.
+3. The server checks whether `jobs_cache.job_data` exists.
+4. If `job_data` is missing, the server parses `raw_description_text` and saves `job_data`.
+5. OpenAI compares the resume data with the structured job data.
+6. If the match score is high enough, the job is saved to `user_saved_jobs`.
+7. The score and details are stored in `job_resume_matches`.
 
 Matches should link to `user_job_id` because matching is tied to the user's saved-job relationship.
 
@@ -216,7 +221,7 @@ Matches should link to `user_job_id` because matching is tied to the user's save
 
 The current model is sound for the MVP because:
 
-- Shared URL parsing is cached in `jobs_cache`.
+- Shared URL source data and parsed job JSON are cached in `jobs_cache`.
 - User notes are isolated in `user_saved_jobs`.
 - Resume/job match scores are isolated in `job_resume_matches`.
 - Uploaded files and extracted text are versioned through `documents` and `document_versions`.

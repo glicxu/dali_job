@@ -234,22 +234,24 @@ The older one-row `profiles.resume_data` design is intentionally removed. If Dal
 
 ### jobs_cache
 
-The implemented `jobs_cache` table stores the canonical job posting data: cleaned raw posting text plus structured `job_data` JSON. It does not contain `user_id`, `workspace_id`, notes, or match scores. It is used to avoid repeated scraping and OpenAI parsing for the same URL. User-facing saved-job ownership and notes live in `user_saved_jobs`, and resume-specific match scores live in `job_resume_matches`.
+The implemented `jobs_cache` table stores the canonical job posting source data: cleaned raw posting text plus optional structured `job_data` JSON. It does not contain `user_id`, `workspace_id`, notes, or match scores. It is used to avoid repeated scraping and repeated OpenAI parsing for the same URL. User-facing saved-job ownership and notes live in `user_saved_jobs`, and resume-specific match scores live in `job_resume_matches`.
+
+DaliJob should use lazy job parsing for bulk imports and Apify-backed imports. Those flows should create or reuse a `jobs_cache` row with title, company, source URL, and raw description text first, then leave `job_data` empty until a feature actually needs structured data. When the user runs resume matching or explicitly requests a structured job profile, the backend checks `jobs_cache.job_data`; if it is missing, the backend parses `raw_description_text` with OpenAI, saves the resulting JSON back to `jobs_cache`, and reuses it for future matches/imports.
 
 | Field | Type | Notes |
 | --- | --- | --- |
 | id | integer | Primary key |
-| title | text | Copied from `job_data.title` for list/filter display |
-| company | text | Copied from `job_data.company` for list/filter display |
+| title | text | Best known title from source metadata, manual entry, or `job_data.title` after parsing |
+| company | text | Best known company from source metadata, manual entry, or `job_data.company` after parsing |
 | source_url | text | Nullable |
 | source_url_hash | text | Nullable SHA-256 hash used for efficient URL cache lookup |
 | raw_description_text | text | Cleaned text from pasted input or broad URL scraping |
-| job_data | jsonb | Structured job description JSON used for matching |
+| job_data | jsonb | Nullable structured job description JSON used for matching |
 | created_at | timestamptz | Required |
 | updated_at | timestamptz | Required |
 | deleted_at | timestamptz | Nullable soft delete |
 
-`job_data` schema:
+`job_data` is nullable until parsed. When present, it uses this schema:
 
 ```json
 {
@@ -274,9 +276,9 @@ The implemented `jobs_cache` table stores the canonical job posting data: cleane
 }
 ```
 
-Future application tracking may add or derive columns such as `remote_policy`, `closing_date`, `compensation_min`, and `compensation_max` when those fields need filtering/sorting. The cache JSON remains the canonical parsed job description from the original source URL. When a URL has already been parsed, matching and import flows should reuse `jobs_cache.job_data` and `raw_description_text` as the starting point instead of spending another OpenAI job parsing call.
+Future application tracking may add or derive columns such as `remote_policy`, `closing_date`, `compensation_min`, and `compensation_max` when those fields need filtering/sorting. The cache JSON remains the canonical parsed job description from the original source URL after parsing has occurred. When a URL has already been parsed, matching and detail flows should reuse `jobs_cache.job_data` and `raw_description_text` as the starting point instead of spending another OpenAI job parsing call.
 
-Bulk job-list import does not require a separate core job table for the MVP. A listing URL discovery step should extract individual posting URLs, then each selected posting URL should flow through the same `jobs_cache` lookup and `user_saved_jobs` relationship pipeline. Apify-backed Indeed search should follow the same storage model: returned results are temporary review data until the user imports them, then selected results create or reuse `jobs_cache` rows and create `user_saved_jobs` rows. A future `job_import_runs` or `job_search_runs` table can be added if DaliJob needs persistent import/search history, retry state, Apify dataset IDs, cost tracking, or background progress tracking across many pages.
+Bulk job-list import does not require a separate core job table for the MVP. A listing URL discovery step should extract individual posting URLs, then each selected posting URL should flow through the same `jobs_cache` lookup and `user_saved_jobs` relationship pipeline. Apify-backed Indeed search should follow the same storage model: returned results are temporary review data until the user imports them, then selected results create or reuse `jobs_cache` rows and create `user_saved_jobs` rows. Bulk and Apify imports should not call OpenAI just to save jobs. A future `job_import_runs` or `job_search_runs` table can be added if DaliJob needs persistent import/search history, retry state, Apify dataset IDs, cost tracking, or background progress tracking across many pages.
 
 ### user_saved_jobs
 

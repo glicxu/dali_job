@@ -173,7 +173,7 @@ Creates recruiter/contact.
 
 Lists jobs saved by the current user. The API returns saved-job rows from `user_saved_jobs` joined to canonical job details in `jobs_cache`.
 
-Response fields include `id`, `title`, `company`, `source_url`, `raw_description_text`, `job_data`, `notes`, `match_score`, `matched_resume_profile_id`, `matched_resume_document_id`, `matched_resume_source`, `created_at`, and `updated_at`.
+Response fields include `id`, `title`, `company`, `source_url`, `raw_description_text`, nullable `job_data`, `notes`, `match_score`, `matched_resume_profile_id`, `matched_resume_document_id`, `matched_resume_source`, `created_at`, and `updated_at`.
 
 `match_score`, `matched_resume_profile_id`, `matched_resume_document_id`, and `matched_resume_source` are response-only convenience fields computed from the current user's latest `job_resume_matches` row for that `user_saved_jobs` record. They are not stored on `user_saved_jobs` or `jobs_cache`.
 
@@ -189,7 +189,7 @@ Future query params:
 
 ### `POST /jobs/draft`
 
-Creates a reviewable job draft from either a public URL or pasted job description text. This endpoint parses with OpenAI but does not save the job. If the URL already exists in the job cache, the server returns the cached raw text and structured `job_data` without another OpenAI parsing call.
+Creates a reviewable job draft from either a public URL or pasted job description text. Single-job drafts may parse with OpenAI because the user is actively reviewing one job, but they do not save the job. If the URL already exists in the job cache and structured `job_data` exists, the server returns the cached raw text and structured `job_data` without another OpenAI parsing call. If the cached row has only raw source data, the server may either return the raw draft or lazily parse for the draft view.
 
 Body with URL:
 
@@ -239,7 +239,7 @@ Response:
 
 ### `POST /jobs/import-description`
 
-Imports a job description foundation record from pasted text or a public URL. The server stores or reuses the cleaned raw text and OpenAI-parsed structured job JSON in `jobs_cache`, then creates a current-user saved-job row in `user_saved_jobs`. If the URL is already cached, the server reuses the stored cache JSON instead of parsing again. User edits later update only notes on `user_saved_jobs`.
+Imports a job description foundation record from pasted text or a public URL. For one-job imports, the server may store or reuse the cleaned raw text and OpenAI-parsed structured job JSON in `jobs_cache`, then create a current-user saved-job row in `user_saved_jobs`. If the URL is already cached, the server reuses the stored cache row instead of parsing again. User edits later update only notes on `user_saved_jobs`.
 
 Body with pasted text:
 
@@ -346,7 +346,7 @@ Candidate `status` values:
 
 ### `POST /jobs/import-list`
 
-Imports selected candidates from a prior list discovery result. For each selected job URL, the server should use the normal URL import pipeline: check `jobs_cache`, reuse cached parsed data when possible, otherwise scrape the detail page and parse the job JSON, then create a user-specific `user_saved_jobs` row.
+Imports selected candidates from a prior list discovery result. For each selected job URL, the server should use the lazy URL import pipeline: check `jobs_cache`, reuse cached source data when possible, otherwise scrape the detail page, save `raw_description_text` and available metadata, then create a user-specific `user_saved_jobs` row. Bulk import should not call OpenAI just to save jobs. If `run_matching` is true, the server must lazily create missing `job_data` before matching each imported job.
 
 Body:
 
@@ -474,7 +474,7 @@ The server caps `max_results`; the first implementation defaults to 5. Empty Api
 
 ### `POST /job-search/indeed/import`
 
-Imports selected Apify Indeed search results. The server normalizes each selected result into `raw_description_text` and `job_data`, reuses an existing `jobs_cache` row by `source_url` when possible, and creates a `user_saved_jobs` row for the current user.
+Imports selected Apify Indeed search results. The server normalizes each selected result into `raw_description_text` and metadata, reuses an existing `jobs_cache` row by `source_url` when possible, and creates a `user_saved_jobs` row for the current user. Apify import should leave `job_data` empty when matching is not requested, then lazily parse and cache `job_data` only when `run_matching` is true or a later match/profile action needs structured data.
 
 Body:
 
@@ -518,7 +518,7 @@ Response:
 
 ### `POST /jobs`
 
-Creates a saved job from a reviewed draft or fully manual input. If a source URL already exists in `jobs_cache`, the server reuses that cache row and creates a `user_saved_jobs` row. Manual jobs without a URL also create a `jobs_cache` row with a nullable `source_url`. This is a core workflow and does not depend on job board APIs, plugins, or URL extraction.
+Creates a saved job from a reviewed draft or fully manual input. If a source URL already exists in `jobs_cache`, the server reuses that cache row and creates a `user_saved_jobs` row. Manual jobs without a URL also create a `jobs_cache` row with a nullable `source_url`. This is a core workflow and does not depend on job board APIs, plugins, or URL extraction. Reviewed/manual jobs may include immediate `job_data` because the user is editing one job directly.
 
 Body:
 
@@ -590,7 +590,7 @@ Runs the initial resume-to-job matching prototype. This endpoint compares a sele
 
 The endpoint accepts exactly one resume source: `resume_profile_id`, pasted resume text, or an uploaded resume document ID. It also accepts exactly one job source: pasted job description text or a job URL. The UI should block conflicting inputs.
 
-Before scoring, the server parses the job source into structured `job_data` JSON, then compares structured resume JSON against structured job JSON. If the URL already exists in the job cache, the server reuses the stored `job_data` instead of parsing the same URL again. If a structured resume profile is not selected, the server falls back to the supplied resume/document text wrapped as raw resume JSON so the prototype remains usable.
+Before scoring, the server ensures the job source has structured `job_data` JSON, then compares structured resume JSON against structured job JSON. If the selected saved job or URL already has cached `job_data`, the server reuses it. If `job_data` is missing but `raw_description_text` exists, the server lazily parses `raw_description_text`, saves the resulting `job_data` to `jobs_cache`, and then runs the match. If parsing fails, the server returns a clear error instead of spending match tokens on unusable job data. If a structured resume profile is not selected, the server falls back to the supplied resume/document text wrapped as raw resume JSON so the prototype remains usable.
 
 When `job_url` is provided, the server uses broader cleaned visible page extraction for the job parser. When pasted text is provided, that text is parsed the same way.
 

@@ -82,6 +82,67 @@ Required body:
 }
 ```
 
+## 2.5 Homepage Dashboard
+
+### `GET /dashboard`
+
+Returns the signed-in user's homepage summary. The endpoint should be owner-scoped and should not expose other users' saved jobs, resume profiles, or match data.
+
+The dashboard response should be compact so the homepage does not need to fetch all jobs, all resume profiles, and all match rows separately.
+
+Response:
+
+```json
+{
+  "setup_alerts": [
+    {
+      "kind": "missing_resume_profile",
+      "message": "Create a resume profile before running reliable job matches.",
+      "href": "/profile"
+    }
+  ],
+  "recommended_next_step": {
+    "kind": "create_resume_profile",
+    "label": "Create resume profile",
+    "href": "/profile",
+    "reason": "Resume profiles are needed before DaliJob can compare jobs against your background."
+  },
+  "best_matches": [
+    {
+      "user_saved_job_id": 42,
+      "job_cache_id": 18,
+      "title": "Software Engineer",
+      "company": "Example Co",
+      "match_score": 8,
+      "resume_profile_id": 7,
+      "resume_label": "Backend Resume",
+      "match_summary": "Strong backend API match with a gap around Kubernetes.",
+      "href": "/jobs?job_id=42"
+    }
+  ],
+  "recently_saved_jobs": [
+    {
+      "user_saved_job_id": 43,
+      "job_cache_id": 19,
+      "title": "Data Engineer",
+      "company": "Example Co",
+      "source_url": "https://example.com/jobs/data-engineer",
+      "status": "needs_analysis",
+      "created_at": "2026-07-02T12:00:00Z",
+      "href": "/jobs?job_id=43"
+    }
+  ]
+}
+```
+
+Dashboard behavior:
+
+- `setup_alerts` should include missing resume-profile setup and may include no saved jobs, saved jobs that need analysis, or analyzed jobs that have no matches.
+- `recommended_next_step` should be a single highest-priority action: create/import resume profile, search/import jobs, analyze saved jobs, run matching, or review best matches.
+- `best_matches` should use the current user's saved jobs and match rows, sorted by `match_score` descending, then newest match first.
+- `recently_saved_jobs` should use `user_saved_jobs.created_at` descending.
+- Saved-job links should use a stable user-saved-job identifier, not the shared `jobs_cache` identifier, because notes and match history are user-specific.
+
 ## 3. Resume Profiles
 
 ### `GET /resume-profiles`

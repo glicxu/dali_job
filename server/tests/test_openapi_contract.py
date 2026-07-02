@@ -14,6 +14,7 @@ def test_health_endpoint_is_in_openapi_contract() -> None:
     assert response.status_code == 200
     schema = response.json()
     assert "/api/v1/health" in schema["paths"]
+    assert "/api/v1/dashboard" in schema["paths"]
 
 
 def test_health_endpoint_returns_ok() -> None:

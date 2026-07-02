@@ -65,6 +65,29 @@ The comparison should use the OpenAI API through the server-side AI provider abs
 
 This prototype should still preserve the client/server split: the client submits source selections through the API, and the server performs URL fetching, AI parsing, scoring, validation, and persistence.
 
+### 4.0.1 Homepage Dashboard
+
+The homepage should be a signed-in dashboard that helps the user decide what to do next. It should not be a marketing landing page and should not mention internal providers such as Apify or OpenAI. If the user is not signed in, the app should continue showing only login/register access.
+
+Initial homepage contents:
+
+- Setup alerts for missing prerequisites, especially when the user has no structured resume profiles. The alert should explain the missing setup item and link directly to the page where the user can fix it, such as `/profile`.
+- Best matches, showing the user's highest-scoring saved jobs from `job_resume_matches` joined through `user_saved_jobs` and `jobs_cache`.
+- Recently saved jobs, showing the latest saved jobs from `user_saved_jobs` with title, company, source URL when available, current analysis state, and match state.
+- Recommended next step, a single prominent action chosen from the user's current state.
+
+Recommended next-step priority:
+
+1. If the user has no resume profiles, recommend creating or importing a resume profile.
+2. If the user has no saved jobs, recommend searching or importing jobs.
+3. If saved jobs exist but some are missing `jobs_cache.job_data`, recommend analyzing saved jobs.
+4. If analyzed saved jobs exist without match results, recommend running resume/job matching.
+5. If matches exist, recommend reviewing the best matches and deciding which jobs to apply to.
+
+Best match cards should display the score, job title, company, compared resume label when available, and a short match summary when it exists in `job_resume_matches.match_data`. Recently saved job cards should display whether the job needs analysis, is ready to match, or already has match data.
+
+Homepage job links should open the corresponding saved-job profile on the Jobs page, for example with a route such as `/jobs?job_id=<user_saved_job_id>`. The Jobs page should support deep-linking to a saved job before this homepage link behavior is considered complete.
+
 ### 4.1 Resume Profiles Module
 
 Stores multiple structured resume profiles that power resume generation, cover letters, study guides, matching, and analytics.

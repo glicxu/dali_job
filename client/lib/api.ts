@@ -274,6 +274,49 @@ export type DocumentTextResponse = {
   extracted_text: string;
 };
 
+export type DashboardAlert = {
+  kind: string;
+  message: string;
+  href: string;
+};
+
+export type DashboardNextStep = {
+  kind: string;
+  label: string;
+  href: string;
+  reason: string;
+};
+
+export type DashboardBestMatch = {
+  user_saved_job_id: number;
+  job_cache_id: number | null;
+  title: string;
+  company: string;
+  match_score: number;
+  resume_profile_id: number | null;
+  resume_label: string;
+  match_summary: string;
+  href: string;
+};
+
+export type DashboardRecentJob = {
+  user_saved_job_id: number;
+  job_cache_id: number | null;
+  title: string;
+  company: string;
+  source_url: string | null;
+  status: "needs_analysis" | "ready_to_match" | "matched" | string;
+  created_at: string;
+  href: string;
+};
+
+export type DashboardResponse = {
+  setup_alerts: DashboardAlert[];
+  recommended_next_step: DashboardNextStep;
+  best_matches: DashboardBestMatch[];
+  recently_saved_jobs: DashboardRecentJob[];
+};
+
 export const emptyResumeData: ResumeData = {
   headline: null,
   summary: null,
@@ -391,6 +434,10 @@ export async function loginUser(email: string, password: string): Promise<AuthRe
 
 export function getCurrentUser(): Promise<CurrentUser> {
   return requestJson<CurrentUser>("/me");
+}
+
+export function getDashboard(): Promise<DashboardResponse> {
+  return requestJson<DashboardResponse>("/dashboard");
 }
 
 export function listDocuments(): Promise<DocumentListResponse> {

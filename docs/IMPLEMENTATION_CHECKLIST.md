@@ -118,6 +118,17 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Build resume profile list UI with favorites displayed first.
 - [x] Build profile editor UI.
 
+### Homepage Dashboard
+
+- [x] Add owner-scoped `GET /dashboard` summary endpoint.
+- [x] Add setup alerts for missing resume profiles, no saved jobs, jobs needing analysis, and jobs needing matching.
+- [x] Add a recommended next-step card with the documented priority order.
+- [x] Show best saved-job matches sorted by match score, including score, title, company, resume label, and short match summary when available.
+- [x] Show recently saved jobs with needs-analysis, ready-to-match, or matched state.
+- [x] Add homepage links that open the selected saved-job profile on the Jobs page.
+- [x] Add Jobs page deep-link support for opening `/jobs?job_id=<user_saved_job_id>`.
+- [x] Keep the homepage free of provider-specific wording such as Apify, Indeed, or OpenAI.
+
 ### Job Import
 
 - [x] Add backend `jobs_cache` table for shared URL scrape/parse cache.

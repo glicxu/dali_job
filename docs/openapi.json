@@ -113,6 +113,32 @@
         }
       }
     },
+    "/api/v1/dashboard": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Read Dashboard",
+        "operationId": "read_dashboard_api_v1_dashboard_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/documents": {
       "get": {
         "tags": [
@@ -1332,7 +1358,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           }
         },
@@ -1346,7 +1372,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           },
           "title": {
@@ -1404,6 +1430,219 @@
           "provider"
         ],
         "title": "CurrentUserResponse"
+      },
+      "DashboardAlert": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "href": {
+            "type": "string",
+            "title": "Href"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "message",
+          "href"
+        ],
+        "title": "DashboardAlert"
+      },
+      "DashboardBestMatch": {
+        "properties": {
+          "user_saved_job_id": {
+            "type": "integer",
+            "title": "User Saved Job Id"
+          },
+          "job_cache_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Cache Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "company": {
+            "type": "string",
+            "title": "Company"
+          },
+          "match_score": {
+            "type": "integer",
+            "title": "Match Score"
+          },
+          "resume_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Profile Id"
+          },
+          "resume_label": {
+            "type": "string",
+            "title": "Resume Label"
+          },
+          "match_summary": {
+            "type": "string",
+            "title": "Match Summary"
+          },
+          "href": {
+            "type": "string",
+            "title": "Href"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_saved_job_id",
+          "title",
+          "company",
+          "match_score",
+          "resume_label",
+          "match_summary",
+          "href"
+        ],
+        "title": "DashboardBestMatch"
+      },
+      "DashboardNextStep": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "href": {
+            "type": "string",
+            "title": "Href"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "label",
+          "href",
+          "reason"
+        ],
+        "title": "DashboardNextStep"
+      },
+      "DashboardRecentJob": {
+        "properties": {
+          "user_saved_job_id": {
+            "type": "integer",
+            "title": "User Saved Job Id"
+          },
+          "job_cache_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Cache Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "company": {
+            "type": "string",
+            "title": "Company"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "href": {
+            "type": "string",
+            "title": "Href"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_saved_job_id",
+          "title",
+          "company",
+          "status",
+          "created_at",
+          "href"
+        ],
+        "title": "DashboardRecentJob"
+      },
+      "DashboardResponse": {
+        "properties": {
+          "setup_alerts": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardAlert"
+            },
+            "type": "array",
+            "title": "Setup Alerts"
+          },
+          "recommended_next_step": {
+            "$ref": "#/components/schemas/DashboardNextStep"
+          },
+          "best_matches": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardBestMatch"
+            },
+            "type": "array",
+            "title": "Best Matches"
+          },
+          "recently_saved_jobs": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardRecentJob"
+            },
+            "type": "array",
+            "title": "Recently Saved Jobs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "setup_alerts",
+          "recommended_next_step",
+          "best_matches",
+          "recently_saved_jobs"
+        ],
+        "title": "DashboardResponse"
       },
       "DocumentListResponse": {
         "properties": {
@@ -3282,6 +3521,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",

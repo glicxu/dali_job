@@ -138,7 +138,7 @@ function matchPageHref(job: StoredJob): string {
     params.set("resume_document_id", String(job.matched_resume_document_id));
   }
   const query = params.toString();
-  return query ? `/?${query}` : "/";
+  return query ? `/match?${query}` : "/match";
 }
 
 function stringArrayFromUnknown(value: unknown): string[] {
@@ -283,6 +283,16 @@ export function JobsManager() {
         setDocuments([]);
       });
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedJobId = Number(params.get("job_id"));
+    if (!requestedJobId) return;
+    const requestedJob = jobs.find((job) => job.id === requestedJobId);
+    if (requestedJob) {
+      setEditor(editorFromJob(requestedJob));
+    }
+  }, [jobs]);
 
   function startManualJob() {
     setError(null);

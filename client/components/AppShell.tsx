@@ -68,7 +68,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       <aside className="sidebar" aria-label="Primary navigation">
         <div className="brand">DaliJob</div>
         <nav>
-          <a href="/">Match</a>
+          <a href="/">Home</a>
+          <a href="/match">Match</a>
           <a href="/jobs">Jobs</a>
           <a href="/jobs/search">Job Search</a>
           <a href="/jobs/import">Bulk Import</a>

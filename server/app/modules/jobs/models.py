@@ -43,7 +43,7 @@ class JobCache(Base):
     source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     source_url_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     raw_description_text: Mapped[str] = mapped_column(Text, nullable=False)
-    job_data: Mapped[dict] = mapped_column(JSON, nullable=False, default=default_job_data)
+    job_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

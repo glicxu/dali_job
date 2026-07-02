@@ -67,6 +67,11 @@ class FakeJobDescriptionParser:
         )
 
 
+class FailingJobDescriptionParser:
+    def parse(self, raw_description_text: str) -> JobDescriptionData:
+        raise AssertionError("Apify import should not parse unless matching is requested")
+
+
 class FakeMatcher:
     def compare(self, request: ResumeJobMatchRequest) -> ResumeJobMatchResponse:
         assert request.resume_text is not None
@@ -164,6 +169,7 @@ def test_indeed_search_reports_provider_errors() -> None:
 
 def test_indeed_search_import_saves_selected_result() -> None:
     client = create_test_client()
+    client.app.dependency_overrides[get_job_search_description_parser] = lambda: FailingJobDescriptionParser()
     search_response = client.post(
         "/api/v1/job-search/indeed",
         json={"keyword": "software engineer", "location": "Maryland"},
@@ -184,6 +190,9 @@ def test_indeed_search_import_saves_selected_result() -> None:
     jobs = client.get("/api/v1/jobs").json()
     assert len(jobs) == 1
     assert jobs[0]["source_url"] == "https://www.indeed.com/viewjob?jk=abc123"
+    assert jobs[0]["title"] == "Software Engineer"
+    assert jobs[0]["company"] == "Example Systems"
+    assert jobs[0]["job_data"] is None
 
     duplicate_import_response = client.post(
         "/api/v1/job-search/indeed/import",

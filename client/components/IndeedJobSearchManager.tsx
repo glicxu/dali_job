@@ -61,9 +61,9 @@ export function IndeedJobSearchManager() {
       const payload = await searchIndeedJobs(keyword.trim(), location.trim(), 5);
       setResult(payload);
       setSelectedKeys(new Set(payload.results.map((item) => resultKey(item))));
-      setStatus(`Found ${payload.results.length} Indeed job${payload.results.length === 1 ? "" : "s"}.`);
+      setStatus(`Found ${payload.results.length} job${payload.results.length === 1 ? "" : "s"}.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Indeed job search failed.");
+      setError(err instanceof Error ? err.message : "Job search failed.");
     } finally {
       setIsSearching(false);
     }
@@ -99,7 +99,7 @@ export function IndeedJobSearchManager() {
       setImportResult(payload);
       setStatus(`Imported ${payload.imported.length} job${payload.imported.length === 1 ? "" : "s"}.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Indeed job import failed.");
+      setError(err instanceof Error ? err.message : "Job import failed.");
     } finally {
       setIsImporting(false);
     }
@@ -113,8 +113,8 @@ export function IndeedJobSearchManager() {
       <section className="profile-card">
         <div className="profile-card-header">
           <div>
-            <h2>Indeed Job Search</h2>
-            <p className="metadata">Search Indeed through Apify, review results, and import selected jobs.</p>
+            <h2>Job Search</h2>
+            <p className="metadata">Search jobs, review results, and import selected postings.</p>
           </div>
         </div>
 

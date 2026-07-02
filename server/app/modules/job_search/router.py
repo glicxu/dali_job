@@ -152,22 +152,33 @@ def import_indeed_search_results(
             cached_job = repository.get_cached_job_by_source_url(db, result.source_url)
             if cached_job is not None:
                 raw_text = cached_job.raw_description_text
-                job_data = JobDescriptionData.model_validate(cached_job.job_data)
             else:
                 raw_text = _raw_text_from_result(result)
                 if not raw_text:
                     raise ValueError("Apify result did not include a job description or summary.")
-                job_data = _job_data_from_result(result, parser.parse(raw_text))
-            saved_job = repository.create_job_from_description(
+            saved_job = repository.create_job_from_source(
                 db,
                 identity,
                 source_url=result.source_url,
                 raw_description_text=raw_text,
-                job_data=job_data,
+                title=result.title,
+                company=result.company,
             )
             match_score = None
             match_id = None
             if payload.run_matching and payload.resume_profile_id:
+                cached_for_match = repository.get_cached_job_by_id(db, saved_job["jobs_cache_id"])
+                if cached_for_match is None:
+                    raise ValueError("Saved job cache row could not be found for matching.")
+                parsed_job_data = repository.ensure_job_data(db, cached_for_match, parser)
+                job_data = _job_data_from_result(result, parsed_job_data)
+                if cached_for_match.job_data != job_data.model_dump():
+                    cached_for_match.job_data = job_data.model_dump()
+                    if job_data.title and not cached_for_match.title:
+                        cached_for_match.title = job_data.title
+                    if job_data.company and not cached_for_match.company:
+                        cached_for_match.company = job_data.company
+                    db.flush()
                 saved_match = _create_resume_profile_match(
                     db,
                     identity,
@@ -183,8 +194,8 @@ def import_indeed_search_results(
                     "user_job_id": saved_job["id"],
                     "jobs_cache_id": saved_job["jobs_cache_id"],
                     "source_url": response_source_url,
-                    "title": saved_job["title"],
-                    "company": saved_job["company"],
+                    "title": job_data.title if payload.run_matching and payload.resume_profile_id else saved_job["title"],
+                    "company": job_data.company if payload.run_matching and payload.resume_profile_id else saved_job["company"],
                     "match_score": match_score,
                     "match_id": match_id,
                 }

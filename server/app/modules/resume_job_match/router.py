@@ -92,14 +92,12 @@ def import_job_for_match(
         saved_job = job_repository.get_user_job_by_source_url(db, identity, source_url)
         if saved_job is not None:
             _user_saved_job, cached_saved_job = saved_job
-            return cached_saved_job.source_url, cached_saved_job.raw_description_text, JobDescriptionData.model_validate(
-                cached_saved_job.job_data
-            )
+            job_data = job_repository.ensure_job_data(db, cached_saved_job, parser)
+            return cached_saved_job.source_url, cached_saved_job.raw_description_text, job_data
         cached_job = job_repository.get_cached_job_by_source_url(db, source_url)
         if cached_job is not None:
-            return cached_job.source_url, cached_job.raw_description_text, JobDescriptionData.model_validate(
-                cached_job.job_data
-            )
+            job_data = job_repository.ensure_job_data(db, cached_job, parser)
+            return cached_job.source_url, cached_job.raw_description_text, job_data
         raw_text = fetch_job_page_text_from_url(source_url)
     else:
         source_url = None

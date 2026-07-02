@@ -821,6 +821,53 @@
         }
       }
     },
+    "/api/v1/jobs/{job_id}/analyze": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Analyze Job",
+        "operationId": "analyze_job_api_v1_jobs__job_id__analyze_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/profile/resume-imports": {
       "post": {
         "tags": [
@@ -2187,7 +2234,14 @@
             "title": "Raw Description Text"
           },
           "job_data": {
-            "$ref": "#/components/schemas/JobDescriptionData"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobDescriptionData"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "notes": {
             "anyOf": [
@@ -2276,7 +2330,6 @@
           "company",
           "source_url",
           "raw_description_text",
-          "job_data",
           "created_at",
           "updated_at"
         ],

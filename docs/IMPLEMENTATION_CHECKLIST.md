@@ -137,18 +137,19 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Add optional batch matching for imported jobs after the user selects a resume profile.
 - [x] Add conservative limits, deduplication, source-access checks, and clear warnings for unsupported listing pages.
 - [x] Add incremental Load More pagination for bulk job-list discovery using generalized next-page heuristics.
-- [ ] Make `jobs_cache.job_data` nullable so bulk and provider-backed imports can save source data before OpenAI parsing.
-- [ ] Change bulk job-list import to save `raw_description_text` and metadata without immediate OpenAI parsing unless match-on-import is selected.
-- [ ] Add backend helper that ensures `job_data` exists by lazily parsing `raw_description_text`, saving the result, and reusing cached parsed data later.
-- [ ] Update resume-job matching to call the lazy parse helper before scoring when selected jobs have no `job_data`.
+- [x] Make `jobs_cache.job_data` nullable so bulk and provider-backed imports can save source data before OpenAI parsing.
+- [x] Change bulk job-list import to save `raw_description_text` and metadata without immediate OpenAI parsing unless match-on-import is selected.
+- [x] Add backend helper that ensures `job_data` exists by lazily parsing `raw_description_text`, saving the result, and reusing cached parsed data later.
+- [x] Update resume-job matching to call the lazy parse helper before scoring when selected jobs have no `job_data`.
 - [ ] Add parse failure handling that shows a user-facing retry/manual-paste path.
+- [x] Add saved-job Analyze action that generates missing `job_data` on demand.
 
 ### Apify Indeed Job Search
 
 - [x] Add server-side `APIFY_API_TOKEN` environment variable support. The token must never be exposed to the client or committed config.
 - [x] Use Apify actor `misceres/indeed-scraper` for the first Indeed integration.
 - [x] Document the Apify run endpoints for actor `misceres~indeed-scraper`.
-- [x] Document the `misceres/indeed-scraper` input shape using `position`, `location`, `country`, `maxItemsPerSearch`, `parseCompanyDetails`, `saveOnlyUniqueItems`, `followApplyRedirects`, and `startUrls`.
+- [x] Document the `misceres/indeed-scraper` input shape using `position`, `location`, `country`, `maxItemsPerSearch`, `parseCompanyDetails`, `saveOnlyUniqueItems`, and `followApplyRedirects`.
 - [x] Add Apify service wrapper for running the synchronous dataset-items endpoint, handling failures, and reading dataset results.
 - [x] Normalize Apify Indeed results into DaliJob job search result DTOs with title, company, location, source URL, raw description text, salary, employment type, posting date, and full description when available.
 - [x] Add `POST /api/v1/job-search/indeed` endpoint accepting keyword, location, and max results with a default cap of 5.
@@ -163,7 +164,7 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Optionally support match-on-import after the user selects a resume profile, matching the existing bulk import behavior.
 - [x] Add tests for Apify result normalization, search endpoint errors, import deduplication, and selected-job import.
 - [x] Update README setup notes to document `APIFY_API_TOKEN` in `server/.env` after implementation.
-- [ ] Change Apify selected-result import to defer OpenAI job parsing unless match-on-import is selected.
+- [x] Change Apify selected-result import to defer OpenAI job parsing unless match-on-import is selected.
 
 ### Application Tracking
 

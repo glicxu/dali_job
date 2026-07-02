@@ -139,7 +139,6 @@ class ApifyIndeedClient:
                 detail="APIFY_API_TOKEN is not configured for the server process.",
             )
 
-        search_url = f"https://www.indeed.com/jobs?{urlencode({'q': keyword, 'l': location})}"
         apify_input = {
             "position": keyword,
             "maxItemsPerSearch": max_results,
@@ -148,7 +147,6 @@ class ApifyIndeedClient:
             "parseCompanyDetails": False,
             "saveOnlyUniqueItems": True,
             "followApplyRedirects": False,
-            "startUrls": [{"url": search_url}],
         }
         endpoint = f"{APIFY_INDEED_SYNC_ENDPOINT}?{urlencode({'token': self._token})}"
         request = Request(

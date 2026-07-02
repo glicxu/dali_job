@@ -73,7 +73,7 @@ export type StoredJob = {
   company: string;
   source_url: string | null;
   raw_description_text: string;
-  job_data: JobDescriptionData;
+  job_data: JobDescriptionData | null;
   notes: string | null;
   match_score: number | null;
   matched_resume_profile_id: number | null;
@@ -551,6 +551,12 @@ export function createJob(payload: JobSavePayload): Promise<StoredJob> {
   return requestJson<StoredJob>("/jobs", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+export function analyzeJob(jobId: number): Promise<StoredJob> {
+  return requestJson<StoredJob>(`/jobs/${jobId}/analyze`, {
+    method: "POST",
   });
 }
 

@@ -172,7 +172,7 @@ class JobResponse(BaseModel):
     company: str
     source_url: str | None
     raw_description_text: str
-    job_data: JobDescriptionData
+    job_data: JobDescriptionData | None = None
     notes: str | None = None
     match_score: int | None = None
     matched_resume_profile_id: int | None = None

@@ -49,10 +49,11 @@ def build_job_draft(payload: JobImportRequest, parser: JobDescriptionParser, db:
     if db is not None and payload.job_url:
         cached_job = repository.get_cached_job_by_source_url(db, str(payload.job_url))
         if cached_job is not None:
+            job_data = repository.ensure_job_data(db, cached_job, parser)
             return JobDraftResponse(
                 source_url=cached_job.source_url,
                 raw_description_text=cached_job.raw_description_text,
-                job_data=JobDescriptionData.model_validate(cached_job.job_data),
+                job_data=job_data,
                 fields_missing=[],
             )
     raw_text = resolve_raw_job_text(payload)
@@ -142,12 +143,13 @@ def import_job_description(
     if payload.job_url:
         cached_job = repository.get_cached_job_by_source_url(db, str(payload.job_url))
         if cached_job is not None:
+            job_data = repository.ensure_job_data(db, cached_job, parser)
             return repository.create_job_from_description(
                 db,
                 identity,
                 source_url=cached_job.source_url,
                 raw_description_text=cached_job.raw_description_text,
-                job_data=JobDescriptionData.model_validate(cached_job.job_data),
+                job_data=job_data,
             )
     raw_text = resolve_raw_job_text(payload)
     job_data = parser.parse(raw_text)
@@ -210,20 +212,21 @@ def import_job_list(
             cached_job = repository.get_cached_job_by_source_url(db, source_url)
             if cached_job is not None:
                 raw_text = cached_job.raw_description_text
-                job_data = JobDescriptionData.model_validate(cached_job.job_data)
             else:
                 raw_text = fetch_job_page_text_from_url(source_url)
-                job_data = parser.parse(raw_text)
-            saved_job = repository.create_job_from_description(
+            saved_job = repository.create_job_from_source(
                 db,
                 identity,
                 source_url=source_url,
                 raw_description_text=raw_text,
-                job_data=job_data,
             )
             match_score = None
             match_id = None
             if payload.run_matching and payload.resume_profile_id:
+                cached_for_match = repository.get_cached_job_by_id(db, saved_job["jobs_cache_id"])
+                if cached_for_match is None:
+                    raise ValueError("Saved job cache row could not be found for matching.")
+                job_data = repository.ensure_job_data(db, cached_for_match, parser)
                 saved_match = _create_resume_profile_match(
                     db,
                     identity,
@@ -239,8 +242,8 @@ def import_job_list(
                     "user_job_id": saved_job["id"],
                     "jobs_cache_id": saved_job["jobs_cache_id"],
                     "source_url": source_url,
-                    "title": saved_job["title"],
-                    "company": saved_job["company"],
+                    "title": job_data.title if payload.run_matching and payload.resume_profile_id else saved_job["title"],
+                    "company": job_data.company if payload.run_matching and payload.resume_profile_id else saved_job["company"],
                     "match_score": match_score,
                     "match_id": match_id,
                 }
@@ -270,6 +273,23 @@ def get_job(
     user_job = repository.get_user_job_for_identity(db, identity, job_id)
     if user_job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+    return repository.job_response_for_identity(db, identity, user_job)
+
+
+@router.post("/{job_id}/analyze", response_model=JobResponse)
+def analyze_job(
+    job_id: int,
+    parser: JobDescriptionParser = Depends(get_job_description_parser),
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> dict:
+    user_job = repository.get_user_job_for_identity(db, identity, job_id)
+    if user_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+    job_cache = repository.get_job_cache_for_saved_job(db, user_job)
+    if job_cache is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cached job not found.")
+    repository.ensure_job_data(db, job_cache, parser)
     return repository.job_response_for_identity(db, identity, user_job)
 
 

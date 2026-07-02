@@ -226,12 +226,7 @@ Actor input shape for `misceres/indeed-scraper`:
   "location": "San Francisco",
   "parseCompanyDetails": false,
   "saveOnlyUniqueItems": true,
-  "followApplyRedirects": false,
-  "startUrls": [
-    {
-      "url": "https://www.indeed.com/jobs?q=software+engineer&l=New+York"
-    }
-  ]
+  "followApplyRedirects": false
 }
 ```
 

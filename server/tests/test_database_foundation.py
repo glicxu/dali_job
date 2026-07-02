@@ -139,6 +139,7 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
     assert "match_score" not in job_cache_columns
     assert "matched_resume_document_id" not in job_cache_columns
     assert "matched_resume_source" not in job_cache_columns
+    assert Base.metadata.tables["jobs_cache"].columns["job_data"].nullable is True
 
 
 def test_foundation_metadata_can_create_tables() -> None:
@@ -170,7 +171,7 @@ def test_alembic_has_initial_schema_revision() -> None:
     config.set_main_option("script_location", str(server_dir / "app" / "db" / "migrations"))
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == "20260626_0012"
+    assert script.get_current_head() == "20260630_0013"
 
 
 def test_resume_profile_repository_creates_local_resume_json() -> None:

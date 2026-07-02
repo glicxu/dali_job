@@ -5,8 +5,8 @@ export default function IndeedJobSearchPage() {
     <section className="panel">
       <div>
         <p className="eyebrow">Job Search</p>
-        <h1>Indeed Search</h1>
-        <p className="lede">Search Indeed through Apify and import selected job postings into DaliJob.</p>
+        <h1>Job Search</h1>
+        <p className="lede">Search for jobs and import selected postings into DaliJob.</p>
       </div>
       <IndeedJobSearchManager />
     </section>

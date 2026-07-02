@@ -62,6 +62,11 @@ class FakeJobDescriptionParser:
         )
 
 
+class FailingJobDescriptionParser:
+    def parse(self, raw_description_text: str) -> JobDescriptionData:
+        raise AssertionError("job import should not parse unless structured job data is required")
+
+
 def create_test_client() -> TestClient:
     engine = create_engine(
         "sqlite://",
@@ -375,6 +380,7 @@ def test_bulk_job_list_discovery_returns_reviewable_candidates(monkeypatch) -> N
 
 def test_bulk_job_list_import_saves_selected_jobs(monkeypatch) -> None:
     client = create_test_client()
+    client.app.dependency_overrides[get_job_description_parser] = lambda: FailingJobDescriptionParser()
     monkeypatch.setattr(
         jobs_router,
         "fetch_job_page_text_from_url",
@@ -392,14 +398,46 @@ def test_bulk_job_list_import_saves_selected_jobs(monkeypatch) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["failed"] == []
-    assert payload["imported"][0]["title"] == "Backend Engineer"
-    assert payload["imported"][0]["company"] == "Example Co"
+    assert payload["imported"][0]["title"] == ""
+    assert payload["imported"][0]["company"] == ""
     assert payload["imported"][0]["source_url"] == "https://example.com/jobs/backend-engineer"
     assert payload["imported"][0]["match_score"] is None
 
     jobs = client.get("/api/v1/jobs").json()
     assert len(jobs) == 1
     assert jobs[0]["source_url"] == "https://example.com/jobs/backend-engineer"
+    assert jobs[0]["raw_description_text"] == "Build APIs using Python and PostgreSQL for customer workflows."
+    assert jobs[0]["job_data"] is None
+
+
+def test_analyze_saved_job_generates_missing_job_data(monkeypatch) -> None:
+    client = create_test_client()
+    client.app.dependency_overrides[get_job_description_parser] = lambda: FailingJobDescriptionParser()
+    monkeypatch.setattr(
+        jobs_router,
+        "fetch_job_page_text_from_url",
+        lambda _url: "Build APIs using Python and PostgreSQL for customer workflows.",
+    )
+
+    import_response = client.post(
+        "/api/v1/jobs/import-list",
+        json={
+            "list_url": "https://example.com/careers/search",
+            "selected_urls": ["https://example.com/jobs/backend-engineer"],
+        },
+    )
+    assert import_response.status_code == 200
+    job_id = import_response.json()["imported"][0]["user_job_id"]
+    assert client.get("/api/v1/jobs").json()[0]["job_data"] is None
+
+    client.app.dependency_overrides[get_job_description_parser] = lambda: FakeJobDescriptionParser()
+    analyze_response = client.post(f"/api/v1/jobs/{job_id}/analyze")
+
+    assert analyze_response.status_code == 200
+    payload = analyze_response.json()
+    assert payload["job_data"]["title"] == "Backend Engineer"
+    assert payload["job_data"]["required_skills"] == ["Python", "API design"]
+    assert client.get("/api/v1/jobs").json()[0]["job_data"]["summary"] == "Build backend services."
 
 
 def test_bulk_job_list_import_matching_uses_selected_resume_profile(monkeypatch) -> None:

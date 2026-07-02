@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  analyzeJob,
   createJob,
   draftJobFromUrl,
   emptyJobDescriptionData,
@@ -108,6 +109,10 @@ function emptyEditorState(): JobEditorState {
   };
 }
 
+function jobDataOrEmpty(job: StoredJob): JobDescriptionData {
+  return job.job_data ?? { ...emptyJobDescriptionData };
+}
+
 function editorFromJob(job: StoredJob, showSaveButton = true): JobEditorState {
   return {
     id: job.id,
@@ -115,7 +120,7 @@ function editorFromJob(job: StoredJob, showSaveButton = true): JobEditorState {
     company: job.company,
     source_url: job.source_url ?? "",
     raw_description_text: job.raw_description_text,
-    job_data: job.job_data,
+    job_data: jobDataOrEmpty(job),
     notes: job.notes ?? "",
     showSaveButton,
   };
@@ -250,6 +255,7 @@ export function JobsManager() {
   const [isLoading, setIsLoading] = useState(true);
   const [isParsing, setIsParsing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [analyzingJobId, setAnalyzingJobId] = useState<number | null>(null);
 
   const sortedJobs = useMemo(() => jobs, [jobs]);
 
@@ -365,6 +371,21 @@ export function JobsManager() {
     }
   }
 
+  async function analyzeSavedJob(job: StoredJob) {
+    setError(null);
+    setStatus(null);
+    setAnalyzingJobId(job.id);
+    try {
+      const analyzed = await analyzeJob(job.id);
+      setJobs((current) => current.map((item) => (item.id === analyzed.id ? analyzed : item)));
+      setStatus("Job analysis completed.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Job analysis failed.");
+    } finally {
+      setAnalyzingJobId(null);
+    }
+  }
+
   return (
     <div className="jobs-manager">
       {error ? <div className="error-banner">{error}</div> : null}
@@ -445,45 +466,62 @@ export function JobsManager() {
         {isLoading ? <p className="empty">Loading jobs.</p> : null}
         {!isLoading && !sortedJobs.length ? <p className="empty">No saved jobs.</p> : null}
         <div className="job-list">
-          {sortedJobs.map((job) => (
-            <article className="job-row" key={job.id}>
-              <div className="job-score-cell">
-                <span className="score-badge">{job.match_score === null ? "N/A" : `${job.match_score}/10`}</span>
-              </div>
-              <div>
-                <h2>{job.title || "Untitled Job"}</h2>
-                <p className="metadata">
-                  {job.company || "Unknown company"} | {job.job_data.work_location || "Location not set"} |{" "}
-                  {job.job_data.application_deadline || "No deadline"}
-                </p>
-                <p className="summary">{job.job_data.summary || "No summary saved."}</p>
-                <JobNotesPreview notes={job.notes} />
-              </div>
-              <div className="button-row job-row-actions">
-                <button
-                  type="button"
-                  className="secondary-button"
-                  disabled={!job.source_url}
-                  onClick={() => {
-                    window.location.href = matchPageHref(job);
-                  }}
-                >
-                  Match
-                </button>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  disabled={!job.match_data}
-                  onClick={() => setMatchDataJob(job)}
-                >
-                  Match Data
-                </button>
-                <button type="button" className="secondary-button" onClick={() => setEditor(editorFromJob(job))}>
-                  View
-                </button>
-              </div>
-            </article>
-          ))}
+          {sortedJobs.map((job) => {
+            const jobData = jobDataOrEmpty(job);
+            const hasJobData = Boolean(job.job_data);
+            return (
+              <article className="job-row" key={job.id}>
+                <div className="job-score-cell">
+                  <span className="score-badge">{job.match_score === null ? "N/A" : `${job.match_score}/10`}</span>
+                </div>
+                <div>
+                  <h2>{job.title || "Untitled Job"}</h2>
+                  <p className="metadata">
+                    {job.company || "Unknown company"} | {jobData.work_location || "Location not set"} |{" "}
+                    {jobData.application_deadline || "No deadline"}
+                  </p>
+                  <p className="summary">{jobData.summary || "No structured summary saved yet."}</p>
+                  <JobNotesPreview notes={job.notes} />
+                </div>
+                <div className="button-row job-row-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={!job.source_url}
+                    onClick={() => {
+                      window.location.href = matchPageHref(job);
+                    }}
+                  >
+                    Match
+                  </button>
+                  {!hasJobData ? (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={analyzingJobId === job.id}
+                      onClick={() => void analyzeSavedJob(job)}
+                    >
+                      {analyzingJobId === job.id ? "Analyzing..." : "Analyze"}
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={!job.match_data}
+                        onClick={() => setMatchDataJob(job)}
+                      >
+                        Match Data
+                      </button>
+                      <button type="button" className="secondary-button" onClick={() => setEditor(editorFromJob(job))}>
+                        View
+                      </button>
+                    </>
+                  )}
+                </div>
+              </article>
+            );
+          })}
         </div>
       </section>
     </div>

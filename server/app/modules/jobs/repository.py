@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.modules.auth.dependencies import AuthenticatedIdentity
 from app.modules.jobs.models import JobCache, JobResumeMatch, UserSavedJob
 from app.modules.jobs.schemas import JobDescriptionData, JobSaveRequest, JobUpdateRequest
+from app.modules.jobs.service import JobDescriptionParser
 from app.modules.profiles.repository import ensure_account_for_identity
 
 
@@ -138,6 +139,12 @@ def get_cached_job_by_source_url(db: Session, source_url: str | None) -> JobCach
     )
 
 
+def get_cached_job_by_id(db: Session, jobs_cache_id: int | None) -> JobCache | None:
+    if jobs_cache_id is None:
+        return None
+    return db.get(JobCache, jobs_cache_id)
+
+
 def get_user_job_by_source_url(
     db: Session,
     identity: AuthenticatedIdentity,
@@ -157,19 +164,54 @@ def _create_cache_job(
     *,
     source_url: str | None,
     raw_description_text: str,
-    job_data: JobDescriptionData,
+    job_data: JobDescriptionData | None = None,
+    title: str = "",
+    company: str = "",
 ) -> JobCache:
+    stored_job_data = job_data.model_dump() if job_data is not None else None
     job_cache = JobCache(
-        title=job_data.title,
-        company=job_data.company,
+        title=(job_data.title if job_data and job_data.title else title).strip(),
+        company=(job_data.company if job_data and job_data.company else company).strip(),
         source_url=source_url,
         source_url_hash=source_url_hash(source_url),
         raw_description_text=raw_description_text,
-        job_data=job_data.model_dump(),
+        job_data=stored_job_data,
     )
     db.add(job_cache)
     db.flush()
     db.refresh(job_cache)
+    return job_cache
+
+
+def _fill_cache_job(
+    db: Session,
+    job_cache: JobCache,
+    *,
+    raw_description_text: str | None = None,
+    job_data: JobDescriptionData | None = None,
+    title: str = "",
+    company: str = "",
+) -> JobCache:
+    changed = False
+    if raw_description_text and not job_cache.raw_description_text:
+        job_cache.raw_description_text = raw_description_text
+        changed = True
+    if title and not job_cache.title:
+        job_cache.title = title.strip()
+        changed = True
+    if company and not job_cache.company:
+        job_cache.company = company.strip()
+        changed = True
+    if job_data is not None and job_cache.job_data is None:
+        job_cache.job_data = job_data.model_dump()
+        if job_data.title and not job_cache.title:
+            job_cache.title = job_data.title
+        if job_data.company and not job_cache.company:
+            job_cache.company = job_data.company
+        changed = True
+    if changed:
+        db.flush()
+        db.refresh(job_cache)
     return job_cache
 
 
@@ -178,19 +220,38 @@ def get_or_create_cache_job(
     *,
     source_url: str | None,
     raw_description_text: str,
-    job_data: JobDescriptionData,
+    job_data: JobDescriptionData | None = None,
+    title: str = "",
+    company: str = "",
     reuse_cached_url: bool = True,
 ) -> JobCache:
     if reuse_cached_url:
         cached_job = get_cached_job_by_source_url(db, source_url)
         if cached_job is not None:
-            return cached_job
+            return _fill_cache_job(
+                db,
+                cached_job,
+                raw_description_text=raw_description_text,
+                job_data=job_data,
+                title=title,
+                company=company,
+            )
     return _create_cache_job(
         db,
         source_url=source_url,
         raw_description_text=raw_description_text,
         job_data=job_data,
+        title=title,
+        company=company,
     )
+
+
+def ensure_job_data(db: Session, job_cache: JobCache, parser: JobDescriptionParser) -> JobDescriptionData:
+    if job_cache.job_data is not None:
+        return JobDescriptionData.model_validate(job_cache.job_data)
+    job_data = parser.parse(job_cache.raw_description_text)
+    _fill_cache_job(db, job_cache, job_data=job_data)
+    return job_data
 
 
 def create_user_job(
@@ -235,6 +296,35 @@ def create_job_from_description(
         source_url=source_url,
         raw_description_text=raw_description_text,
         job_data=job_data,
+        reuse_cached_url=reuse_cached_url,
+    )
+    user_job = create_user_job(
+        db,
+        identity,
+        jobs_cache_id=job_cache.id,
+        notes=notes,
+    )
+    return _job_response(user_job, job_cache, _latest_match_for_user_job(db, identity, user_job.id))
+
+
+def create_job_from_source(
+    db: Session,
+    identity: AuthenticatedIdentity,
+    *,
+    source_url: str | None,
+    raw_description_text: str,
+    title: str = "",
+    company: str = "",
+    notes: str | None = None,
+    reuse_cached_url: bool = True,
+) -> dict:
+    job_cache = get_or_create_cache_job(
+        db,
+        source_url=source_url,
+        raw_description_text=raw_description_text,
+        title=title,
+        company=company,
+        job_data=None,
         reuse_cached_url=reuse_cached_url,
     )
     user_job = create_user_job(

@@ -94,3 +94,42 @@ class JobUrlExtractResponse(BaseModel):
 class SavePendingMatchedJobResponse(BaseModel):
     saved_job_id: int
     saved_match_id: int
+
+
+class BulkSavedJobMatchRequest(BaseModel):
+    user_job_ids: list[int] = Field(..., min_length=1, max_length=25)
+    resume_text: str | None = Field(default=None)
+    resume_profile_id: int | None = Field(default=None)
+    resume_document_id: int | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def require_resume_source(self) -> BulkSavedJobMatchRequest:
+        resume_sources = [
+            bool(self.resume_profile_id),
+            bool(self.resume_document_id),
+            bool(self.resume_text and self.resume_text.strip()),
+        ]
+        if not any(resume_sources):
+            raise ValueError("Provide resume_profile_id, resume_text, or resume_document_id.")
+        if sum(resume_sources) > 1:
+            raise ValueError("Provide only one resume source.")
+        return self
+
+
+class BulkSavedJobMatchItem(BaseModel):
+    user_job_id: int
+    jobs_cache_id: int | None = None
+    title: str
+    company: str
+    saved_match_id: int
+    match: ResumeJobMatchResponse
+
+
+class BulkSavedJobMatchFailure(BaseModel):
+    user_job_id: int
+    reason: str
+
+
+class BulkSavedJobMatchResponse(BaseModel):
+    matched: list[BulkSavedJobMatchItem] = Field(default_factory=list)
+    failed: list[BulkSavedJobMatchFailure] = Field(default_factory=list)

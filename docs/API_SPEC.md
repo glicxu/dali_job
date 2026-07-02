@@ -117,7 +117,7 @@ Response:
       "resume_profile_id": 7,
       "resume_label": "Backend Resume",
       "match_summary": "Strong backend API match with a gap around Kubernetes.",
-      "href": "/jobs?job_id=42"
+      "href": "/jobs?job_id=42&view=match"
     }
   ],
   "recently_saved_jobs": [
@@ -139,7 +139,7 @@ Dashboard behavior:
 
 - `setup_alerts` should include missing resume-profile setup and may include no saved jobs, saved jobs that need analysis, or analyzed jobs that have no matches.
 - `recommended_next_step` should be a single highest-priority action: create/import resume profile, search/import jobs, analyze saved jobs, run matching, or review best matches.
-- `best_matches` should use the current user's saved jobs and match rows, sorted by `match_score` descending, then newest match first.
+- `best_matches` should use the current user's saved jobs and match rows, sorted by `match_score` descending, then newest match first. Best-match links should open the saved job's match-data view on the Jobs page.
 - `recently_saved_jobs` should use `user_saved_jobs.created_at` descending.
 - Saved-job links should use a stable user-saved-job identifier, not the shared `jobs_cache` identifier, because notes and match history are user-specific.
 
@@ -736,6 +736,57 @@ Saves a low-compatibility `pending_job` returned by `POST /resume-job-matches` a
 {
   "saved_job_id": 1,
   "saved_match_id": 1
+}
+```
+
+### `POST /resume-job-matches/saved-jobs`
+
+Runs one selected resume source against multiple already saved jobs. This powers the Saved Jobs `Bulk Match` flow.
+
+The endpoint accepts saved-job IDs from `user_saved_jobs`, not shared `jobs_cache` IDs. The server verifies each selected job belongs to the current user, lazily creates missing `jobs_cache.job_data` when needed, compares the selected resume against each job, and stores every result in `job_resume_matches`.
+
+Unlike the single ad hoc matcher, low scores are saved immediately because the jobs are already in the user's saved jobs list.
+
+Body:
+
+```json
+{
+  "user_job_ids": [12, 13, 14],
+  "resume_profile_id": 4
+}
+```
+
+Response:
+
+```json
+{
+  "matched": [
+    {
+      "user_job_id": 12,
+      "jobs_cache_id": 8,
+      "title": "Software Engineer",
+      "company": "Example Co",
+      "saved_match_id": 31,
+      "match": {
+        "id": null,
+        "saved_job_id": 12,
+        "saved_match_id": 31,
+        "job_saved": true,
+        "pending_job": null,
+        "match_score": 8,
+        "score_scale": "0-10",
+        "summary": "Strong backend match.",
+        "matched_skills": ["Python"],
+        "missing_skills": [],
+        "matched_keywords": ["API"],
+        "missing_keywords": [],
+        "supported_requirements": [],
+        "unsupported_requirements": [],
+        "recommended_resume_updates": []
+      }
+    }
+  ],
+  "failed": []
 }
 ```
 

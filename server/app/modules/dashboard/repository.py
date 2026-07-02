@@ -21,6 +21,10 @@ def _job_href(user_saved_job_id: int) -> str:
     return f"/jobs?job_id={user_saved_job_id}"
 
 
+def _match_href(user_saved_job_id: int) -> str:
+    return f"/jobs?job_id={user_saved_job_id}&view=match"
+
+
 def _match_summary(match_data: dict[str, Any] | None) -> str:
     if not match_data:
         return ""
@@ -155,7 +159,7 @@ def get_dashboard(db: Session, identity: AuthenticatedIdentity) -> DashboardResp
             resume_profile_id=job.get("matched_resume_profile_id"),
             resume_label=_resume_label(job, resume_titles),
             match_summary=_match_summary(job.get("match_data")),
-            href=_job_href(job["id"]),
+            href=_match_href(job["id"]),
         )
         for job in matched_jobs[:5]
     ]

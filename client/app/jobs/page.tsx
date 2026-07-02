@@ -2,7 +2,7 @@ import { JobsManager } from "../../components/JobsManager";
 
 export default function JobsPage() {
   return (
-    <section className="panel">
+    <section className="panel jobs-panel">
       <div>
         <p className="eyebrow">Job Import</p>
         <h1>Jobs</h1>

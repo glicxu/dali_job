@@ -90,34 +90,32 @@ export function DashboardHome() {
         </a>
       </section>
 
-      <section className="dashboard-grid">
-        <section className="profile-card">
-          <h2>Setup Alerts</h2>
-          {dashboard.setup_alerts.length ? (
-            <div className="dashboard-alert-list">
-              {dashboard.setup_alerts.map((alert) => (
-                <a className="dashboard-alert" href={alert.href} key={alert.kind}>
-                  {alert.message}
-                </a>
-              ))}
-            </div>
-          ) : (
-            <p className="empty">No setup alerts.</p>
-          )}
-        </section>
+      <section className="profile-card">
+        <h2>Setup Alerts</h2>
+        {dashboard.setup_alerts.length ? (
+          <div className="dashboard-alert-list">
+            {dashboard.setup_alerts.map((alert) => (
+              <a className="dashboard-alert" href={alert.href} key={alert.kind}>
+                {alert.message}
+              </a>
+            ))}
+          </div>
+        ) : (
+          <p className="empty">No setup alerts.</p>
+        )}
+      </section>
 
-        <section className="profile-card">
-          <h2>Best Matches</h2>
-          {dashboard.best_matches.length ? (
-            <div className="dashboard-card-list">
-              {dashboard.best_matches.map((job) => (
-                <BestMatchCard job={job} key={job.user_saved_job_id} />
-              ))}
-            </div>
-          ) : (
-            <p className="empty">No match scores yet.</p>
-          )}
-        </section>
+      <section className="profile-card">
+        <h2>Best Matches</h2>
+        {dashboard.best_matches.length ? (
+          <div className="dashboard-card-list">
+            {dashboard.best_matches.map((job) => (
+              <BestMatchCard job={job} key={job.user_saved_job_id} />
+            ))}
+          </div>
+        ) : (
+          <p className="empty">No match scores yet.</p>
+        )}
       </section>
 
       <section className="profile-card">

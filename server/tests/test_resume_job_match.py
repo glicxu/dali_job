@@ -218,13 +218,86 @@ def test_resume_job_match_returns_score_and_skills() -> None:
     assert payload["missing_skills"] == ["Kubernetes"]
     assert payload["supported_requirements"][0]["confidence"] == 0.9
     assert payload["unsupported_requirements"][0]["requirement"] == "Operate Kubernetes workloads"
-
     jobs = client.get("/api/v1/jobs").json()
     assert len(jobs) == 1
     assert jobs[0]["source_url"] is None
     assert jobs[0]["job_data"]["required_skills"] == ["PostgreSQL"]
     assert jobs[0]["match_score"] == 7
     assert jobs[0]["matched_resume_source"] == "pasted_text"
+
+
+def test_bulk_saved_job_match_matches_selected_jobs_with_resume_profile() -> None:
+    client = create_test_client()
+    profile_response = client.post(
+        "/api/v1/resume-profiles",
+        json={
+            "title": "Backend Resume",
+            "resume_data": {
+                "headline": "Backend Engineer",
+                "summary": "Built FastAPI services with Python.",
+                "experience": ["Built FastAPI services with Python."],
+                "skills": ["Python", "FastAPI"],
+                "education": [],
+                "certifications": [],
+                "projects": [],
+                "awards": [],
+                "publications": [],
+                "languages": [],
+                "volunteer": [],
+                "target_roles": [],
+                "notes": [],
+            },
+            "is_favorite": True,
+        },
+    )
+    assert profile_response.status_code == 200
+    job_payload = {
+        "title": "Backend Engineer",
+        "company": "Example Co",
+        "raw_description_text": "Build APIs using PostgreSQL and Kubernetes.",
+        "job_data": {
+            "title": "Backend Engineer",
+            "company": "Example Co",
+            "summary": "Build APIs using PostgreSQL.",
+            "responsibilities": ["Build APIs using PostgreSQL."],
+            "required_skills": ["PostgreSQL"],
+            "preferred_skills": ["Kubernetes"],
+            "required_experience": ["Backend API development"],
+            "preferred_experience": [],
+            "education": [],
+            "certifications": [],
+            "tools_and_technologies": ["PostgreSQL", "Kubernetes"],
+            "keywords": ["API", "PostgreSQL", "Kubernetes"],
+            "seniority_level": "",
+            "employment_type": "",
+            "security_clearance": "",
+            "work_location": "",
+            "salary_range": "",
+            "application_deadline": "",
+        },
+    }
+    first_job = client.post("/api/v1/jobs", json=job_payload)
+    second_job = client.post("/api/v1/jobs", json={**job_payload, "title": "API Engineer"})
+    assert first_job.status_code == 200
+    assert second_job.status_code == 200
+
+    response = client.post(
+        "/api/v1/resume-job-matches/saved-jobs",
+        json={
+            "user_job_ids": [first_job.json()["id"], second_job.json()["id"]],
+            "resume_profile_id": profile_response.json()["id"],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["failed"] == []
+    assert len(payload["matched"]) == 2
+    assert payload["matched"][0]["match"]["match_score"] == 7
+    assert payload["matched"][0]["match"]["job_saved"] is True
+    assert payload["matched"][0]["saved_match_id"] is not None
+    jobs = client.get("/api/v1/jobs").json()
+    assert {job["match_score"] for job in jobs} == {7}
 
 
 def test_resume_job_match_rejects_empty_inputs() -> None:

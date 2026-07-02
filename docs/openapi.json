@@ -1283,6 +1283,52 @@
         ]
       }
     },
+    "/api/v1/resume-job-matches/saved-jobs": {
+      "post": {
+        "tags": [
+          "resume-job-matches"
+        ],
+        "summary": "Create Bulk Saved Job Matches",
+        "operationId": "create_bulk_saved_job_matches_api_v1_resume_job_matches_saved_jobs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkSavedJobMatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkSavedJobMatchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/resume-job-matches/pending-job": {
       "post": {
         "tags": [
@@ -1397,6 +1443,138 @@
           "file"
         ],
         "title": "Body_upload_document_api_v1_documents_post"
+      },
+      "BulkSavedJobMatchFailure": {
+        "properties": {
+          "user_job_id": {
+            "type": "integer",
+            "title": "User Job Id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_job_id",
+          "reason"
+        ],
+        "title": "BulkSavedJobMatchFailure"
+      },
+      "BulkSavedJobMatchItem": {
+        "properties": {
+          "user_job_id": {
+            "type": "integer",
+            "title": "User Job Id"
+          },
+          "jobs_cache_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jobs Cache Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "company": {
+            "type": "string",
+            "title": "Company"
+          },
+          "saved_match_id": {
+            "type": "integer",
+            "title": "Saved Match Id"
+          },
+          "match": {
+            "$ref": "#/components/schemas/ResumeJobMatchResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_job_id",
+          "title",
+          "company",
+          "saved_match_id",
+          "match"
+        ],
+        "title": "BulkSavedJobMatchItem"
+      },
+      "BulkSavedJobMatchRequest": {
+        "properties": {
+          "user_job_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 25,
+            "minItems": 1,
+            "title": "User Job Ids"
+          },
+          "resume_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Text"
+          },
+          "resume_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Profile Id"
+          },
+          "resume_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Document Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_job_ids"
+        ],
+        "title": "BulkSavedJobMatchRequest"
+      },
+      "BulkSavedJobMatchResponse": {
+        "properties": {
+          "matched": {
+            "items": {
+              "$ref": "#/components/schemas/BulkSavedJobMatchItem"
+            },
+            "type": "array",
+            "title": "Matched"
+          },
+          "failed": {
+            "items": {
+              "$ref": "#/components/schemas/BulkSavedJobMatchFailure"
+            },
+            "type": "array",
+            "title": "Failed"
+          }
+        },
+        "type": "object",
+        "title": "BulkSavedJobMatchResponse"
       },
       "CurrentUserResponse": {
         "properties": {

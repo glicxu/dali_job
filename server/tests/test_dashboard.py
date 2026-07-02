@@ -104,5 +104,5 @@ def test_dashboard_returns_best_matches_and_recent_jobs() -> None:
     assert payload["best_matches"][0]["title"] == "Backend Engineer"
     assert payload["best_matches"][0]["match_score"] == 8
     assert payload["best_matches"][0]["resume_label"] == "Backend Resume"
-    assert payload["best_matches"][0]["href"] == f"/jobs?job_id={saved_job['id']}"
+    assert payload["best_matches"][0]["href"] == f"/jobs?job_id={saved_job['id']}&view=match"
     assert payload["recently_saved_jobs"][0]["status"] == "matched"

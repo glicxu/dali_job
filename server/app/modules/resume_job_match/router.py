@@ -15,6 +15,8 @@ from app.modules.profiles import repository as profile_repository
 from app.modules.resume_job_match.job_url_import import fetch_job_description_from_url
 from app.modules.resume_job_match.job_url_import import fetch_job_page_text_from_url
 from app.modules.resume_job_match.schemas import (
+    BulkSavedJobMatchRequest,
+    BulkSavedJobMatchResponse,
     JobUrlExtractRequest,
     JobUrlExtractResponse,
     PendingMatchedJob,
@@ -114,6 +116,14 @@ def resume_match_reference(payload: ResumeJobMatchRequest) -> tuple[int | None, 
     return None, None, "pasted_text"
 
 
+def resume_match_reference_from_bulk(payload: BulkSavedJobMatchRequest) -> tuple[int | None, int | None, str]:
+    if payload.resume_profile_id:
+        return payload.resume_profile_id, None, "resume_profile"
+    if payload.resume_document_id:
+        return None, payload.resume_document_id, "document"
+    return None, None, "pasted_text"
+
+
 def match_data_from_result(result: ResumeJobMatchResponse) -> dict:
     return result.model_dump(
         exclude={
@@ -123,6 +133,15 @@ def match_data_from_result(result: ResumeJobMatchResponse) -> dict:
             "job_saved",
             "pending_job",
         }
+    )
+
+
+def bulk_payload_as_match_request(payload: BulkSavedJobMatchRequest) -> ResumeJobMatchRequest:
+    return ResumeJobMatchRequest(
+        resume_text=payload.resume_text,
+        resume_profile_id=payload.resume_profile_id,
+        resume_document_id=payload.resume_document_id,
+        job_description_text="bulk saved job placeholder",
     )
 
 
@@ -196,6 +215,73 @@ def create_resume_job_match(
         result.job_saved = False
         result.pending_job = pending_job
     return result
+
+
+@router.post("/saved-jobs", response_model=BulkSavedJobMatchResponse)
+def create_bulk_saved_job_matches(
+    payload: BulkSavedJobMatchRequest,
+    matcher: ResumeJobMatcher = Depends(get_resume_job_matcher),
+    parser: JobDescriptionParser = Depends(get_match_job_description_parser),
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> BulkSavedJobMatchResponse:
+    resume_payload = bulk_payload_as_match_request(payload)
+    resume_data = resolve_resume_data_for_match(resume_payload, db, identity)
+    resume_profile_id, resume_document_id, resume_source = resume_match_reference_from_bulk(payload)
+    matched = []
+    failed = []
+
+    for user_job_id in list(dict.fromkeys(payload.user_job_ids)):
+        try:
+            user_job = job_repository.get_user_job_for_identity(db, identity, user_job_id)
+            if user_job is None:
+                failed.append({"user_job_id": user_job_id, "reason": "Saved job not found."})
+                continue
+            job_cache = job_repository.get_job_cache_for_saved_job(db, user_job)
+            if job_cache is None:
+                failed.append({"user_job_id": user_job_id, "reason": "Cached job not found."})
+                continue
+            job_data_model = job_repository.ensure_job_data(db, job_cache, parser)
+            job_data = job_data_model.model_dump()
+            result = matcher.compare(
+                ResumeJobMatchRequest(
+                    resume_text=json.dumps(resume_data, ensure_ascii=False, indent=2),
+                    job_description_text=json.dumps(job_data, ensure_ascii=False, indent=2),
+                    resume_data=resume_data,
+                    job_data=job_data,
+                )
+            )
+            saved_match = job_repository.create_job_resume_match(
+                db,
+                identity,
+                user_job_id=user_job.id,
+                jobs_cache_id=job_cache.id,
+                resume_profile_id=resume_profile_id,
+                resume_document_id=resume_document_id,
+                resume_source=resume_source,
+                match_score=result.match_score,
+                match_data=match_data_from_result(result),
+            )
+            result.saved_job_id = user_job.id
+            result.saved_match_id = saved_match["id"]
+            result.job_saved = True
+            result.pending_job = None
+            matched.append(
+                {
+                    "user_job_id": user_job.id,
+                    "jobs_cache_id": job_cache.id,
+                    "title": job_cache.title or "Untitled Job",
+                    "company": job_cache.company or "Unknown company",
+                    "saved_match_id": saved_match["id"],
+                    "match": result,
+                }
+            )
+        except HTTPException as exc:
+            failed.append({"user_job_id": user_job_id, "reason": str(exc.detail)})
+        except Exception as exc:
+            failed.append({"user_job_id": user_job_id, "reason": str(exc)})
+
+    return BulkSavedJobMatchResponse(matched=matched, failed=failed)
 
 
 @router.post("/pending-job", response_model=SavePendingMatchedJobResponse)

@@ -62,6 +62,7 @@ This is the first functional slice. It should happen before the full tracker, co
 - [x] Ask the user whether to save low-compatibility jobs below score 5.
 - [x] Store match score and selected resume reference in `job_resume_matches`, not on saved jobs.
 - [x] Link matches to `resume_profile_id` when the selected resume source is a saved structured resume profile.
+- [x] Add saved-jobs bulk matching flow where selected saved jobs can be matched against one selected resume.
 - [x] Add OpenAI provider implementation for the comparison.
 - [x] Read OpenAI API key from server environment variable `OPENAI_API_KEY`.
 - [x] Read OpenAI model from `ProcessConfig` `[openai].model`.

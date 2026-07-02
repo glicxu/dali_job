@@ -75,6 +75,10 @@ a {
   max-width: 1040px;
 }
 
+.jobs-panel {
+  max-width: none;
+}
+
 .eyebrow {
   color: #4f46e5;
   font-size: 12px;
@@ -102,6 +106,10 @@ h1 {
   gap: 18px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin: 28px 0 18px;
+}
+
+.input-grid.single-column {
+  grid-template-columns: 1fr;
 }
 
 .match-source-grid {
@@ -344,12 +352,6 @@ li span {
   padding: 18px;
 }
 
-.dashboard-grid {
-  display: grid;
-  gap: 18px;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
-}
-
 .dashboard-alert-list,
 .dashboard-card-list {
   display: grid;
@@ -384,6 +386,24 @@ li span {
 .dashboard-job-card h3 {
   font-size: 15px;
   margin: 0 0 5px;
+}
+
+.compact-job-card {
+  border: 1px solid #e4e7eb;
+  border-radius: 6px;
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+}
+
+.bulk-match-result-card {
+  align-items: center;
+  border: 1px solid #e4e7eb;
+  border-radius: 6px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 14px;
 }
 
 .dashboard-url {
@@ -427,6 +447,32 @@ li span {
   gap: 12px;
 }
 
+.saved-jobs-workspace {
+  align-items: flex-start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(520px, 0.95fr) minmax(360px, 1.05fr);
+}
+
+.saved-jobs-list-card {
+  max-height: calc(100vh - 64px);
+  overflow: auto;
+}
+
+.saved-jobs-detail-pane {
+  display: grid;
+  gap: 18px;
+  position: sticky;
+  top: 32px;
+}
+
+.saved-jobs-empty-detail {
+  background: #fff;
+  border: 1px dashed #cbd2d9;
+  border-radius: 6px;
+  padding: 18px;
+}
+
 .document-row {
   align-items: center;
   border: 1px solid #e4e7eb;
@@ -445,6 +491,27 @@ li span {
   gap: 14px;
   grid-template-columns: auto minmax(0, 1fr) auto;
   padding: 14px;
+}
+
+.job-row.selected {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 1px #4f46e5;
+}
+
+.job-row-bulk {
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+}
+
+.bulk-job-checkbox {
+  align-items: center;
+  display: flex;
+  height: 32px;
+  justify-content: center;
+  width: 24px;
+}
+
+.bulk-job-checkbox input {
+  width: auto;
 }
 
 .job-row h2 {
@@ -816,6 +883,20 @@ li span {
   margin-top: 10px;
 }
 
+@media (max-width: 1180px) {
+  .saved-jobs-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .saved-jobs-list-card {
+    max-height: none;
+  }
+
+  .saved-jobs-detail-pane {
+    position: static;
+  }
+}
+
 @media (max-width: 760px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -829,7 +910,6 @@ li span {
   .match-source-grid,
   .result-grid,
   .detail-grid,
-  .dashboard-grid,
   .dashboard-next-step,
     .profile-grid,
     .profile-columns,

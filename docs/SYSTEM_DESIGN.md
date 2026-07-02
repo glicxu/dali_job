@@ -61,6 +61,8 @@ Score meaning:
 
 The first prototype started with pasted text only. After document management is available, the matcher should support selecting a structured resume profile or uploaded resume document and pasting a job URL, while retaining pasted text fallbacks for pages that block extraction. The resume selector should list favorited resume profiles first, followed by other resume profiles, uploaded resume documents, and pasted-text fallback. The job URL field and pasted job description field should be mutually exclusive. In either mode, the server should save high-compatibility jobs automatically and let the user decide whether to save jobs with a score below 5. `jobs_cache` is the canonical job detail cache, `user_saved_jobs` stores each user's saved-job relationship and notes, and match scores are user/resume-specific in `job_resume_matches`.
 
+The matcher should also support bulk matching from Saved Jobs. In that flow, the user selects multiple `user_saved_jobs` rows, chooses one resume source on the Match page, and the server compares that resume against each selected saved job. Because the jobs are already saved, low-score bulk match results should still be stored in `job_resume_matches` without an additional save/discard prompt.
+
 The comparison should use the OpenAI API through the server-side AI provider abstraction. The OpenAI API key must be read from the server process environment variable `OPENAI_API_KEY`, never from the client and never from a committed config file. The model name should be configurable through `ProcessConfig` so it can be changed without code edits.
 
 This prototype should still preserve the client/server split: the client submits source selections through the API, and the server performs URL fetching, AI parsing, scoring, validation, and persistence.
@@ -86,7 +88,7 @@ Recommended next-step priority:
 
 Best match cards should display the score, job title, company, compared resume label when available, and a short match summary when it exists in `job_resume_matches.match_data`. Recently saved job cards should display whether the job needs analysis, is ready to match, or already has match data.
 
-Homepage job links should open the corresponding saved-job profile on the Jobs page, for example with a route such as `/jobs?job_id=<user_saved_job_id>`. The Jobs page should support deep-linking to a saved job before this homepage link behavior is considered complete.
+Homepage recently saved job links should open the corresponding saved-job profile on the Jobs page, for example with a route such as `/jobs?job_id=<user_saved_job_id>`. Homepage best-match links should open the saved job's match-data view, for example `/jobs?job_id=<user_saved_job_id>&view=match`. The Jobs page should support deep-linking to both views before this homepage link behavior is considered complete.
 
 ### 4.1 Resume Profiles Module
 

@@ -37,6 +37,32 @@ export type ResumeJobMatchRequest = {
   job_url?: string;
 };
 
+export type BulkSavedJobMatchRequest = {
+  user_job_ids: number[];
+  resume_text?: string;
+  resume_profile_id?: number;
+  resume_document_id?: number;
+};
+
+export type BulkSavedJobMatchItem = {
+  user_job_id: number;
+  jobs_cache_id: number | null;
+  title: string;
+  company: string;
+  saved_match_id: number;
+  match: ResumeJobMatchResponse;
+};
+
+export type BulkSavedJobMatchFailure = {
+  user_job_id: number;
+  reason: string;
+};
+
+export type BulkSavedJobMatchResponse = {
+  matched: BulkSavedJobMatchItem[];
+  failed: BulkSavedJobMatchFailure[];
+};
+
 export type JobUrlExtractResponse = {
   job_url: string;
   extracted_text: string;
@@ -506,6 +532,15 @@ export async function downloadDocumentFile(documentId: number, fileName: string)
 
 export async function compareResumeToJob(payload: ResumeJobMatchRequest): Promise<ResumeJobMatchResponse> {
   return requestJson<ResumeJobMatchResponse>("/resume-job-matches", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function compareResumeToSavedJobs(
+  payload: BulkSavedJobMatchRequest,
+): Promise<BulkSavedJobMatchResponse> {
+  return requestJson<BulkSavedJobMatchResponse>("/resume-job-matches/saved-jobs", {
     method: "POST",
     body: JSON.stringify(payload),
   });

@@ -121,6 +121,12 @@ The sections below are grouped by product area. The order above should guide imp
 
 ### Homepage Dashboard
 
+- [ ] Replace the immediate logged-out login screen with a public homepage overview.
+- [ ] Add logged-out homepage Login/Register calls to action.
+- [ ] Add static preview sections for resume profiles, job search/import, saved jobs, resume-to-job matching, and match data.
+- [ ] Exclude future application tracking from the public preview until that product area is intentionally designed.
+- [ ] Prevent logged-out users from using AI, scraping, provider integrations, file uploads, user database data, or persistence.
+- [ ] Show a login-required panel or redirect for protected app routes when the user is signed out.
 - [x] Add owner-scoped `GET /dashboard` summary endpoint.
 - [x] Add setup alerts for missing resume profiles, no saved jobs, jobs needing analysis, and jobs needing matching.
 - [x] Add a recommended next-step card with the documented priority order.

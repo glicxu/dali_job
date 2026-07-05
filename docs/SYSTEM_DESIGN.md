@@ -67,9 +67,26 @@ The comparison should use the OpenAI API through the server-side AI provider abs
 
 This prototype should still preserve the client/server split: the client submits source selections through the API, and the server performs URL fetching, AI parsing, scoring, validation, and persistence.
 
-### 4.0.1 Homepage Dashboard
+### 4.0.1 Homepage And Public Preview
 
-The homepage should be a signed-in dashboard that helps the user decide what to do next. It should not be a marketing landing page and should not mention internal providers such as Apify or OpenAI. If the user is not signed in, the app should continue showing only login/register access.
+The homepage has two modes:
+
+- Signed-out mode: a public product overview that explains what DaliJob does and gives the user clear login/register entry points.
+- Signed-in mode: the private dashboard that helps the user decide what to do next.
+
+The signed-out homepage may include static, non-database-backed previews of the core product areas:
+
+- Resume profile organization.
+- Job search/import.
+- Saved jobs.
+- Resume-to-job matching.
+- Match data and gap analysis.
+
+The signed-out preview must not include future application tracking until that product area is intentionally designed. It must also avoid live AI, scraping, provider integrations, uploads, or user-specific database reads/writes. Example cards, mock scores, and sample match explanations should be hardcoded or otherwise free to render.
+
+Public navigation may show links to public overview sections and a clear Login/Register action. Any route that would use user data, OpenAI, Apify, scraping, file uploads, or persistence must require authentication and should show a login-required panel or redirect to `/auth`.
+
+The signed-in homepage should not be a marketing landing page and should not mention internal providers such as Apify or OpenAI.
 
 Initial homepage contents:
 

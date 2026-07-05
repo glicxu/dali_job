@@ -31,6 +31,8 @@ Authorization: Bearer <token>
 
 The first implementation stores DaliJob-owned account credentials in the DaliJob database. A future Dalifin-wide login can be introduced by moving identity into a shared auth service or shared identity database, but DaliJob should not require users to first log in through app_server.
 
+The browser may show a signed-out public preview homepage without an access token. That public preview must not call protected APIs, OpenAI-backed endpoints, Apify-backed endpoints, scraping endpoints, document upload endpoints, or user data endpoints. Protected app routes should require a DaliJob bearer token and either redirect to `/auth` or show a login-required panel in the client.
+
 ### `POST /auth/register`
 
 Creates a DaliJob account and returns a bearer token.

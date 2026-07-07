@@ -6,6 +6,7 @@ import {
   DashboardRecentJob,
   DashboardResponse,
   getDashboard,
+  getAuthToken,
 } from "../lib/api";
 
 function statusLabel(status: DashboardRecentJob["status"]): string {
@@ -26,11 +27,18 @@ function formatDate(value: string): string {
 }
 
 export function DashboardHome() {
+  const [homeMode, setHomeMode] = useState<"checking" | "public" | "dashboard">("checking");
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   async function loadDashboard() {
+    if (!getAuthToken()) {
+      setHomeMode("public");
+      setIsLoading(false);
+      return;
+    }
+    setHomeMode("dashboard");
     setError(null);
     setIsLoading(true);
     try {
@@ -46,7 +54,11 @@ export function DashboardHome() {
     void loadDashboard();
   }, []);
 
-  if (isLoading) {
+  if (homeMode === "public") {
+    return <PublicHome />;
+  }
+
+  if (homeMode === "checking" || isLoading) {
     return (
       <section className="panel">
         <p className="empty">Loading homepage.</p>
@@ -131,6 +143,88 @@ export function DashboardHome() {
         )}
       </section>
     </section>
+  );
+}
+
+function PublicHome() {
+  return (
+    <section className="panel public-home">
+      <section className="public-hero">
+        <div>
+          <p className="eyebrow">Career Management</p>
+          <h1>DaliJob helps organize your job search around your resume.</h1>
+          <p className="lede">
+            Save jobs, structure resume profiles, compare opportunities, and review match gaps in one private
+            workspace.
+          </p>
+        </div>
+        <div className="button-row public-hero-actions">
+          <a className="button-link" href="/auth">
+            Login / Register
+          </a>
+        </div>
+      </section>
+
+      <section className="public-preview-grid">
+        <PublicPreviewCard
+          title="Resume Profiles"
+          description="Keep structured resume profiles that can be reused for matching and future document generation."
+          items={["Backend resume", "Data-focused resume", "Default profile first"]}
+        />
+        <PublicPreviewCard
+          title="Job Search And Import"
+          description="Search or import job postings, then save the roles that are worth reviewing."
+          items={["Review before saving", "Source URL preserved", "Manual fallback available"]}
+        />
+        <PublicPreviewCard
+          title="Saved Jobs"
+          description="Track saved jobs with notes, deadlines when available, and analyzed job details."
+          items={["Private saved list", "Job notes", "Analysis status"]}
+        />
+        <PublicPreviewCard
+          title="Resume Matching"
+          description="Compare a selected resume profile against saved jobs and get a clear score."
+          items={["0-10 score", "Bulk matching", "Resume-specific results"]}
+        />
+        <PublicPreviewCard
+          title="Match Data"
+          description="Review why a job matched, what was missing, and what resume updates may help."
+          items={["Matched skills", "Missing keywords", "Supported requirements"]}
+        />
+      </section>
+
+      <section className="profile-card">
+        <h2>Private by default</h2>
+        <p className="summary">
+          Login is required to use AI matching, job scraping, provider-backed search, uploads, saved jobs,
+          documents, and profile data.
+        </p>
+      </section>
+    </section>
+  );
+}
+
+function PublicPreviewCard({
+  title,
+  description,
+  items,
+}: {
+  title: string;
+  description: string;
+  items: string[];
+}) {
+  return (
+    <article className="profile-card public-preview-card">
+      <h2>{title}</h2>
+      <p className="summary">{description}</p>
+      <div className="resume-chip-row">
+        {items.map((item) => (
+          <span className="resume-chip" key={item}>
+            {item}
+          </span>
+        ))}
+      </div>
+    </article>
   );
 }
 

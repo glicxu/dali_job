@@ -68,7 +68,7 @@ def test_dashboard_returns_best_matches_and_recent_jobs() -> None:
                     summary="Builds APIs.",
                     skills=["Python", "FastAPI"],
                 ),
-                is_favorite=True,
+                is_default=True,
             ),
             identity,
         )

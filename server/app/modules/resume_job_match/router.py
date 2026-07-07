@@ -93,9 +93,13 @@ def import_job_for_match(
         source_url = str(payload.job_url)
         saved_job = job_repository.get_user_job_by_source_url(db, identity, source_url)
         if saved_job is not None:
-            _user_saved_job, cached_saved_job = saved_job
-            job_data = job_repository.ensure_job_data(db, cached_saved_job, parser)
-            return cached_saved_job.source_url, cached_saved_job.raw_description_text, job_data
+            _user_saved_job, cached_saved_job, edited_saved_job = saved_job
+            job_data = job_repository.ensure_saved_job_data(db, _user_saved_job, cached_saved_job, parser)
+            return (
+                edited_saved_job.source_url if edited_saved_job else cached_saved_job.source_url,
+                edited_saved_job.raw_description_text if edited_saved_job else cached_saved_job.raw_description_text,
+                job_data,
+            )
         cached_job = job_repository.get_cached_job_by_source_url(db, source_url)
         if cached_job is not None:
             job_data = job_repository.ensure_job_data(db, cached_job, parser)
@@ -238,10 +242,7 @@ def create_bulk_saved_job_matches(
                 failed.append({"user_job_id": user_job_id, "reason": "Saved job not found."})
                 continue
             job_cache = job_repository.get_job_cache_for_saved_job(db, user_job)
-            if job_cache is None:
-                failed.append({"user_job_id": user_job_id, "reason": "Cached job not found."})
-                continue
-            job_data_model = job_repository.ensure_job_data(db, job_cache, parser)
+            job_data_model = job_repository.ensure_saved_job_data(db, user_job, job_cache, parser)
             job_data = job_data_model.model_dump()
             result = matcher.compare(
                 ResumeJobMatchRequest(
@@ -255,7 +256,7 @@ def create_bulk_saved_job_matches(
                 db,
                 identity,
                 user_job_id=user_job.id,
-                jobs_cache_id=job_cache.id,
+                jobs_cache_id=job_cache.id if job_cache else None,
                 resume_profile_id=resume_profile_id,
                 resume_document_id=resume_document_id,
                 resume_source=resume_source,
@@ -269,9 +270,9 @@ def create_bulk_saved_job_matches(
             matched.append(
                 {
                     "user_job_id": user_job.id,
-                    "jobs_cache_id": job_cache.id,
-                    "title": job_cache.title or "Untitled Job",
-                    "company": job_cache.company or "Unknown company",
+                    "jobs_cache_id": job_cache.id if job_cache else None,
+                    "title": job_data_model.title or (job_cache.title if job_cache else "") or "Untitled Job",
+                    "company": job_data_model.company or (job_cache.company if job_cache else "") or "Unknown company",
                     "saved_match_id": saved_match["id"],
                     "match": result,
                 }

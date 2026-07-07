@@ -65,7 +65,7 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "resume_data",
         "source_document_id",
         "source_document_version_id",
-        "is_favorite",
+        "is_default",
         "created_at",
         "updated_at",
         "deleted_at",
@@ -171,7 +171,7 @@ def test_alembic_has_initial_schema_revision() -> None:
     config.set_main_option("script_location", str(server_dir / "app" / "db" / "migrations"))
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == "20260630_0013"
+    assert script.get_current_head() == "20260707_0015"
 
 
 def test_resume_profile_repository_creates_local_resume_json() -> None:
@@ -218,7 +218,7 @@ def test_resume_suggestions_create_resume_profile() -> None:
         assert saved.resume_data["skills"] == ["Python"]
 
 
-def test_resume_profiles_sort_favorites_first() -> None:
+def test_resume_profiles_allow_one_default_profile() -> None:
     engine = create_engine("sqlite:///:memory:", future=True)
     Base.metadata.create_all(bind=engine)
     session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
@@ -228,19 +228,22 @@ def test_resume_profiles_sort_favorites_first() -> None:
             session,
             ResumeData(headline="Backend Resume", skills=["Python"]),
         )
+        assert first.is_default is True
         second = repository.apply_resume_suggestions(
             session,
             ResumeData(headline="Data Resume", skills=["SQL"]),
         )
+        assert second.is_default is False
         repository.update_resume_profile(
             session,
             second,
-            ResumeProfileUpdateRequest(is_favorite=True),
+            ResumeProfileUpdateRequest(is_default=True),
         )
 
         profiles = repository.list_resume_profiles(session)
         assert profiles[0].id == second.id
-        assert profiles[0].is_favorite is True
+        assert profiles[0].is_default is True
+        assert profiles[1].is_default is False
         assert {profile.id for profile in profiles} == {first.id, second.id}
 
 

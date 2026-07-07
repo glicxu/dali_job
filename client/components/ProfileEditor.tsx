@@ -6,6 +6,7 @@ import {
   createResumeProfile,
   deleteResumeProfile,
   emptyResumeData,
+  getAuthToken,
   importResumePdf,
   listResumeProfiles,
   ResumeData,
@@ -91,14 +92,18 @@ function profilePreview(data: ResumeData): string {
 
 function sortResumeProfiles(profiles: ResumeProfile[]): ResumeProfile[] {
   return [...profiles].sort((a, b) => {
-    if (a.is_favorite !== b.is_favorite) {
-      return a.is_favorite ? -1 : 1;
+    if (a.is_default !== b.is_default) {
+      return a.is_default ? -1 : 1;
     }
     return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
   });
 }
 
 export function ProfileEditor() {
+  if (!getAuthToken()) {
+    return <ProfileEditorPreview />;
+  }
+
   const [resumeProfiles, setResumeProfiles] = useState<ResumeProfile[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [title, setTitle] = useState("Master Resume");
@@ -188,7 +193,7 @@ export function ProfileEditor() {
       };
       const saved = selectedProfile
         ? await updateResumeProfile(selectedProfile.id, payload)
-        : await createResumeProfile({ ...payload, is_favorite: false });
+        : await createResumeProfile({ ...payload, is_default: false });
       upsertResumeProfile(saved);
       setStatus("Resume profile saved.");
     } catch (err) {
@@ -205,7 +210,7 @@ export function ProfileEditor() {
       const created = await createResumeProfile({
         title: "Untitled Resume",
         resume_data: emptyResumeData,
-        is_favorite: false,
+        is_default: false,
       });
       upsertResumeProfile(created);
       setStatus("Blank resume profile created.");
@@ -214,14 +219,14 @@ export function ProfileEditor() {
     }
   }
 
-  async function toggleFavorite(profile: ResumeProfile) {
+  async function setDefaultProfile(profile: ResumeProfile) {
     setError(null);
     setStatus(null);
     try {
-      const updated = await updateResumeProfile(profile.id, { is_favorite: !profile.is_favorite });
+      const updated = await updateResumeProfile(profile.id, { is_default: true });
       upsertResumeProfile(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Favorite update failed.");
+      setError(err instanceof Error ? err.message : "Default resume update failed.");
     }
   }
 
@@ -315,7 +320,7 @@ export function ProfileEditor() {
         <div className="profile-card-header">
           <div>
             <h2>Resume Profiles</h2>
-            <p className="metadata">Favorited resumes appear first.</p>
+            <p className="metadata">Your default resume appears first.</p>
           </div>
           <button type="button" className="secondary-button" onClick={() => void createBlankResumeProfile()}>
             New Resume
@@ -329,7 +334,7 @@ export function ProfileEditor() {
                 profile={profile}
                 isSelected={profile.id === selectedId}
                 onOpen={() => setEditorFromProfile(profile)}
-                onToggleFavorite={() => void toggleFavorite(profile)}
+                onSetDefault={() => void setDefaultProfile(profile)}
               />
             ))}
           </div>
@@ -399,16 +404,112 @@ export function ProfileEditor() {
   );
 }
 
+function ProfileEditorPreview() {
+  const previewData = normalizeResumeData({
+    headline: "Backend Software Engineer",
+    summary: "Builds APIs, data workflows, and user-facing tools.",
+    experience: ["Built REST services and internal tools for product teams."],
+    skills: ["Python", "SQL", "APIs", "React", "Testing"],
+    education: ["B.S. Computer Science"],
+    projects: ["Job matching prototype with structured resume data."],
+  });
+  const sectionText = makeSectionText(previewData);
+
+  return (
+    <div className="profile-editor">
+      <div className="warning-banner">
+        Login is required to upload, parse, edit, and save resume profiles.
+      </div>
+      <section className="profile-card">
+        <div className="profile-card-header">
+          <div>
+            <h2>Import Master Resume</h2>
+            <p className="metadata">Upload a PDF after login to generate structured resume JSON.</p>
+          </div>
+        </div>
+        <form className="inline-form resume-upload-form">
+          <input type="file" disabled />
+          <button type="button" disabled>
+            Parse Resume
+          </button>
+        </form>
+      </section>
+      <section className="profile-card">
+        <div className="profile-card-header">
+          <div>
+            <h2>Resume Profiles</h2>
+            <p className="metadata">Your default resume appears first.</p>
+          </div>
+          <button type="button" className="secondary-button" disabled>
+            New Resume
+          </button>
+        </div>
+        <div className="resume-profile-list">
+          <article className="resume-profile-card selected">
+            <button type="button" className="resume-profile-open" disabled>
+              <span className="resume-profile-title">
+                Software Engineering Resume
+                <span className="default-label">Default</span>
+              </span>
+              <span className="metadata">{previewData.headline}</span>
+              <span className="resume-profile-preview">{profilePreview(previewData)}</span>
+            </button>
+            <button type="button" className="secondary-button default-button" disabled>
+              Default
+            </button>
+          </article>
+        </div>
+      </section>
+      <form className="profile-card">
+        <div className="profile-card-header">
+          <div>
+            <h2>Full Resume Profile</h2>
+            <p className="metadata">Preview only</p>
+          </div>
+          <button type="button" disabled>
+            Save Resume
+          </button>
+        </div>
+        <div className="profile-grid">
+          <label>
+            Resume Title
+            <input value="Software Engineering Resume" readOnly />
+          </label>
+          <label>
+            Headline
+            <input value={previewData.headline ?? ""} readOnly />
+          </label>
+        </div>
+        <label>
+          Summary
+          <textarea value={previewData.summary ?? ""} readOnly />
+        </label>
+        <div className="profile-columns">
+          {editableSections.slice(0, 6).map((key) => (
+            <label className="section-editor" key={key}>
+              {sectionLabels[key]}
+              <textarea value={sectionText[key]} readOnly />
+            </label>
+          ))}
+        </div>
+      </form>
+      <a className="button-link" href="/auth">
+        Login / Register to Edit Profiles
+      </a>
+    </div>
+  );
+}
+
 function ResumeProfileCard({
   profile,
   isSelected,
   onOpen,
-  onToggleFavorite,
+  onSetDefault,
 }: {
   profile: ResumeProfile;
   isSelected: boolean;
   onOpen: () => void;
-  onToggleFavorite: () => void;
+  onSetDefault: () => void;
 }) {
   const data = normalizeResumeData(profile.resume_data);
   const skillPreview = data.skills.slice(0, 5);
@@ -418,7 +519,7 @@ function ResumeProfileCard({
       <button type="button" className="resume-profile-open" onClick={onOpen}>
         <span className="resume-profile-title">
           {profile.title}
-          {profile.is_favorite ? <span className="favorite-label">Favorite</span> : null}
+          {profile.is_default ? <span className="default-label">Default</span> : null}
         </span>
         <span className="metadata">{data.headline || "No headline yet"}</span>
         <span className="resume-profile-preview">{profilePreview(data)}</span>
@@ -434,11 +535,12 @@ function ResumeProfileCard({
       </button>
       <button
         type="button"
-        className="secondary-button favorite-button"
-        onClick={onToggleFavorite}
-        aria-label={profile.is_favorite ? "Remove favorite" : "Favorite resume"}
+        className="secondary-button default-button"
+        onClick={onSetDefault}
+        disabled={profile.is_default}
+        aria-label={profile.is_default ? "Default resume" : "Set default resume"}
       >
-        {profile.is_favorite ? "Starred" : "Star"}
+        {profile.is_default ? "Default" : "Set default"}
       </button>
     </article>
   );

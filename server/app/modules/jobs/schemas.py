@@ -152,6 +152,7 @@ class JobSaveRequest(BaseModel):
     raw_description_text: str
     job_data: JobDescriptionData
     notes: str | None = None
+    save_as_user_edit: bool = False
 
 
 class JobUpdateRequest(BaseModel):
@@ -168,6 +169,7 @@ class JobResponse(BaseModel):
     workspace_id: int
     user_id: int
     jobs_cache_id: int | None = None
+    user_edited_job_id: int | None = None
     title: str
     company: str
     source_url: str | None

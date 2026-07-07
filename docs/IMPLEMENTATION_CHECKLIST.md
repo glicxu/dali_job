@@ -78,7 +78,7 @@ This is the first functional slice. It should happen before the full tracker, co
 Recommended implementation order:
 
 1. Database foundation: users, private workspaces, base migrations, seed script, validation script, and migration CI.
-2. Resume profile foundation: multiple JSON-backed resume profiles, favorite resume sorting, PDF resume import, and basic resume editor UI.
+2. Resume profile foundation: multiple JSON-backed resume profiles, single default resume sorting, PDF resume import, and basic resume editor UI.
 3. Job import: manual job creation, pasted job descriptions, jobs list, and job detail UI.
 4. Application tracking: application table, status transitions, timeline events, notes, tasks, reminders, tracker UI, and application detail UI.
 5. Document management: documents, document versions, signed upload/download flow, document library, and application attachments.
@@ -104,10 +104,10 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Create initial profile schema with JSON-backed resume data.
 - [x] Split structured resume data into `resume_profiles.resume_data` so one user can maintain multiple parsed resumes.
 - [x] Remove the legacy `profiles` table so `resume_profiles` is the only structured resume JSON storage.
-- [x] Add `resume_profiles.is_favorite` so users can star any number of resumes and see favorites first.
+- [x] Replace `resume_profiles.is_favorite` with `resume_profiles.is_default` so users can mark exactly one default resume.
 - [x] Replace separate skills, experience, education, projects, certifications, awards, publications, and links tables with one resume JSON document.
 - [x] Add list/create/read/update/delete API for structured resume profiles.
-- [x] Add favorite/unfavorite support without requiring a single primary resume.
+- [x] Add default-resume support and enforce one default resume per user.
 - [x] Add master resume upload or paste flow that preserves the original document when a file is provided.
 - [x] Add PDF master resume import prototype that extracts structured profile suggestions.
 - [x] Redact common personal contact information from uploaded resume text before AI parsing.
@@ -116,17 +116,18 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Let the user accept or reject parsed profile suggestions before saving resume JSON.
 - [x] Let the user apply parsed suggestions into a new resume profile instead of overwriting one global profile JSON.
 - [x] Let the user edit parsed profile suggestions after applying them in the JSON-backed editor.
-- [x] Build resume profile list UI with favorites displayed first.
+- [x] Build resume profile list UI with the default resume displayed first.
 - [x] Build profile editor UI.
 
 ### Homepage Dashboard
 
-- [ ] Replace the immediate logged-out login screen with a public homepage overview.
-- [ ] Add logged-out homepage Login/Register calls to action.
-- [ ] Add static preview sections for resume profiles, job search/import, saved jobs, resume-to-job matching, and match data.
-- [ ] Exclude future application tracking from the public preview until that product area is intentionally designed.
-- [ ] Prevent logged-out users from using AI, scraping, provider integrations, file uploads, user database data, or persistence.
-- [ ] Show a login-required panel or redirect for protected app routes when the user is signed out.
+- [x] Replace the immediate logged-out login screen with a public homepage overview.
+- [x] Add logged-out homepage Login/Register calls to action.
+- [x] Add static preview sections for resume profiles, job search/import, saved jobs, resume-to-job matching, and match data.
+- [x] Exclude future application tracking from the public preview until that product area is intentionally designed.
+- [x] Prevent logged-out users from using AI, scraping, provider integrations, file uploads, user database data, or persistence.
+- [x] Let logged-out users browse static read-only previews of major app pages.
+- [x] Direct logged-out users to `/auth` when they want to use protected live actions.
 - [x] Add owner-scoped `GET /dashboard` summary endpoint.
 - [x] Add setup alerts for missing resume profiles, no saved jobs, jobs needing analysis, and jobs needing matching.
 - [x] Add a recommended next-step card with the documented priority order.

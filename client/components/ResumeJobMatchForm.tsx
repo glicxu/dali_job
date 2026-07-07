@@ -5,6 +5,7 @@ import {
   BulkSavedJobMatchResponse,
   compareResumeToSavedJobs,
   compareResumeToJob,
+  getAuthToken,
   listJobs,
   listResumeProfiles,
   PendingMatchedJob,
@@ -18,6 +19,10 @@ type ResumeSourceMode = "profile" | "paste";
 type JobSourceMode = "url" | "paste";
 
 export function ResumeJobMatchForm() {
+  if (!getAuthToken()) {
+    return <ResumeJobMatchPreview />;
+  }
+
   const [resumeProfiles, setResumeProfiles] = useState<ResumeProfile[]>([]);
   const [resumeSourceMode, setResumeSourceMode] = useState<ResumeSourceMode>("profile");
   const [jobSourceMode, setJobSourceMode] = useState<JobSourceMode>("url");
@@ -218,7 +223,7 @@ export function ResumeJobMatchForm() {
             </option>
             {resumeProfiles.map((profile) => (
               <option key={profile.id} value={`profile:${profile.id}`}>
-                {profile.is_favorite ? "Starred - " : ""}
+                {profile.is_default ? "Default - " : ""}
                 {profile.title}
               </option>
             ))}
@@ -334,6 +339,48 @@ export function ResumeJobMatchForm() {
       {result ? <MatchResult result={result} /> : null}
       {bulkResult ? <BulkMatchResult result={bulkResult} /> : null}
     </form>
+  );
+}
+
+function ResumeJobMatchPreview() {
+  return (
+    <div className="match-form">
+      <div className="warning-banner">
+        Login is required to use resume-to-job matching.
+      </div>
+      <section className="match-source-grid">
+        <label>
+          Resume source
+          <select disabled>
+            <option>Software engineering resume profile</option>
+          </select>
+        </label>
+        <label>
+          Job source
+          <select disabled>
+            <option>Saved job or pasted job URL</option>
+          </select>
+        </label>
+      </section>
+      <section className="result-panel">
+        <div className="score-row">
+          <div className="score">8</div>
+          <div>
+            <p className="score-label">Example match score</p>
+            <p className="summary">
+              Strong backend match with gaps around cloud deployment and observability.
+            </p>
+          </div>
+        </div>
+        <div className="result-grid">
+          <ResultList title="Matched Skills" items={["Python", "APIs", "SQL"]} />
+          <ResultList title="Missing Skills" items={["Kubernetes", "Monitoring"]} />
+        </div>
+      </section>
+      <a className="button-link" href="/auth">
+        Login / Register to Match
+      </a>
+    </div>
   );
 }
 

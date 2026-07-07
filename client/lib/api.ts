@@ -95,6 +95,7 @@ export type StoredJob = {
   workspace_id: number;
   user_id: number;
   jobs_cache_id: number | null;
+  user_edited_job_id: number | null;
   title: string;
   company: string;
   source_url: string | null;
@@ -183,6 +184,11 @@ export type JobSavePayload = {
   raw_description_text: string;
   job_data: JobDescriptionData;
   notes?: string | null;
+  save_as_user_edit?: boolean;
+};
+
+export type JobUpdatePayload = Partial<JobSavePayload> & {
+  notes?: string | null;
 };
 
 export type PendingMatchedJob = JobSavePayload & {
@@ -222,7 +228,7 @@ export type ResumeProfile = {
   resume_data: ResumeData;
   source_document_id: number | null;
   source_document_version_id: number | null;
-  is_favorite: boolean;
+  is_default: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -236,13 +242,13 @@ export type ResumeProfileCreatePayload = {
   resume_data: ResumeData;
   source_document_id?: number | null;
   source_document_version_id?: number | null;
-  is_favorite?: boolean;
+  is_default?: boolean;
 };
 
 export type ResumeProfileUpdatePayload = {
   title?: string;
   resume_data?: ResumeData;
-  is_favorite?: boolean;
+  is_default?: boolean;
 };
 
 export type ResumeImportResponse = {
@@ -642,7 +648,7 @@ export function analyzeJob(jobId: number): Promise<StoredJob> {
   });
 }
 
-export function updateJob(jobId: number, payload: JobSavePayload): Promise<StoredJob> {
+export function updateJob(jobId: number, payload: JobUpdatePayload): Promise<StoredJob> {
   return requestJson<StoredJob>(`/jobs/${jobId}`, {
     method: "PATCH",
     body: JSON.stringify(payload),

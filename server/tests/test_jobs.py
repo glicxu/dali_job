@@ -172,7 +172,7 @@ def test_draft_job_description_does_not_save_until_user_creates_job(monkeypatch)
     assert client.get("/api/v1/jobs").json()[0]["id"] == saved["id"]
 
 
-def test_update_saved_job_edits_notes_only() -> None:
+def test_update_saved_job_stores_private_detail_edits() -> None:
     client = create_test_client()
     create_response = client.post(
         "/api/v1/jobs",
@@ -236,8 +236,8 @@ def test_update_saved_job_edits_notes_only() -> None:
 
     assert update_response.status_code == 200
     payload = update_response.json()
-    assert payload["title"] == "Backend Engineer"
-    assert payload["job_data"]["required_skills"] == ["Python"]
+    assert payload["title"] == "Senior Backend Engineer"
+    assert payload["job_data"]["required_skills"] == ["Python", "PostgreSQL"]
     assert payload["notes"] == "Updated after review."
 
 
@@ -267,8 +267,8 @@ def test_updating_saved_job_does_not_mutate_cached_url_job(monkeypatch) -> None:
         },
     )
     assert update_response.status_code == 200
-    assert update_response.json()["job_data"]["required_skills"] == ["Python", "API design"]
-    assert update_response.json()["title"] == "Backend Engineer"
+    assert update_response.json()["job_data"]["required_skills"] == ["Custom Skill"]
+    assert update_response.json()["title"] == "My Edited Job Title"
 
     draft_response = client.post(
         "/api/v1/jobs/draft",
@@ -467,7 +467,7 @@ def test_bulk_job_list_import_matching_uses_selected_resume_profile(monkeypatch)
                 "target_roles": [],
                 "notes": [],
             },
-            "is_favorite": True,
+            "is_default": True,
         },
     )
     assert profile_response.status_code == 200

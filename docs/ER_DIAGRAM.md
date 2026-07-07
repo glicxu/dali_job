@@ -8,6 +8,7 @@ erDiagram
     workspaces ||--o{ resume_profiles : owns
     workspaces ||--o{ companies : owns
     workspaces ||--o{ user_saved_jobs : saves
+    workspaces ||--o{ user_edited_jobs : edits
     workspaces ||--o{ applications : owns
     workspaces ||--o{ documents : owns
     workspaces ||--o{ integrations : owns
@@ -22,7 +23,8 @@ erDiagram
     companies ||--o{ recruiters : has
     companies ||--o{ applications : receives
 
-    jobs_cache ||--o{ user_saved_jobs : saved_by
+    jobs_cache ||--o{ user_saved_jobs : optionally_saved_by
+    user_edited_jobs ||--o{ user_saved_jobs : overrides
     user_saved_jobs ||--o{ applications : creates
     user_saved_jobs ||--o{ job_resume_matches : compared_by
     applications ||--o{ application_status_history : tracks
@@ -64,8 +66,8 @@ erDiagram
 ## Relationship Notes
 
 - In the MVP, each `workspace` is private and has exactly one owning `user`.
-- `resume_profiles.resume_data` holds structured resume facts as JSON. A user may have multiple resume profiles and may favorite any number of them so they appear first in resume selectors.
-- `jobs_cache.raw_description_text` stores the cleaned scraped posting text, and `jobs_cache.job_data` stores the canonical structured job description JSON. `user_saved_jobs` stores each user's saved-job relationship and notes.
+- `resume_profiles.resume_data` holds structured resume facts as JSON. A user may have multiple resume profiles but only one default resume profile, which appears first in resume selectors.
+- `jobs_cache.raw_description_text` stores reusable cleaned scraped posting text, and `jobs_cache.job_data` stores reusable structured job description JSON for URL-backed imports. `user_saved_jobs` stores each user's saved-job relationship and notes. `user_edited_jobs` stores manual job details and user-specific corrections; manual jobs can have no `jobs_cache` relationship.
 - `resume_versions`, `cover_letter_versions`, and `document_versions` are immutable.
 - `applications` connect jobs, companies, submitted documents, interviews, notes, tasks, offers, email messages, and calendar events.
 - `job_resume_matches` stores 0-10 resume-to-job comparison results for the initial prototype and later recommendation workflows.

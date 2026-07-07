@@ -28,7 +28,7 @@ class ResumeProfileCreateRequest(BaseModel):
     resume_data: ResumeData = Field(default_factory=ResumeData)
     source_document_id: int | None = None
     source_document_version_id: int | None = None
-    is_favorite: bool = False
+    is_default: bool = False
 
 
 class ResumeImportApplyRequest(BaseModel):
@@ -40,7 +40,7 @@ class ResumeImportApplyRequest(BaseModel):
 class ResumeProfileUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     resume_data: ResumeData | None = None
-    is_favorite: bool | None = None
+    is_default: bool | None = None
 
 
 class ResumeProfileResponse(BaseModel):
@@ -53,7 +53,7 @@ class ResumeProfileResponse(BaseModel):
     resume_data: ResumeData
     source_document_id: int | None = None
     source_document_version_id: int | None = None
-    is_favorite: bool
+    is_default: bool
     created_at: datetime
     updated_at: datetime
 

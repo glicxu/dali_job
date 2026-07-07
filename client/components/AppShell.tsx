@@ -1,12 +1,14 @@
 "use client";
 
 import { ReactNode, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { AuthForm } from "./AuthForm";
 import { clearAuthToken, CurrentUser, getAuthToken, getCurrentUser } from "../lib/api";
 
 type AuthState = "checking" | "authenticated" | "anonymous";
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const [authState, setAuthState] = useState<AuthState>("checking");
   const [user, setUser] = useState<CurrentUser | null>(null);
 
@@ -44,23 +46,27 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   if (authState === "anonymous") {
-    return (
-      <main className="content auth-only">
-        <section className="panel">
-          <div>
-            <p className="eyebrow">Account</p>
-            <h1>DaliJob login</h1>
-            <p className="lede">Create a DaliJob account or sign in with your existing DaliJob account.</p>
-          </div>
-          <AuthForm
-            onAuthChange={(currentUser) => {
-              setUser(currentUser);
-              setAuthState("authenticated");
-            }}
-          />
-        </section>
-      </main>
-    );
+    if (pathname === "/auth") {
+      return (
+        <PublicShell>
+          <section className="panel">
+            <div>
+              <p className="eyebrow">Account</p>
+              <h1>DaliJob login</h1>
+              <p className="lede">Create a DaliJob account or sign in with your existing DaliJob account.</p>
+            </div>
+            <AuthForm
+              onAuthChange={(currentUser) => {
+                setUser(currentUser);
+                setAuthState(currentUser ? "authenticated" : "anonymous");
+              }}
+            />
+          </section>
+        </PublicShell>
+      );
+    }
+
+    return <PublicShell>{children}</PublicShell>;
   }
 
   return (
@@ -83,6 +89,29 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </nav>
         {user ? <p className="metadata">{user.email}</p> : null}
+      </aside>
+      <main className="content">{children}</main>
+    </div>
+  );
+}
+
+function PublicShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="app-shell public-shell">
+      <aside className="sidebar" aria-label="Public navigation">
+        <div className="brand">DaliJob</div>
+        <nav>
+          <a href="/">Home</a>
+          <a href="/match">Match</a>
+          <a href="/jobs">Jobs</a>
+          <a href="/jobs/search">Job Search</a>
+          <a href="/jobs/import">Bulk Import</a>
+          <a href="/profile">Profile</a>
+          <a href="/documents">Documents</a>
+          <a href="/health">Health</a>
+          <a href="/job-url-debug">URL Debug</a>
+          <a href="/auth">Login / Register</a>
+        </nav>
       </aside>
       <main className="content">{children}</main>
     </div>

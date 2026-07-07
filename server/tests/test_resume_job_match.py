@@ -247,7 +247,7 @@ def test_bulk_saved_job_match_matches_selected_jobs_with_resume_profile() -> Non
                 "target_roles": [],
                 "notes": [],
             },
-            "is_favorite": True,
+            "is_default": True,
         },
     )
     assert profile_response.status_code == 200
@@ -298,6 +298,99 @@ def test_bulk_saved_job_match_matches_selected_jobs_with_resume_profile() -> Non
     assert payload["matched"][0]["saved_match_id"] is not None
     jobs = client.get("/api/v1/jobs").json()
     assert {job["match_score"] for job in jobs} == {7}
+
+
+def test_manual_saved_job_is_user_owned_editable_and_matchable() -> None:
+    client = create_test_client()
+    profile_response = client.post(
+        "/api/v1/resume-profiles",
+        json={
+            "title": "Backend Resume",
+            "resume_data": {
+                "headline": "Backend Engineer",
+                "summary": "Built FastAPI services with Python.",
+                "experience": ["Built FastAPI services with Python."],
+                "skills": ["Python", "FastAPI"],
+                "education": [],
+                "certifications": [],
+                "projects": [],
+                "awards": [],
+                "publications": [],
+                "languages": [],
+                "volunteer": [],
+                "target_roles": [],
+                "notes": [],
+            },
+        },
+    )
+    assert profile_response.status_code == 200
+
+    job_payload = {
+        "title": "Backend Engineer",
+        "company": "Manual Co",
+        "raw_description_text": "Build APIs using PostgreSQL and Kubernetes.",
+        "job_data": {
+            "title": "Backend Engineer",
+            "company": "Manual Co",
+            "summary": "Build APIs using PostgreSQL.",
+            "responsibilities": ["Build APIs using PostgreSQL."],
+            "required_skills": ["PostgreSQL"],
+            "preferred_skills": ["Kubernetes"],
+            "required_experience": ["Backend API development"],
+            "preferred_experience": [],
+            "education": [],
+            "certifications": [],
+            "tools_and_technologies": ["PostgreSQL", "Kubernetes"],
+            "keywords": ["API", "PostgreSQL", "Kubernetes"],
+            "seniority_level": "",
+            "employment_type": "",
+            "security_clearance": "",
+            "work_location": "",
+            "salary_range": "",
+            "application_deadline": "",
+        },
+    }
+    create_response = client.post("/api/v1/jobs", json=job_payload)
+    assert create_response.status_code == 200
+    created = create_response.json()
+    assert created["jobs_cache_id"] is None
+    assert created["user_edited_job_id"] is not None
+    assert created["title"] == "Backend Engineer"
+
+    update_response = client.patch(
+        f"/api/v1/jobs/{created['id']}",
+        json={
+            **job_payload,
+            "title": "Edited Backend Engineer",
+            "notes": "User-specific correction.",
+            "job_data": {
+                **job_payload["job_data"],
+                "title": "Edited Backend Engineer",
+                "required_skills": ["PostgreSQL", "FastAPI"],
+            },
+        },
+    )
+    assert update_response.status_code == 200
+    updated = update_response.json()
+    assert updated["jobs_cache_id"] is None
+    assert updated["user_edited_job_id"] == created["user_edited_job_id"]
+    assert updated["title"] == "Edited Backend Engineer"
+    assert updated["notes"] == "User-specific correction."
+    assert updated["job_data"]["required_skills"] == ["PostgreSQL", "FastAPI"]
+
+    match_response = client.post(
+        "/api/v1/resume-job-matches/saved-jobs",
+        json={
+            "user_job_ids": [created["id"]],
+            "resume_profile_id": profile_response.json()["id"],
+        },
+    )
+    assert match_response.status_code == 200
+    payload = match_response.json()
+    assert payload["failed"] == []
+    assert payload["matched"][0]["jobs_cache_id"] is None
+    assert payload["matched"][0]["title"] == "Edited Backend Engineer"
+    assert payload["matched"][0]["match"]["match_score"] == 7
 
 
 def test_resume_job_match_rejects_empty_inputs() -> None:
@@ -362,7 +455,7 @@ def test_resume_job_match_uses_saved_resume_profile() -> None:
                 "target_roles": [],
                 "notes": [],
             },
-            "is_favorite": True,
+            "is_default": True,
         },
     )
     assert profile_response.status_code == 200

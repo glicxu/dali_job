@@ -167,18 +167,26 @@ def import_indeed_search_results(
             match_score = None
             match_id = None
             if payload.run_matching and payload.resume_profile_id:
+                user_job_for_match = repository.get_user_job_for_identity(db, identity, saved_job["id"])
+                if user_job_for_match is None:
+                    raise ValueError("Saved job could not be found for matching.")
                 cached_for_match = repository.get_cached_job_by_id(db, saved_job["jobs_cache_id"])
-                if cached_for_match is None:
-                    raise ValueError("Saved job cache row could not be found for matching.")
-                parsed_job_data = repository.ensure_job_data(db, cached_for_match, parser)
+                parsed_job_data = repository.ensure_saved_job_data(db, user_job_for_match, cached_for_match, parser)
                 job_data = _job_data_from_result(result, parsed_job_data)
-                if cached_for_match.job_data != job_data.model_dump():
+                edited_for_match = repository.get_user_edited_job_for_saved_job(db, user_job_for_match)
+                if edited_for_match is not None:
+                    edited_for_match.job_data = job_data.model_dump()
+                    if job_data.title and not edited_for_match.title:
+                        edited_for_match.title = job_data.title
+                    if job_data.company and not edited_for_match.company:
+                        edited_for_match.company = job_data.company
+                elif cached_for_match is not None and cached_for_match.job_data is None:
                     cached_for_match.job_data = job_data.model_dump()
                     if job_data.title and not cached_for_match.title:
                         cached_for_match.title = job_data.title
                     if job_data.company and not cached_for_match.company:
                         cached_for_match.company = job_data.company
-                    db.flush()
+                db.flush()
                 saved_match = _create_resume_profile_match(
                     db,
                     identity,

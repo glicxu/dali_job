@@ -31,7 +31,7 @@ Authorization: Bearer <token>
 
 The first implementation stores DaliJob-owned account credentials in the DaliJob database. A future Dalifin-wide login can be introduced by moving identity into a shared auth service or shared identity database, but DaliJob should not require users to first log in through app_server.
 
-The browser may show a signed-out public preview homepage without an access token. That public preview must not call protected APIs, OpenAI-backed endpoints, Apify-backed endpoints, scraping endpoints, document upload endpoints, or user data endpoints. Protected app routes should require a DaliJob bearer token and either redirect to `/auth` or show a login-required panel in the client.
+The browser may show signed-out public previews without an access token. Public previews can include the homepage and read-only versions of major app pages, but they must not call protected APIs, OpenAI-backed endpoints, Apify-backed endpoints, scraping endpoints, document upload endpoints, or user data endpoints. Any live action on a protected app page should require a DaliJob bearer token and direct the user to `/auth` when signed out.
 
 ### `POST /auth/register`
 
@@ -149,7 +149,7 @@ Dashboard behavior:
 
 ### `GET /resume-profiles`
 
-Lists structured resume profiles owned by the current user. Response ordering should put `is_favorite = true` resumes first, then sort by `updated_at` descending.
+Lists structured resume profiles owned by the current user. Response ordering should put `is_default = true` first, then sort by `updated_at` descending.
 
 ### `POST /resume-profiles`
 
@@ -161,7 +161,7 @@ Returns one structured resume profile.
 
 ### `PATCH /resume-profiles/{resumeProfileId}`
 
-Updates title, structured resume JSON, or favorite state. Toggling `is_favorite` must not unset favorites from other resumes because users may favorite multiple resumes.
+Updates title, structured resume JSON, or default state. Setting `is_default = true` must unset the previous default resume for that user because only one resume profile can be default.
 
 ### `DELETE /resume-profiles/{resumeProfileId}`
 
@@ -234,11 +234,11 @@ Creates recruiter/contact.
 
 ### `GET /jobs`
 
-Lists jobs saved by the current user. The API returns saved-job rows from `user_saved_jobs` joined to canonical job details in `jobs_cache`.
+Lists jobs saved by the current user. The API returns saved-job rows from `user_saved_jobs` with optional joins to reusable URL details in `jobs_cache` and private edited details in `user_edited_jobs`.
 
 Response fields include `id`, `title`, `company`, `source_url`, `raw_description_text`, nullable `job_data`, `notes`, `match_score`, `matched_resume_profile_id`, `matched_resume_document_id`, `matched_resume_source`, `created_at`, and `updated_at`.
 
-`match_score`, `matched_resume_profile_id`, `matched_resume_document_id`, and `matched_resume_source` are response-only convenience fields computed from the current user's latest `job_resume_matches` row for that `user_saved_jobs` record. They are not stored on `user_saved_jobs` or `jobs_cache`.
+`title`, `company`, `source_url`, `raw_description_text`, and `job_data` come from `user_edited_jobs` when `user_saved_jobs.user_edited_job_id` is set; otherwise they come from `jobs_cache`. `match_score`, `matched_resume_profile_id`, `matched_resume_document_id`, and `matched_resume_source` are response-only convenience fields computed from the current user's latest `job_resume_matches` row for that `user_saved_jobs` record.
 
 Future query params:
 
@@ -302,7 +302,7 @@ Response:
 
 ### `POST /jobs/import-description`
 
-Imports a job description foundation record from pasted text or a public URL. For one-job imports, the server may store or reuse the cleaned raw text and OpenAI-parsed structured job JSON in `jobs_cache`, then create a current-user saved-job row in `user_saved_jobs`. If the URL is already cached, the server reuses the stored cache row instead of parsing again. User edits later update only notes on `user_saved_jobs`.
+Imports a job description foundation record from pasted text or a public URL. For one-job URL imports, the server may store or reuse the cleaned raw text and OpenAI-parsed structured job JSON in `jobs_cache`, then creates a current-user saved-job row in `user_saved_jobs` that points at the cache. If the URL is already cached, the server reuses the stored cache row instead of parsing again. Pasted/manual jobs without a URL create a `user_edited_jobs` row and a `user_saved_jobs` row with `jobs_cache_id = null`.
 
 Body with pasted text:
 
@@ -409,7 +409,7 @@ Candidate `status` values:
 
 ### `POST /jobs/import-list`
 
-Imports selected candidates from a prior list discovery result. For each selected job URL, the server should use the lazy URL import pipeline: check `jobs_cache`, reuse cached source data when possible, otherwise scrape the detail page, save `raw_description_text` and available metadata, then create a user-specific `user_saved_jobs` row. Bulk import should not call OpenAI just to save jobs. If `run_matching` is true, the server must lazily create missing `job_data` before matching each imported job.
+Imports selected candidates from a prior list discovery result. For each selected job URL, the server should use the lazy URL import pipeline: check `jobs_cache`, reuse cached source data when possible, otherwise scrape the detail page, save `raw_description_text` and available metadata, then create a user-specific `user_saved_jobs` row pointing at the cache. Bulk import should not call OpenAI just to save jobs. If `run_matching` is true, the server must lazily create missing `jobs_cache.job_data` and then match each imported job.
 
 Body:
 
@@ -532,7 +532,7 @@ The server caps `max_results`; the first implementation defaults to 5. Empty Api
 
 ### `POST /job-search/indeed/import`
 
-Imports selected Apify Indeed search results. The server normalizes each selected result into `raw_description_text` and metadata, reuses an existing `jobs_cache` row by `source_url` when possible, and creates a `user_saved_jobs` row for the current user. Apify import should leave `job_data` empty when matching is not requested, then lazily parse and cache `job_data` only when `run_matching` is true or a later match/profile action needs structured data.
+Imports selected Apify-backed search results. The server normalizes each selected result into `raw_description_text` and metadata, reuses an existing `jobs_cache` row by `source_url` when possible, and creates a lightweight `user_saved_jobs` row for the current user. Import should leave `job_data` empty when matching is not requested, then lazily parse and save `jobs_cache.job_data` only when `run_matching` is true or a later match/profile action needs structured data. Manual/no-URL provider results use `user_edited_jobs`.
 
 Body:
 
@@ -576,7 +576,7 @@ Response:
 
 ### `POST /jobs`
 
-Creates a saved job from a reviewed draft or fully manual input. If a source URL already exists in `jobs_cache`, the server reuses that cache row and creates a `user_saved_jobs` row. Manual jobs without a URL also create a `jobs_cache` row with a nullable `source_url`. This is a core workflow and does not depend on job board APIs, plugins, or URL extraction. Reviewed/manual jobs may include immediate `job_data` because the user is editing one job directly.
+Creates a saved job from a reviewed draft or fully manual input. If a source URL is present and the user did not edit the parsed details, the server reuses or creates a `jobs_cache` row and creates a lightweight `user_saved_jobs` row. If the user edited the parsed details, the server also creates a `user_edited_jobs` row and links it from `user_saved_jobs`. Manual jobs without a URL do not create a cache row; they create `user_edited_jobs` plus `user_saved_jobs` with `jobs_cache_id = null`.
 
 Body:
 
@@ -612,11 +612,11 @@ Body:
 
 ### `GET /jobs/{jobId}`
 
-Returns a job saved by the current user from `user_saved_jobs` joined to `jobs_cache`.
+Returns a job saved by the current user from `user_saved_jobs`, with optional fallback to `jobs_cache`.
 
 ### `PATCH /jobs/{jobId}`
 
-Updates saved-job notes on `user_saved_jobs` only. This never mutates `jobs_cache`; saved job JSON is read-only from the Jobs page.
+Updates notes on `user_saved_jobs`. If the request changes title, company, source URL, raw description text, or `job_data`, the server creates or updates `user_edited_jobs` and links it from `user_saved_jobs`. This never mutates `jobs_cache`.
 
 ### `POST /jobs/import-file`
 
@@ -745,7 +745,7 @@ Saves a low-compatibility `pending_job` returned by `POST /resume-job-matches` a
 
 Runs one selected resume source against multiple already saved jobs. This powers the Saved Jobs `Bulk Match` flow.
 
-The endpoint accepts saved-job IDs from `user_saved_jobs`, not shared `jobs_cache` IDs. The server verifies each selected job belongs to the current user, lazily creates missing `jobs_cache.job_data` when needed, compares the selected resume against each job, and stores every result in `job_resume_matches`.
+The endpoint accepts saved-job IDs from `user_saved_jobs`, not shared `jobs_cache` IDs. The server verifies each selected job belongs to the current user, resolves effective job details from `user_edited_jobs` first and `jobs_cache` second, lazily creates missing structured `job_data` where needed, compares the selected resume against each job, and stores every result in `job_resume_matches`.
 
 Unlike the single ad hoc matcher, low scores are saved immediately because the jobs are already in the user's saved jobs list.
 

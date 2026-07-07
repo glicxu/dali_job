@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import {
+  getAuthToken,
   getDocumentText,
   listDocuments,
   StoredDocument,
@@ -16,6 +17,10 @@ function formatBytes(value: number): string {
 }
 
 export function DocumentLibrary() {
+  if (!getAuthToken()) {
+    return <DocumentLibraryPreview />;
+  }
+
   const [documents, setDocuments] = useState<StoredDocument[]>([]);
   const [textPreview, setTextPreview] = useState<string | null>(null);
   const [textPreviewTitle, setTextPreviewTitle] = useState<string | null>(null);
@@ -157,6 +162,56 @@ export function DocumentLibrary() {
           <pre className="text-preview">{textPreview}</pre>
         </section>
       ) : null}
+    </div>
+  );
+}
+
+function DocumentLibraryPreview() {
+  return (
+    <div className="document-library">
+      <div className="warning-banner">
+        Login is required to upload, extract, download, and store documents.
+      </div>
+      <section className="profile-card">
+        <div>
+          <h2>Upload Document</h2>
+          <p className="metadata">Upload resume files after login so they can be stored privately.</p>
+        </div>
+        <form className="document-upload-form">
+          <input placeholder="Document title" disabled />
+          <input type="file" disabled />
+          <button type="button" disabled>
+            Upload
+          </button>
+        </form>
+      </section>
+      <section className="profile-card">
+        <div className="profile-card-header">
+          <h2>Document Library</h2>
+          <button type="button" className="secondary-button" disabled>
+            Refresh
+          </button>
+        </div>
+        <div className="document-list">
+          <article className="document-row">
+            <div>
+              <h2>Master Resume.pdf</h2>
+              <p className="metadata">resume.pdf | 145 KB | resume</p>
+            </div>
+            <div className="button-row">
+              <button type="button" className="secondary-button" disabled>
+                Text
+              </button>
+              <button type="button" className="secondary-button" disabled>
+                Download
+              </button>
+            </div>
+          </article>
+        </div>
+      </section>
+      <a className="button-link" href="/auth">
+        Login / Register to Manage Documents
+      </a>
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   discoverJobList,
+  getAuthToken,
   importJobList,
   JobListCandidate,
   JobListDiscoverResponse,
@@ -12,6 +13,10 @@ import {
 } from "../lib/api";
 
 export function JobListImportManager() {
+  if (!getAuthToken()) {
+    return <JobListImportPreview />;
+  }
+
   const [listUrl, setListUrl] = useState("");
   const [result, setResult] = useState<JobListDiscoverResponse | null>(null);
   const [selectedUrls, setSelectedUrls] = useState<Set<string>>(new Set());
@@ -32,7 +37,7 @@ export function JobListImportManager() {
   const sortedResumeProfiles = useMemo(
     () =>
       [...resumeProfiles].sort((left, right) => {
-        if (left.is_favorite !== right.is_favorite) return left.is_favorite ? -1 : 1;
+        if (left.is_default !== right.is_default) return left.is_default ? -1 : 1;
         return left.title.localeCompare(right.title);
       }),
     [resumeProfiles],
@@ -239,7 +244,7 @@ export function JobListImportManager() {
                   <option value="">Select resume profile</option>
                   {sortedResumeProfiles.map((profile) => (
                     <option value={profile.id} key={profile.id}>
-                      {profile.is_favorite ? "* " : ""}
+                      {profile.is_default ? "Default - " : ""}
                       {profile.title}
                     </option>
                   ))}
@@ -296,6 +301,66 @@ export function JobListImportManager() {
           ) : null}
         </section>
       ) : null}
+    </div>
+  );
+}
+
+function JobListImportPreview() {
+  return (
+    <div className="jobs-manager">
+      <div className="warning-banner">
+        Login is required to discover, scrape, import, and match jobs from a list URL.
+      </div>
+      <section className="profile-card">
+        <div className="profile-card-header">
+          <div>
+            <h2>Discover Jobs From List URL</h2>
+            <p className="metadata">Paste a job search page after login and review discovered postings.</p>
+          </div>
+        </div>
+        <form className="inline-form resume-upload-form">
+          <label>
+            Job list URL
+            <input value="https://company.com/careers/search" readOnly />
+          </label>
+          <button type="button" disabled>
+            Discover Jobs
+          </button>
+        </form>
+      </section>
+      <section className="profile-card">
+        <div className="profile-card-header">
+          <div>
+            <h2>Review Discovered Jobs</h2>
+            <p className="metadata">2 of 2 selected.</p>
+          </div>
+        </div>
+        <div className="bulk-import-table">
+          <div className="bulk-import-row bulk-import-header">
+            <span>Select</span>
+            <span>Job</span>
+            <span>Status</span>
+          </div>
+          {["Backend Engineer", "Machine Learning Engineer"].map((title) => (
+            <label className="bulk-import-row" key={title}>
+              <span>
+                <input type="checkbox" checked readOnly />
+              </span>
+              <span>
+                <strong>{title}</strong>
+                <span className="metadata">https://example.com/jobs/{title.toLowerCase().replaceAll(" ", "-")}</span>
+              </span>
+              <span className="score-badge">new</span>
+            </label>
+          ))}
+        </div>
+        <button type="button" disabled>
+          Import 2 Selected
+        </button>
+      </section>
+      <a className="button-link" href="/auth">
+        Login / Register to Import Jobs
+      </a>
     </div>
   );
 }

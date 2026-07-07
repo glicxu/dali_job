@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  getAuthToken,
   importIndeedSearchResults,
   IndeedJobSearchResponse,
   IndeedJobSearchResult,
@@ -15,7 +16,18 @@ function resultKey(result: IndeedJobSearchResult): string {
   return result.source_url || result.external_id || `${result.title}|${result.company}|${result.location}`;
 }
 
+function descriptionParagraphs(value: string): string[] {
+  return value
+    .split(/\n{2,}|\r?\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+}
+
 export function IndeedJobSearchManager() {
+  if (!getAuthToken()) {
+    return <IndeedJobSearchPreview />;
+  }
+
   const [keyword, setKeyword] = useState("");
   const [location, setLocation] = useState("");
   const [result, setResult] = useState<IndeedJobSearchResponse | null>(null);
@@ -37,7 +49,7 @@ export function IndeedJobSearchManager() {
   const sortedResumeProfiles = useMemo(
     () =>
       [...resumeProfiles].sort((left, right) => {
-        if (left.is_favorite !== right.is_favorite) return left.is_favorite ? -1 : 1;
+        if (left.is_default !== right.is_default) return left.is_default ? -1 : 1;
         return left.title.localeCompare(right.title);
       }),
     [resumeProfiles],
@@ -146,110 +158,106 @@ export function IndeedJobSearchManager() {
       </section>
 
       {result ? (
-        <section className="profile-card">
-          <div className="profile-card-header">
-            <div>
-              <h2>Search Results</h2>
-              <p className="metadata">
-                {selectedResults.length} of {results.length} selected.
-              </p>
-            </div>
-            <div className="button-row">
-              <button type="button" className="secondary-button" onClick={() => setSelectedKeys(new Set())}>
-                Clear
-              </button>
-              <button type="button" className="secondary-button" onClick={() => setAllResults(results)}>
-                Select All
-              </button>
-            </div>
-          </div>
-
-          {result.warnings.length ? (
-            <div className="warning-banner">
-              {result.warnings.map((warning) => (
-                <span key={warning}>{warning}</span>
-              ))}
-            </div>
-          ) : null}
-
-          <div className="bulk-import-table">
-            <div className="bulk-import-row bulk-import-header indeed-search-row">
-              <span>Select</span>
-              <span>Job</span>
-              <span>Status</span>
-              <span>Actions</span>
-            </div>
-            {results.map((item) => (
-              <div className="bulk-import-row indeed-search-row" key={resultKey(item)}>
-                <span>
-                  <input
-                    type="checkbox"
-                    checked={selectedKeys.has(resultKey(item))}
-                    onChange={() => toggleResult(item)}
-                  />
-                </span>
-                <span>
-                  <strong>{item.title || "Untitled job"}</strong>
-                  <span className="metadata">
-                    {item.company || "Unknown company"} {item.location ? `| ${item.location}` : ""}
-                  </span>
-                  <span className="metadata">{item.source_url || "No source URL returned"}</span>
-                </span>
-                <span className="score-badge">{item.status.replace("_", " ")}</span>
-                <span>
-                  <button type="button" className="secondary-button" onClick={() => setActiveResult(item)}>
-                    View
-                  </button>
-                </span>
+        <section className="job-search-workspace">
+          <section className="profile-card">
+            <div className="profile-card-header">
+              <div>
+                <h2>Search Results</h2>
+                <p className="metadata">
+                  {selectedResults.length} of {results.length} selected.
+                </p>
               </div>
-            ))}
-          </div>
-
-          <div className="bulk-import-options">
-            <label className="checkbox-row">
-              <input type="checkbox" checked={runMatching} onChange={(event) => setRunMatching(event.target.checked)} />
-              Run matching after import
-            </label>
-            {runMatching ? (
-              <label>
-                Resume profile
-                <select value={resumeProfileId} onChange={(event) => setResumeProfileId(event.target.value)} required>
-                  <option value="">Select resume profile</option>
-                  {sortedResumeProfiles.map((profile) => (
-                    <option value={profile.id} key={profile.id}>
-                      {profile.is_favorite ? "* " : ""}
-                      {profile.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-          </div>
-
-          <button type="button" disabled={!canImport || isImporting} onClick={() => void importSelected()}>
-            {isImporting ? "Importing..." : `Import ${selectedResults.length} Selected`}
-          </button>
-        </section>
-      ) : null}
-
-      {activeResult ? (
-        <section className="profile-card">
-          <div className="profile-card-header">
-            <div>
-              <h2>{activeResult.title || "Untitled Job"}</h2>
-              <p className="metadata">
-                {activeResult.company || "Unknown company"} {activeResult.location ? `| ${activeResult.location}` : ""}
-              </p>
+              <div className="button-row">
+                <button type="button" className="secondary-button" onClick={() => setSelectedKeys(new Set())}>
+                  Clear
+                </button>
+                <button type="button" className="secondary-button" onClick={() => setAllResults(results)}>
+                  Select All
+                </button>
+              </div>
             </div>
-            <button type="button" className="secondary-button" onClick={() => setActiveResult(null)}>
-              Close
+
+            {result.warnings.length ? (
+              <div className="warning-banner">
+                {result.warnings.map((warning) => (
+                  <span key={warning}>{warning}</span>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="bulk-import-table">
+              <div className="bulk-import-row bulk-import-header indeed-search-row">
+                <span>Select</span>
+                <span>Job</span>
+                <span>Status</span>
+                <span>Actions</span>
+              </div>
+              {results.map((item) => {
+                const key = resultKey(item);
+                const isActive = activeResult ? resultKey(activeResult) === key : false;
+                return (
+                  <div className={`bulk-import-row indeed-search-row${isActive ? " selected" : ""}`} key={key}>
+                    <span>
+                      <input
+                        type="checkbox"
+                        checked={selectedKeys.has(key)}
+                        onChange={() => toggleResult(item)}
+                      />
+                    </span>
+                    <span>
+                      <strong>{item.title || "Untitled job"}</strong>
+                      <span className="metadata">
+                        {item.company || "Unknown company"} {item.location ? `| ${item.location}` : ""}
+                      </span>
+                      <span className="metadata">{item.source_url || "No source URL returned"}</span>
+                    </span>
+                    <span className="score-badge">{item.status.replace("_", " ")}</span>
+                    <span>
+                      <button type="button" className="secondary-button" onClick={() => setActiveResult(item)}>
+                        View
+                      </button>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="bulk-import-options">
+              <label className="checkbox-row">
+                <input type="checkbox" checked={runMatching} onChange={(event) => setRunMatching(event.target.checked)} />
+                Run matching after import
+              </label>
+              {runMatching ? (
+                <label>
+                  Resume profile
+                  <select value={resumeProfileId} onChange={(event) => setResumeProfileId(event.target.value)} required>
+                    <option value="">Select resume profile</option>
+                    {sortedResumeProfiles.map((profile) => (
+                      <option value={profile.id} key={profile.id}>
+                        {profile.is_default ? "Default - " : ""}
+                        {profile.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
+
+            <button type="button" disabled={!canImport || isImporting} onClick={() => void importSelected()}>
+              {isImporting ? "Importing..." : `Import ${selectedResults.length} Selected`}
             </button>
+          </section>
+
+          <div className="job-search-detail-pane">
+            {activeResult ? (
+              <JobSearchResultDetail result={activeResult} onClose={() => setActiveResult(null)} />
+            ) : (
+              <section className="saved-jobs-empty-detail">
+                <h2>Job Description</h2>
+                <p className="empty">Select View from a search result to open the job description here.</p>
+              </section>
+            )}
           </div>
-          {activeResult.source_url ? <p className="metadata">{activeResult.source_url}</p> : null}
-          {activeResult.summary ? <p className="summary">{activeResult.summary}</p> : null}
-          <pre className="text-preview large-preview">
-            {activeResult.raw_description_text || "No detailed description was returned for this result."}
-          </pre>
         </section>
       ) : null}
 
@@ -285,6 +293,111 @@ export function IndeedJobSearchManager() {
           ) : null}
         </section>
       ) : null}
+    </div>
+  );
+}
+
+function JobSearchResultDetail({
+  result,
+  onClose,
+}: {
+  result: IndeedJobSearchResult;
+  onClose: () => void;
+}) {
+  const paragraphs = descriptionParagraphs(
+    result.raw_description_text || result.summary || "No detailed description was returned for this result.",
+  );
+
+  return (
+    <section className="profile-card job-search-detail-card">
+      <div className="profile-card-header">
+        <div>
+          <h2>{result.title || "Untitled Job"}</h2>
+          <p className="metadata">
+            {result.company || "Unknown company"} {result.location ? `| ${result.location}` : ""}
+          </p>
+        </div>
+        <button type="button" className="secondary-button" onClick={onClose}>
+          Close
+        </button>
+      </div>
+      {result.source_url ? <p className="metadata">{result.source_url}</p> : null}
+      {result.summary ? <p className="summary">{result.summary}</p> : null}
+      <div className="job-description-text">
+        {paragraphs.map((paragraph) => (
+          <p key={paragraph}>{paragraph}</p>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function IndeedJobSearchPreview() {
+  return (
+    <div className="jobs-manager">
+      <div className="warning-banner">
+        Login is required to search for jobs and import selected postings.
+      </div>
+      <section className="profile-card">
+        <div className="profile-card-header">
+          <div>
+            <h2>Job Search</h2>
+            <p className="metadata">Search jobs, review results, and import selected postings after login.</p>
+          </div>
+        </div>
+        <form className="inline-form">
+          <label>
+            Keyword
+            <input value="software engineer" readOnly />
+          </label>
+          <label>
+            Location
+            <input value="Maryland" readOnly />
+          </label>
+          <button type="button" disabled>
+            Search
+          </button>
+        </form>
+      </section>
+      <section className="profile-card">
+        <div className="profile-card-header">
+          <div>
+            <h2>Search Results</h2>
+            <p className="metadata">2 of 2 selected.</p>
+          </div>
+        </div>
+        <div className="bulk-import-table">
+          <div className="bulk-import-row bulk-import-header indeed-search-row">
+            <span>Select</span>
+            <span>Job</span>
+            <span>Status</span>
+            <span>Actions</span>
+          </div>
+          {["Software Engineer", "Data Platform Engineer"].map((title) => (
+            <div className="bulk-import-row indeed-search-row" key={title}>
+              <span>
+                <input type="checkbox" checked readOnly />
+              </span>
+              <span>
+                <strong>{title}</strong>
+                <span className="metadata">Example Company | Remote</span>
+              </span>
+              <span className="score-badge">new</span>
+              <span>
+                <button type="button" className="secondary-button" disabled>
+                  View
+                </button>
+              </span>
+            </div>
+          ))}
+        </div>
+        <button type="button" disabled>
+          Import 2 Selected
+        </button>
+      </section>
+      <a className="button-link" href="/auth">
+        Login / Register to Search Jobs
+      </a>
     </div>
   );
 }

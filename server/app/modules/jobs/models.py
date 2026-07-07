@@ -54,6 +54,37 @@ class JobCache(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class UserEditedJob(Base):
+    __tablename__ = "user_edited_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    company: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    raw_description_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    job_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class UserSavedJob(Base):
     __tablename__ = "user_saved_jobs"
 
@@ -70,10 +101,16 @@ class UserSavedJob(Base):
         nullable=False,
         index=True,
     )
-    jobs_cache_id: Mapped[int] = mapped_column(
+    jobs_cache_id: Mapped[int | None] = mapped_column(
         Integer,
-        ForeignKey("jobs_cache.id", ondelete="CASCADE"),
-        nullable=False,
+        ForeignKey("jobs_cache.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    user_edited_job_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("user_edited_jobs.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

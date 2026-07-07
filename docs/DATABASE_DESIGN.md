@@ -163,7 +163,7 @@ Stores each structured resume profile as one JSON document. A user can have mult
 
 `resume_profiles.resume_data` intentionally excludes personal contact information such as name, email, phone number, residential location, personal website, and social profile URLs. Uploaded resume text should be redacted before AI parsing, and only non-contact career facts should be stored in the JSON document.
 
-Favorites are a sorting and usability feature, not an ownership or canonical-data rule. A user may favorite zero, one, or many resume profiles. The UI should display favorited resumes first, then non-favorited resumes by most recently updated.
+Default resume selection is a sorting and usability feature, not an ownership or canonical-data rule. A user may have only one default resume profile. The UI should display the default resume first, then other resumes by most recently updated. When a user creates their first resume profile, DaliJob should make it the default automatically.
 
 | Field | Type | Notes |
 | --- | --- | --- |
@@ -174,7 +174,7 @@ Favorites are a sorting and usability feature, not an ownership or canonical-dat
 | resume_data | jsonb | Required structured resume JSON |
 | source_document_id | integer | Nullable FK to uploaded source resume document |
 | source_document_version_id | integer | Nullable FK to exact uploaded source version |
-| is_favorite | boolean | Required, default false |
+| is_default | boolean | Required, default false |
 | created_at | timestamptz | Required |
 | updated_at | timestamptz | Required |
 | deleted_at | timestamptz | Nullable |
@@ -234,7 +234,7 @@ The older one-row `profiles.resume_data` design is intentionally removed. If Dal
 
 ### jobs_cache
 
-The implemented `jobs_cache` table stores the canonical job posting source data: cleaned raw posting text plus optional structured `job_data` JSON. It does not contain `user_id`, `workspace_id`, notes, or match scores. It is used to avoid repeated scraping and repeated OpenAI parsing for the same URL. User-facing saved-job ownership and notes live in `user_saved_jobs`, and resume-specific match scores live in `job_resume_matches`.
+The implemented `jobs_cache` table stores reusable job posting source data from URLs: cleaned raw posting text plus optional structured `job_data` JSON. It does not contain `user_id`, `workspace_id`, notes, or match scores. It is used to avoid repeated scraping and repeated OpenAI parsing for the same URL. User-facing saved-job ownership and notes live in `user_saved_jobs`; private manual or edited job details live in `user_edited_jobs`; resume-specific match scores live in `job_resume_matches`.
 
 DaliJob should use lazy job parsing for bulk imports and Apify-backed imports. Those flows should create or reuse a `jobs_cache` row with title, company, source URL, and raw description text first, then leave `job_data` empty until a feature actually needs structured data. When the user runs resume matching or explicitly requests a structured job profile, the backend checks `jobs_cache.job_data`; if it is missing, the backend parses `raw_description_text` with OpenAI, saves the resulting JSON back to `jobs_cache`, and reuses it for future matches/imports.
 
@@ -276,21 +276,40 @@ DaliJob should use lazy job parsing for bulk imports and Apify-backed imports. T
 }
 ```
 
-Future application tracking may add or derive columns such as `remote_policy`, `closing_date`, `compensation_min`, and `compensation_max` when those fields need filtering/sorting. The cache JSON remains the canonical parsed job description from the original source URL after parsing has occurred. When a URL has already been parsed, matching and detail flows should reuse `jobs_cache.job_data` and `raw_description_text` as the starting point instead of spending another OpenAI job parsing call.
+Future application tracking may add or derive columns such as `remote_policy`, `closing_date`, `compensation_min`, and `compensation_max` when those fields need filtering/sorting. The cache JSON remains the reusable parsed job description from the original source URL after parsing has occurred. When a URL has already been parsed, matching and detail flows should reuse `jobs_cache.job_data` and `raw_description_text` instead of spending another OpenAI job parsing call. If a user corrects missing or inaccurate fields, DaliJob stores the correction in `user_edited_jobs` and leaves `jobs_cache` unchanged.
 
 Bulk job-list import does not require a separate core job table for the MVP. A listing URL discovery step should extract individual posting URLs, then each selected posting URL should flow through the same `jobs_cache` lookup and `user_saved_jobs` relationship pipeline. Apify-backed Indeed search should follow the same storage model: returned results are temporary review data until the user imports them, then selected results create or reuse `jobs_cache` rows and create `user_saved_jobs` rows. Bulk and Apify imports should not call OpenAI just to save jobs. A future `job_import_runs` or `job_search_runs` table can be added if DaliJob needs persistent import/search history, retry state, Apify dataset IDs, cost tracking, or background progress tracking across many pages.
 
 ### user_saved_jobs
 
-Stores the current user's saved-job relationship and notes. The Jobs page should query `user_saved_jobs` joined to `jobs_cache`, so the API can return notes and canonical job details in one database query. Users cannot modify `jobs_cache.job_data` from the saved Jobs page.
+Stores the current user's saved-job relationship and notes. The Jobs page should query `user_saved_jobs` with optional joins to `jobs_cache` and `user_edited_jobs`, so the API can return notes and effective job details in one database query. Imported URL jobs normally have `jobs_cache_id` set and `user_edited_job_id` null. Manual jobs have `jobs_cache_id` null and `user_edited_job_id` set. Imported jobs that the user later edits keep `jobs_cache_id` set and also receive `user_edited_job_id`.
 
 | Field | Type | Notes |
 | --- | --- | --- |
 | id | integer | Primary key |
 | workspace_id | integer | FK |
 | user_id | integer | FK user who saved the job |
-| jobs_cache_id | integer | Required FK to `jobs_cache` |
+| jobs_cache_id | integer | Nullable FK to `jobs_cache`; null for manual/user-only jobs |
+| user_edited_job_id | integer | Nullable FK to `user_edited_jobs`; set for manual jobs or user-specific edits |
 | notes | text | Nullable user-specific notes |
+| created_at | timestamptz | Required |
+| updated_at | timestamptz | Required |
+| deleted_at | timestamptz | Nullable soft delete |
+
+### user_edited_jobs
+
+Stores private user-specific job details only when needed. This table is used for manual jobs and for imported jobs whose title, company, source URL, raw description, or structured JSON has been modified by the user. If `user_saved_jobs.user_edited_job_id` is null, the app displays and matches from `jobs_cache`.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | integer | Primary key |
+| workspace_id | integer | FK |
+| user_id | integer | FK owner of the edited job detail |
+| title | text | User-owned job title |
+| company | text | User-owned company |
+| source_url | text | Nullable source URL |
+| raw_description_text | text | User-owned raw job description text |
+| job_data | jsonb | Nullable user-owned structured job JSON used for display and matching |
 | created_at | timestamptz | Required |
 | updated_at | timestamptz | Required |
 | deleted_at | timestamptz | Nullable soft delete |
@@ -663,7 +682,7 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 - `resume_job_matches.application_id`.
 - `application_events.application_id, created_at`.
 - `document_versions.document_id, version_number` unique.
-- `resume_profiles.workspace_id, user_id, is_favorite, updated_at`.
+- `resume_profiles.workspace_id, user_id, is_default, updated_at`.
 - `resume_versions.workspace_id, resume_profile_id, version_number`.
 - `cover_letter_versions.application_id, version_number`.
 - `email_messages.integration_id, provider_message_id` unique.

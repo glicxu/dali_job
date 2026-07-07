@@ -223,10 +223,11 @@ def import_job_list(
             match_score = None
             match_id = None
             if payload.run_matching and payload.resume_profile_id:
+                user_job_for_match = repository.get_user_job_for_identity(db, identity, saved_job["id"])
+                if user_job_for_match is None:
+                    raise ValueError("Saved job could not be found for matching.")
                 cached_for_match = repository.get_cached_job_by_id(db, saved_job["jobs_cache_id"])
-                if cached_for_match is None:
-                    raise ValueError("Saved job cache row could not be found for matching.")
-                job_data = repository.ensure_job_data(db, cached_for_match, parser)
+                job_data = repository.ensure_saved_job_data(db, user_job_for_match, cached_for_match, parser)
                 saved_match = _create_resume_profile_match(
                     db,
                     identity,
@@ -287,9 +288,7 @@ def analyze_job(
     if user_job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
     job_cache = repository.get_job_cache_for_saved_job(db, user_job)
-    if job_cache is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cached job not found.")
-    repository.ensure_job_data(db, job_cache, parser)
+    repository.ensure_saved_job_data(db, user_job, job_cache, parser)
     return repository.job_response_for_identity(db, identity, user_job)
 
 

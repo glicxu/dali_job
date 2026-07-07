@@ -2,7 +2,7 @@ import { IndeedJobSearchManager } from "../../../components/IndeedJobSearchManag
 
 export default function IndeedJobSearchPage() {
   return (
-    <section className="panel">
+    <section className="panel jobs-panel">
       <div>
         <p className="eyebrow">Job Search</p>
         <h1>Job Search</h1>

@@ -1,9 +1,13 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { extractJobUrl, JobUrlExtractResponse } from "../lib/api";
+import { extractJobUrl, getAuthToken, JobUrlExtractResponse } from "../lib/api";
 
 export function JobUrlDebugTool() {
+  if (!getAuthToken()) {
+    return <JobUrlDebugPreview />;
+  }
+
   const [jobUrl, setJobUrl] = useState("");
   const [result, setResult] = useState<JobUrlExtractResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +59,38 @@ export function JobUrlDebugTool() {
           <pre className="text-preview large-preview">{result.extracted_text}</pre>
         </section>
       ) : null}
+    </div>
+  );
+}
+
+function JobUrlDebugPreview() {
+  return (
+    <div className="debug-tool">
+      <div className="warning-banner">
+        Login is required to scrape and debug job URLs.
+      </div>
+      <form className="profile-card">
+        <label>
+          Job Description URL
+          <input value="https://company.com/careers/job-id" readOnly />
+        </label>
+        <button type="button" disabled>
+          Scrape URL
+        </button>
+      </form>
+      <section className="profile-card">
+        <div>
+          <h2>Scraped Text</h2>
+          <p className="metadata">Example preview</p>
+        </div>
+        <pre className="text-preview large-preview">
+          Job title, responsibilities, required skills, qualifications, and application details would appear here
+          after login.
+        </pre>
+      </section>
+      <a className="button-link" href="/auth">
+        Login / Register to Debug URLs
+      </a>
     </div>
   );
 }

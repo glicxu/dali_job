@@ -59,7 +59,7 @@ Score meaning:
 - `5`: partial match with several important gaps.
 - `10`: excellent match where the resume strongly supports the job's core requirements.
 
-The first prototype started with pasted text only. After document management is available, the matcher should support selecting a structured resume profile or uploaded resume document and pasting a job URL, while retaining pasted text fallbacks for pages that block extraction. The resume selector should list favorited resume profiles first, followed by other resume profiles, uploaded resume documents, and pasted-text fallback. The job URL field and pasted job description field should be mutually exclusive. In either mode, the server should save high-compatibility jobs automatically and let the user decide whether to save jobs with a score below 5. `jobs_cache` is the canonical job detail cache, `user_saved_jobs` stores each user's saved-job relationship and notes, and match scores are user/resume-specific in `job_resume_matches`.
+The first prototype started with pasted text only. After document management is available, the matcher should support selecting a structured resume profile or uploaded resume document and pasting a job URL, while retaining pasted text fallbacks for pages that block extraction. The resume selector should list the default resume profile first, followed by other resume profiles, uploaded resume documents, and pasted-text fallback. The job URL field and pasted job description field should be mutually exclusive. In either mode, the server should save high-compatibility jobs automatically and let the user decide whether to save jobs with a score below 5. `jobs_cache` is the reusable URL source cache, `user_saved_jobs` stores each user's saved-job relationship and notes, `user_edited_jobs` stores manual jobs and private corrections, and match scores are user/resume-specific in `job_resume_matches`.
 
 The matcher should also support bulk matching from Saved Jobs. In that flow, the user selects multiple `user_saved_jobs` rows, chooses one resume source on the Match page, and the server compares that resume against each selected saved job. Because the jobs are already saved, low-score bulk match results should still be stored in `job_resume_matches` without an additional save/discard prompt.
 
@@ -84,7 +84,7 @@ The signed-out homepage may include static, non-database-backed previews of the 
 
 The signed-out preview must not include future application tracking until that product area is intentionally designed. It must also avoid live AI, scraping, provider integrations, uploads, or user-specific database reads/writes. Example cards, mock scores, and sample match explanations should be hardcoded or otherwise free to render.
 
-Public navigation may show links to public overview sections and a clear Login/Register action. Any route that would use user data, OpenAI, Apify, scraping, file uploads, or persistence must require authentication and should show a login-required panel or redirect to `/auth`.
+Public navigation should expose the major app pages so prospective users can inspect the workflow before registering. Signed-out versions of those pages must be static read-only previews. Any live action that would use user data, OpenAI, Apify, scraping, file uploads, or persistence must require authentication and should direct the user to `/auth`.
 
 The signed-in homepage should not be a marketing landing page and should not mention internal providers such as Apify or OpenAI.
 
@@ -99,7 +99,7 @@ Recommended next-step priority:
 
 1. If the user has no resume profiles, recommend creating or importing a resume profile.
 2. If the user has no saved jobs, recommend searching or importing jobs.
-3. If saved jobs exist but some are missing `jobs_cache.job_data`, recommend analyzing saved jobs.
+3. If saved jobs exist but their effective job source is missing structured `job_data`, recommend analyzing saved jobs.
 4. If analyzed saved jobs exist without match results, recommend running resume/job matching.
 5. If matches exist, recommend reviewing the best matches and deciding which jobs to apply to.
 
@@ -126,7 +126,7 @@ Each `resume_profiles.resume_data` object contains sections such as:
 
 Resume profile JSON should avoid storing personal contact information. Name, email address, phone number, residential location, personal websites, and social profile URLs should be redacted from uploaded resume text before AI parsing and excluded from `resume_profiles.resume_data`.
 
-DaliJob should not require one primary resume. Users can star or favorite any number of resume profiles. The profile page and resume selectors should sort favorited resumes first, then non-favorited resumes by most recently updated. Favorites are a UI prioritization signal only; they do not prevent the user from matching, editing, tailoring, or applying with any resume profile.
+DaliJob should allow multiple resume profiles but only one default resume profile. The first resume profile a user creates should become the default automatically. The profile page and resume selectors should sort the default resume first, then other resumes by most recently updated. The default is a UI prioritization signal only; it does not prevent the user from matching, editing, tailoring, or applying with any other resume profile.
 
 ### 4.2 Career Knowledge Base
 
@@ -169,7 +169,7 @@ Manual entry is a core workflow, not a fallback-only feature. A user must be abl
 
 URL extraction is a convenience feature. If the page cannot be fetched, blocks automated access, requires authentication, renders content client-side, or does not expose parseable job data, DaliJob should keep the URL and let the user manually fill or paste the missing fields. URL extraction must not be required for application tracking.
 
-The implemented job import flow creates reviewable drafts from URL or pasted text before saving. Users can also start with a blank manual job form. Saved jobs are represented by `user_saved_jobs` rows that reference `jobs_cache` rows, so the same URL can appear in multiple users' job lists without refetching or reparsing the posting while still allowing private user notes.
+The implemented job import flow creates reviewable drafts from URL or pasted text before saving. Users can also start with a blank manual job form. URL-backed saved jobs are represented by `user_saved_jobs` rows that reference `jobs_cache` rows, so the same URL can be reused without refetching or reparsing. If a user privately corrects title, company, raw text, or structured `job_data`, the app creates a linked `user_edited_jobs` row. Manual jobs without a URL use `user_edited_jobs` with `user_saved_jobs.jobs_cache_id = null`.
 
 Bulk job-list import should be a separate workflow from the one-job Match page. The Match page remains focused on comparing one resume against one job source. Bulk import belongs on a dedicated page such as `/jobs/import` or a clearly separated Jobs page section because it has a review/select/import workflow.
 
@@ -179,9 +179,9 @@ Bulk import methodology:
 2. The server fetches the listing page with conservative timeouts, rate limits, and source access checks.
 3. The server extracts candidate individual job posting URLs, normalizes and deduplicates them, and labels each as new, already cached, or failed/unknown when possible.
 4. The client shows a review table so the user can select which jobs to import. DaliJob must not silently import every discovered job.
-5. For each selected job URL, the server checks `jobs_cache`, reuses existing cached source data when available, otherwise scrapes the detail page, saves `raw_description_text`, title/company when known, and creates a user-specific `user_saved_jobs` row.
+5. For each selected job URL, the server checks `jobs_cache`, reuses existing cached source data when available, otherwise scrapes the detail page, saves `raw_description_text`, title/company when known, and creates a lightweight user-specific `user_saved_jobs` row.
 6. Bulk import should not call OpenAI just to save jobs. `jobs_cache.job_data` may remain empty until matching or a structured job-profile action needs it.
-7. Optional batch matching can run after import when the user selects a resume profile. In that case, matching lazily parses any selected job whose `job_data` is missing, then saves `job_data` back to `jobs_cache`.
+7. Optional batch matching can run after import when the user selects a resume profile. In that case, matching lazily parses any selected job whose effective `job_data` is missing, then saves `job_data` to `jobs_cache` for unmodified URL-backed jobs or `user_edited_jobs` for manual/edited jobs.
 
 The first implementation should cap the number of discovered/imported jobs per request, for example 10 to 25, and can start with the first listing page only. Pagination and JavaScript-rendered listing support should be added after the basic workflow is reliable.
 
@@ -198,7 +198,7 @@ Lazy job parsing rules:
 
 - Single-job draft/manual flows may parse immediately because the user is actively reviewing one job.
 - Bulk job-list import and Apify search import should save source data first and defer OpenAI parsing.
-- Before any match, the backend must ensure structured `job_data` exists. If it does not, parse `raw_description_text`, save `job_data`, and continue matching.
+- Before any match, the backend must ensure structured `job_data` exists on the effective job source. If a saved job has `user_edited_job_id`, use or populate `user_edited_jobs.job_data`; otherwise use or populate `jobs_cache.job_data`.
 - If parsing fails, return a clear message so the user can retry or paste cleaner text.
 - Existing parsed cache rows should be reused by URL before making another OpenAI call.
 
@@ -245,7 +245,7 @@ Apify Indeed search workflow:
 7. The user can open a job result to inspect the full description.
 8. The user selects one or more jobs to import.
 9. Imported jobs flow through the existing `jobs_cache` and `user_saved_jobs` pipeline without immediate OpenAI parsing unless match-on-import is selected.
-10. Optional match-on-import can run when the user selects a resume profile; this lazily parses missing `job_data` before matching.
+10. Optional match-on-import can run when the user selects a resume profile; this lazily parses missing effective `job_data` before matching.
 
 The Apify API token must stay server-side and must never be exposed to the client. The integration should handle Apify actor failures, empty datasets, quota/token errors, and timeouts with clear user-facing errors. Since Apify calls can cost credits, the UI must not trigger searches on every keystroke. Searches should require an explicit submit action.
 
@@ -274,7 +274,7 @@ Actor input shape for `misceres/indeed-scraper`:
 
 DaliJob's client-facing `keyword` maps to Apify `position`, `location` maps to Apify `location`, and the first implementation uses `country: "US"`. DaliJob caps `maxItemsPerSearch` to 5 for the first UI. Keep `parseCompanyDetails: false` and `followApplyRedirects: false` to reduce runtime, cost, and redirect risk. Keep `saveOnlyUniqueItems: true`.
 
-Apify results are external data and should be normalized into DaliJob's internal source-data model before storage. The client should not depend directly on Apify field names. If Apify returns a `source_url` already present in `jobs_cache`, DaliJob should reuse the cached job rather than creating duplicate canonical job rows. Apify import should store `raw_description_text` and metadata first; structured `job_data` should be generated lazily only when matching or a structured job profile requires it.
+Apify results are external data and should be normalized into DaliJob's internal source-data model before storage. The client should not depend directly on Apify field names. If Apify returns a `source_url` already present in `jobs_cache`, DaliJob should reuse the cached job rather than creating duplicate cache rows. Apify import should store `raw_description_text` and metadata first; structured `job_data` should be generated lazily only when matching or a structured job profile requires it.
 
 ### 4.4 Job Analysis Pipeline
 

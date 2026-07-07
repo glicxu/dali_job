@@ -34,7 +34,7 @@ REQUIRED_TABLE_COLUMNS: dict[str, set[str]] = {
         "resume_data",
         "source_document_id",
         "source_document_version_id",
-        "is_favorite",
+        "is_default",
         "created_at",
         "updated_at",
         "deleted_at",

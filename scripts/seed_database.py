@@ -102,7 +102,7 @@ def main() -> int:
             user_id,
             title,
             resume_data,
-            is_favorite,
+            is_default,
             created_at,
             updated_at
         )
@@ -133,7 +133,7 @@ def main() -> int:
         ON DUPLICATE KEY UPDATE
             title = VALUES(title),
             resume_data = VALUES(resume_data),
-            is_favorite = VALUES(is_favorite),
+            is_default = VALUES(is_default),
             updated_at = UTC_TIMESTAMP(6)
         """,
         {

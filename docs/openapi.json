@@ -2627,6 +2627,17 @@
             ],
             "title": "Jobs Cache Id"
           },
+          "user_edited_job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Edited Job Id"
+          },
           "title": {
             "type": "string",
             "title": "Title"
@@ -2795,6 +2806,11 @@
               }
             ],
             "title": "Notes"
+          },
+          "save_as_user_edit": {
+            "type": "boolean",
+            "title": "Save As User Edit",
+            "default": false
           }
         },
         "type": "object",
@@ -3479,9 +3495,9 @@
             ],
             "title": "Source Document Version Id"
           },
-          "is_favorite": {
+          "is_default": {
             "type": "boolean",
-            "title": "Is Favorite",
+            "title": "Is Default",
             "default": false
           }
         },
@@ -3547,9 +3563,9 @@
             ],
             "title": "Source Document Version Id"
           },
-          "is_favorite": {
+          "is_default": {
             "type": "boolean",
-            "title": "Is Favorite"
+            "title": "Is Default"
           },
           "created_at": {
             "type": "string",
@@ -3569,7 +3585,7 @@
           "user_id",
           "title",
           "resume_data",
-          "is_favorite",
+          "is_default",
           "created_at",
           "updated_at"
         ],
@@ -3600,7 +3616,7 @@
               }
             ]
           },
-          "is_favorite": {
+          "is_default": {
             "anyOf": [
               {
                 "type": "boolean"
@@ -3609,7 +3625,7 @@
                 "type": "null"
               }
             ],
-            "title": "Is Favorite"
+            "title": "Is Default"
           }
         },
         "type": "object",

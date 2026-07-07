@@ -104,8 +104,8 @@ Acceptance criteria:
 
 - User can create multiple structured resume profiles.
 - Each resume profile stores one validated `resume_data` JSON document.
-- User can favorite zero, one, or many resume profiles.
-- Resume profile list endpoints return favorites first, then most recently updated resumes.
+- User can set exactly one default resume profile.
+- Resume profile list endpoints return the default resume first, then most recently updated resumes.
 
 ### 6. Build Profile And Resume Editor UI
 
@@ -115,7 +115,7 @@ Acceptance criteria:
 
 - User can manage skills, experience, projects, education, and certifications through the JSON-backed resume profile editor.
 - User can star or unstar resumes from the resume profile list.
-- Favorited resumes display first on the profile page and in resume selectors.
+- The default resume displays first on the profile page and in resume selectors.
 - Form validation prevents invalid dates and empty required fields.
 
 ## Milestone: Jobs And Applications

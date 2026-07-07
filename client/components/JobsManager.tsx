@@ -6,6 +6,7 @@ import {
   createJob,
   draftJobFromUrl,
   emptyJobDescriptionData,
+  getAuthToken,
   JobDescriptionData,
   JobSavePayload,
   listDocuments,
@@ -38,6 +39,8 @@ type JobEditorState = {
   job_data: JobDescriptionData;
   notes: string;
   showSaveButton: boolean;
+  hasUserEdits: boolean;
+  isEditing: boolean;
 };
 
 type SupportedRequirementView = {
@@ -106,6 +109,8 @@ function emptyEditorState(): JobEditorState {
     job_data: { ...emptyJobDescriptionData },
     notes: "",
     showSaveButton: true,
+    hasUserEdits: true,
+    isEditing: true,
   };
 }
 
@@ -123,6 +128,8 @@ function editorFromJob(job: StoredJob, showSaveButton = true): JobEditorState {
     job_data: jobDataOrEmpty(job),
     notes: job.notes ?? "",
     showSaveButton,
+    hasUserEdits: false,
+    isEditing: false,
   };
 }
 
@@ -130,6 +137,8 @@ function matchPageHref(job: StoredJob): string {
   const params = new URLSearchParams();
   if (job.source_url) {
     params.set("job_url", job.source_url);
+  } else {
+    params.set("job_ids", String(job.id));
   }
   if (job.matched_resume_profile_id) {
     params.set("resume_profile_id", String(job.matched_resume_profile_id));
@@ -243,6 +252,10 @@ function notePreviewLines(notes: string | null): string[] {
 }
 
 export function JobsManager() {
+  if (!getAuthToken()) {
+    return <JobsManagerPreview />;
+  }
+
   const [jobs, setJobs] = useState<StoredJob[]>([]);
   const [resumeProfiles, setResumeProfiles] = useState<ResumeProfile[]>([]);
   const [documents, setDocuments] = useState<StoredDocument[]>([]);
@@ -349,6 +362,8 @@ export function JobsManager() {
         job_data: draft.job_data,
         notes: "",
         showSaveButton: true,
+        hasUserEdits: false,
+        isEditing: true,
       });
       setStatus("Review and edit the parsed job before saving.");
     } catch (err) {
@@ -377,12 +392,14 @@ export function JobsManager() {
       job_data: nextJobData,
       title: key === "title" ? String(value) : editor.title,
       company: key === "company" ? String(value) : editor.company,
+      hasUserEdits: true,
     });
   }
 
   async function saveJob(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editor) return;
+    if (editor.id && !editor.isEditing) return;
     setError(null);
     setStatus(null);
     if (!editor.raw_description_text.trim()) {
@@ -401,10 +418,13 @@ export function JobsManager() {
       raw_description_text: editor.raw_description_text.trim(),
       job_data: jobData,
       notes: editor.notes.trim() || null,
+      save_as_user_edit: editor.hasUserEdits || !editor.source_url.trim(),
     };
     setIsSaving(true);
     try {
-      const saved = editor.id ? await updateJob(editor.id, payload) : await createJob(payload);
+      const saved = editor.id
+        ? await updateJob(editor.id, editor.hasUserEdits ? payload : { notes: editor.notes.trim() || null })
+        : await createJob(payload);
       setEditor(null);
       setStatus(editor.id ? "Job updated." : "Job saved.");
       await loadJobs();
@@ -553,7 +573,6 @@ export function JobsManager() {
                     <button
                       type="button"
                       className="secondary-button"
-                      disabled={!job.source_url}
                       onClick={() => {
                         window.location.href = matchPageHref(job);
                       }}
@@ -628,6 +647,110 @@ export function JobsManager() {
             </section>
           ) : null}
         </div>
+      </section>
+    </div>
+  );
+}
+
+function JobsManagerPreview() {
+  const previewJobs = [
+    {
+      title: "Backend Software Engineer",
+      company: "Example Cloud Co",
+      location: "Remote",
+      deadline: "Deadline Unavailable",
+      score: "8/10",
+      summary: "Build APIs, improve data workflows, and collaborate with product engineering teams.",
+    },
+    {
+      title: "Data Platform Engineer",
+      company: "Sample Analytics",
+      location: "Maryland",
+      deadline: "Deadline Unavailable",
+      score: "6/10",
+      summary: "Support data pipelines, SQL modeling, and operational reporting systems.",
+    },
+  ];
+
+  return (
+    <div className="jobs-manager">
+      <div className="warning-banner">
+        Login is required to save jobs, import postings, write notes, analyze jobs, and run matching.
+      </div>
+      <section className="profile-card">
+        <div className="profile-card-header">
+          <div>
+            <h2>Import Job</h2>
+            <p className="metadata">Create a draft from a URL or start with manual entry after login.</p>
+          </div>
+        </div>
+        <div className="segmented-control">
+          <button type="button" className="active" disabled>
+            URL
+          </button>
+          <button type="button" disabled>
+            Manual
+          </button>
+        </div>
+        <form className="stack-form">
+          <label>
+            Job URL
+            <input placeholder="https://company.com/careers/job-id" disabled />
+          </label>
+          <button type="button" disabled>
+            Create Draft
+          </button>
+        </form>
+      </section>
+
+      <section className="saved-jobs-workspace">
+        <section className="profile-card saved-jobs-list-card">
+          <div className="profile-card-header">
+            <h2>Saved Jobs</h2>
+            <div className="button-row">
+              <button type="button" disabled>
+                Bulk Match
+              </button>
+              <button type="button" className="secondary-button" disabled>
+                Refresh
+              </button>
+            </div>
+          </div>
+          <div className="job-list">
+            {previewJobs.map((job) => (
+              <article className="job-row" key={job.title}>
+                <div className="job-score-cell">
+                  <span className="score-badge">{job.score}</span>
+                </div>
+                <div>
+                  <h2>{job.title}</h2>
+                  <p className="metadata">
+                    {job.company} | {job.location} | {job.deadline}
+                  </p>
+                  <p className="summary">{job.summary}</p>
+                </div>
+                <div className="button-row job-row-actions">
+                  <button type="button" className="secondary-button" disabled>
+                    Match
+                  </button>
+                  <button type="button" className="secondary-button" disabled>
+                    Match Data
+                  </button>
+                  <button type="button" className="secondary-button" disabled>
+                    View
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+        <section className="saved-jobs-empty-detail">
+          <h2>Job Details</h2>
+          <p className="empty">Login to open saved job details, notes, and match data here.</p>
+          <a className="button-link" href="/auth">
+            Login / Register
+          </a>
+        </section>
       </section>
     </div>
   );
@@ -782,10 +905,25 @@ function JobEditor({
   onClose: () => void;
 }) {
   const isSavedJob = Boolean(editor.id);
-  const detailFieldHint = isSavedJob ? "Saved job details are read-only." : undefined;
+  const canEdit = !isSavedJob || editor.isEditing;
+  const detailFieldHint = isSavedJob
+    ? canEdit
+      ? "Changes save only to your saved job copy."
+      : "Click Edit before changing this saved job."
+    : undefined;
+  const updateDetail = (patch: Partial<JobEditorState>) => onChange({ ...editor, ...patch, hasUserEdits: true });
 
   return (
-    <form className="profile-card job-editor" onSubmit={onSave}>
+    <form
+      className="profile-card job-editor"
+      onSubmit={(event) => {
+        if (isSavedJob && !editor.isEditing) {
+          event.preventDefault();
+          return;
+        }
+        void onSave(event);
+      }}
+    >
       <div className="profile-card-header">
         <div>
           <h2>{isSavedJob ? "Saved Job Details" : "Review Job Draft"}</h2>
@@ -797,9 +935,20 @@ function JobEditor({
           <button type="button" className="secondary-button" onClick={onClose}>
             Close
           </button>
-          {editor.showSaveButton ? (
+          {isSavedJob && !editor.isEditing ? (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onChange({ ...editor, isEditing: true });
+              }}
+            >
+              Edit
+            </button>
+          ) : editor.showSaveButton ? (
             <button type="submit" disabled={isSaving}>
-              {isSaving ? "Saving..." : isSavedJob ? "Save Notes" : "Save Job"}
+              {isSaving ? "Saving..." : isSavedJob ? "Save changes" : "Save Job"}
             </button>
           ) : null}
         </div>
@@ -807,7 +956,11 @@ function JobEditor({
 
       <label>
         Notes
-        <textarea value={editor.notes} onChange={(event) => onChange({ ...editor, notes: event.target.value })} />
+        <textarea
+          value={editor.notes}
+          readOnly={!canEdit}
+          onChange={(event) => onChange({ ...editor, notes: event.target.value })}
+        />
       </label>
 
       <div className="profile-grid">
@@ -815,8 +968,8 @@ function JobEditor({
           Title
           <input
             value={editor.title}
-            onChange={(event) => onChange({ ...editor, title: event.target.value })}
-            readOnly={isSavedJob}
+            readOnly={!canEdit}
+            onChange={(event) => updateDetail({ title: event.target.value })}
             title={detailFieldHint}
           />
         </label>
@@ -824,8 +977,8 @@ function JobEditor({
           Company
           <input
             value={editor.company}
-            onChange={(event) => onChange({ ...editor, company: event.target.value })}
-            readOnly={isSavedJob}
+            readOnly={!canEdit}
+            onChange={(event) => updateDetail({ company: event.target.value })}
             title={detailFieldHint}
           />
         </label>
@@ -834,8 +987,8 @@ function JobEditor({
           <input
             type="url"
             value={editor.source_url}
-            onChange={(event) => onChange({ ...editor, source_url: event.target.value })}
-            readOnly={isSavedJob}
+            readOnly={!canEdit}
+            onChange={(event) => updateDetail({ source_url: event.target.value })}
             title={detailFieldHint}
           />
         </label>
@@ -843,12 +996,13 @@ function JobEditor({
           Deadline
           <input
             value={
-              isSavedJob && !editor.job_data.application_deadline.trim()
+              isSavedJob && !canEdit && !editor.job_data.application_deadline.trim()
                 ? "Deadline Unavailable"
                 : editor.job_data.application_deadline
             }
+            placeholder="Deadline Unavailable"
+            readOnly={!canEdit}
             onChange={(event) => onJobDataChange("application_deadline", event.target.value)}
-            readOnly={isSavedJob}
             title={detailFieldHint}
           />
         </label>
@@ -856,8 +1010,8 @@ function JobEditor({
           Location
           <input
             value={editor.job_data.work_location}
+            readOnly={!canEdit}
             onChange={(event) => onJobDataChange("work_location", event.target.value)}
-            readOnly={isSavedJob}
             title={detailFieldHint}
           />
         </label>
@@ -865,8 +1019,8 @@ function JobEditor({
           Salary
           <input
             value={editor.job_data.salary_range}
+            readOnly={!canEdit}
             onChange={(event) => onJobDataChange("salary_range", event.target.value)}
-            readOnly={isSavedJob}
             title={detailFieldHint}
           />
         </label>
@@ -874,8 +1028,8 @@ function JobEditor({
           Employment Type
           <input
             value={editor.job_data.employment_type}
+            readOnly={!canEdit}
             onChange={(event) => onJobDataChange("employment_type", event.target.value)}
-            readOnly={isSavedJob}
             title={detailFieldHint}
           />
         </label>
@@ -883,8 +1037,8 @@ function JobEditor({
           Seniority
           <input
             value={editor.job_data.seniority_level}
+            readOnly={!canEdit}
             onChange={(event) => onJobDataChange("seniority_level", event.target.value)}
-            readOnly={isSavedJob}
             title={detailFieldHint}
           />
         </label>
@@ -894,8 +1048,8 @@ function JobEditor({
         Summary
         <textarea
           value={editor.job_data.summary}
+          readOnly={!canEdit}
           onChange={(event) => onJobDataChange("summary", event.target.value)}
-          readOnly={isSavedJob}
           title={detailFieldHint}
         />
       </label>
@@ -906,9 +1060,9 @@ function JobEditor({
             {arrayFieldLabels[field]}
             <textarea
               value={listToText(editor.job_data[field])}
+              readOnly={!canEdit}
               onChange={(event) => onJobDataChange(field, textToList(event.target.value))}
               placeholder="One item per line"
-              readOnly={isSavedJob}
               title={detailFieldHint}
             />
           </label>
@@ -919,8 +1073,8 @@ function JobEditor({
         Security Clearance
         <input
           value={editor.job_data.security_clearance}
+          readOnly={!canEdit}
           onChange={(event) => onJobDataChange("security_clearance", event.target.value)}
-          readOnly={isSavedJob}
           title={detailFieldHint}
         />
       </label>
@@ -931,9 +1085,9 @@ function JobEditor({
           Raw Job Description
           <textarea
             value={editor.raw_description_text}
-            onChange={(event) => onChange({ ...editor, raw_description_text: event.target.value })}
+            readOnly={!canEdit}
+            onChange={(event) => updateDetail({ raw_description_text: event.target.value })}
             required
-            readOnly={isSavedJob}
             title={detailFieldHint}
           />
         </label>

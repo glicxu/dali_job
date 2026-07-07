@@ -8,8 +8,9 @@ Shared/cache data and user-specific saved data must stay separate.
 
 - `jobs_cache` stores reusable source data from a job URL.
 - `user_saved_jobs` stores each user's saved-job relationship and notes.
+- `user_edited_jobs` stores manual job details and user-specific corrections.
 - `job_resume_matches` stores match results for one user's saved job and resume.
-- `resume_profiles` stores each user-owned structured resume, with favorites used only for ordering.
+- `resume_profiles` stores each user-owned structured resume, with one default resume used for ordering.
 
 This prevents user-specific notes and future application tracking from changing the shared cached job while still letting the app avoid repeated scraping and OpenAI parsing for the same URL.
 
@@ -58,8 +59,8 @@ resume_profiles 1 -> many resume_versions
 Important behavior:
 
 - Users can have multiple resume profiles.
-- Users can favorite zero, one, or many resume profiles.
-- Favorites sort to the top of the Profile page and Match page resume selector.
+- Users can have only one default resume profile.
+- The default resume sorts to the top of the Profile page and Match page resume selector.
 - There is no single required primary resume.
 - Personal contact information should be redacted before AI parsing and excluded from saved `resume_data`.
 
@@ -81,9 +82,9 @@ This lets one logical resume document have multiple uploaded versions later.
 
 ### jobs_cache
 
-Stores the shared reusable job posting cache.
+Stores the shared reusable job posting cache for URL-based imports.
 
-This table is for source data from URL scraping and optional OpenAI job parsing. Users should not directly edit this table.
+This table is for source data from URL scraping and optional OpenAI job parsing. Users should not directly edit this table. It exists to reduce repeated scraping and token usage when the same URL is imported again.
 
 Typical contents:
 
@@ -107,28 +108,51 @@ If multiple users import the same URL, DaliJob can reuse this cached source data
 
 ### user_saved_jobs
 
-Stores the user's private saved-job relationship.
+Stores the user's private saved-job relationship and notes.
 
-This is what the Jobs page should use for notes and ownership. Job details are read from `jobs_cache` through `jobs_cache_id`.
+This table links a user to either shared cache data, private edited data, or both. URL-imported jobs start with `jobs_cache_id` set and `user_edited_job_id` null. Manual jobs use `jobs_cache_id = null` and `user_edited_job_id` set. If a user edits a URL-imported job, DaliJob creates a `user_edited_jobs` row and links it through `user_edited_job_id`.
 
 Typical contents:
 
 - `workspace_id`
 - `user_id`
 - `jobs_cache_id`
+- `user_edited_job_id`
 - `notes`
 
 Relationship:
 
 ```text
 user_saved_jobs belongs to users/workspaces
-user_saved_jobs references jobs_cache
+user_saved_jobs optionally references jobs_cache
+user_saved_jobs optionally references user_edited_jobs
 user_saved_jobs 1 -> many job_resume_matches
 ```
 
 Important behavior:
 
-A user can edit notes on `user_saved_jobs`. The user cannot edit the job JSON from the saved Jobs page; `jobs_cache` remains the source for title, company, raw description, and structured `job_data` when it has been generated.
+A user can always edit notes on `user_saved_jobs`. Job-detail edits never mutate `jobs_cache`; they create or update `user_edited_jobs`. Matching should prefer `user_edited_jobs.job_data` when linked, otherwise use or lazily generate `jobs_cache.job_data`.
+
+### user_edited_jobs
+
+Stores private job details for manual jobs and user-specific corrections to imported jobs.
+
+Typical contents:
+
+- `workspace_id`
+- `user_id`
+- `title`
+- `company`
+- `source_url`
+- `raw_description_text`
+- `job_data`
+
+Relationship:
+
+```text
+user_edited_jobs belongs to users/workspaces
+user_edited_jobs 1 -> many user_saved_jobs, usually one
+```
 
 ### job_resume_matches
 
@@ -183,11 +207,11 @@ When a user imports a single job URL:
 3. If the URL is not cached, the server scrapes the page and saves source data into `jobs_cache`.
 4. The server creates or reuses a `jobs_cache` row.
 5. The server creates a `user_saved_jobs` row that references the cached data.
-6. The user can edit notes without changing the cached job details.
+6. The user can edit notes without creating duplicate job details. If the user edits job details, DaliJob creates or updates a linked `user_edited_jobs` row without changing the shared cached job.
 
 Single-job draft or manual review flows may parse immediately because the user is actively working on one job. Bulk and provider-backed imports should defer OpenAI parsing until matching or structured viewing needs `job_data`.
 
-When a user manually creates a job without a URL, the app still creates a `jobs_cache` row with a nullable `source_url`, then creates a `user_saved_jobs` row that references it.
+When a user manually creates a job without a URL, the app creates a `user_edited_jobs` row and a `user_saved_jobs` row with `jobs_cache_id = null`.
 
 ## Bulk Job-List Import Flow
 
@@ -197,7 +221,7 @@ When a user imports from a job search or listing URL:
 2. The server normalizes and deduplicates the URLs.
 3. The server checks `jobs_cache` for each candidate URL and marks candidates as already cached or new.
 4. The client shows the candidates in a review table and the user selects which jobs to import.
-5. Each selected detail URL creates or reuses a `jobs_cache` row with source data and a `user_saved_jobs` row.
+5. Each selected detail URL creates or reuses a `jobs_cache` row with source data and creates a lightweight `user_saved_jobs` row that points at the cache.
 6. OpenAI parsing is deferred unless the user also requests match-on-import.
 7. Optional batch matching lazily parses missing `job_data`, then creates `job_resume_matches` rows after the selected jobs are saved to `user_saved_jobs`.
 
@@ -208,9 +232,9 @@ This flow should not store listing-page results as jobs. Only individual job det
 When a user matches a resume to a job:
 
 1. The server resolves the resume from a structured resume profile, uploaded document, or pasted fallback text.
-2. The server resolves the job from URL text, pasted text, or an existing `user_saved_jobs` row joined to `jobs_cache`.
-3. The server checks whether `jobs_cache.job_data` exists.
-4. If `job_data` is missing, the server parses `raw_description_text` and saves `job_data`.
+2. The server resolves the job from URL text, pasted text, or an existing `user_saved_jobs` row with optional joins to `jobs_cache` and `user_edited_jobs`.
+3. The server checks whether linked `user_edited_jobs.job_data` exists; otherwise it falls back to `jobs_cache.job_data`.
+4. If `job_data` is missing, the server parses the best available `raw_description_text`, saves the result to `user_edited_jobs` for manual/edited jobs or `jobs_cache` for unmodified URL-backed jobs, then matches.
 5. OpenAI compares the resume data with the structured job data.
 6. If the match score is high enough, the job is saved to `user_saved_jobs`.
 7. The score and details are stored in `job_resume_matches`.
@@ -221,8 +245,8 @@ Matches should link to `user_job_id` because matching is tied to the user's save
 
 The current model is sound for the MVP because:
 
-- Shared URL source data and parsed job JSON are cached in `jobs_cache`.
-- User notes are isolated in `user_saved_jobs`.
+- Shared URL source data and reusable parsed job JSON are cached in `jobs_cache`.
+- User notes and editable saved-job details are isolated in `user_saved_jobs`.
 - Resume/job match scores are isolated in `job_resume_matches`.
 - Uploaded files and extracted text are versioned through `documents` and `document_versions`.
 - Resume profile data is flexible through `resume_profiles.resume_data` JSON.
@@ -256,7 +280,7 @@ This keeps a saved job separate from a specific application attempt.
 ## Rules To Preserve
 
 - Do not let user edits mutate `jobs_cache`.
-- Use `user_saved_jobs` joined to `jobs_cache` for the Jobs page and application tracking entry point.
+- Use `user_saved_jobs` with an optional `jobs_cache` join for the Jobs page and application tracking entry point.
 - Use `job_resume_matches` for scores and match details.
 - Link matches to `user_job_id`, not only `jobs_cache_id`.
 - Prefer linking matches to `resume_profile_id` when the match used a structured saved resume profile.

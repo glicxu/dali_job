@@ -229,7 +229,7 @@ def test_indeed_search_import_can_match_selected_resume_profile() -> None:
                 "target_roles": [],
                 "notes": [],
             },
-            "is_favorite": True,
+            "is_default": True,
         },
     )
     assert profile_response.status_code == 200

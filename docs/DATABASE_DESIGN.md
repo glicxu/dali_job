@@ -43,14 +43,14 @@ Current `DbMan` behavior expects a `mysql` config section and builds MySQL-compa
 DaliJob should use its own schema/database, separate from other projects. The default schema name is:
 
 ```text
-dali_job
+jobs
 ```
 
 The actual schema should come from the active config file:
 
 ```ini
 [mysql]
-active_db_schema = dali_job
+active_db_schema = jobs
 ```
 
 The project should include Python scripts under `scripts/` that load the same config file used by the server and then operate on the configured schema.

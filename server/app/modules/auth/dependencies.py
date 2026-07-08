@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 from DaliCommonLib.dali_db_man import DbMan
@@ -37,6 +38,9 @@ def get_dev_identity() -> AuthenticatedIdentity:
 
 
 def get_auth_secret() -> str:
+    env_secret = os.getenv("DALIJOB_JWT_SECRET", "").strip()
+    if env_secret:
+        return env_secret
     return (
         read_config_value("dali_job_auth", "jwt_secret", DEFAULT_AUTH_SECRET)
         or DEFAULT_AUTH_SECRET

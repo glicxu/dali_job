@@ -8,6 +8,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.session import get_db_session
 from app.main import create_app
+from app.modules.auth.dependencies import get_auth_secret
 from app.modules.auth.security import hash_password, verify_password
 
 
@@ -16,6 +17,12 @@ def test_password_hash_round_trip() -> None:
 
     assert verify_password("correct horse battery staple", password_hash)
     assert not verify_password("wrong password", password_hash)
+
+
+def test_auth_secret_prefers_environment(monkeypatch) -> None:
+    monkeypatch.setenv("DALIJOB_JWT_SECRET", "env-secret")
+
+    assert get_auth_secret() == "env-secret"
 
 
 def test_register_and_login_issue_dalijob_token() -> None:

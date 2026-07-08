@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
-import os
 from typing import Protocol
 
 from fastapi import HTTPException, status
 from openai import OpenAI
 from pydantic import ValidationError
 
+from app.core.secrets import get_provider_secret
 from app.modules.jobs.schemas import JobDescriptionData
 
 
@@ -84,7 +84,7 @@ def build_job_parse_prompt(raw_description_text: str) -> str:
 
 class OpenAIJobDescriptionParser:
     def __init__(self, model: str) -> None:
-        api_key = os.getenv("OPENAI_API_KEY", "").strip()
+        api_key = get_provider_secret("OPENAI_API_KEY")
         if not api_key:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

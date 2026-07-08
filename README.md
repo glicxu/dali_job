@@ -29,7 +29,7 @@ Key documents:
 
 ## Run Locally
 
-Server settings come from a `ProcessConfig` ini file. Server secrets, including `OPENAI_API_KEY` and `APIFY_API_TOKEN`, belong in `server/.env`, which is ignored by git.
+Server settings come from a `ProcessConfig` ini file. Server secrets, including `DALIJOB_JWT_SECRET`, `OPENAI_API_KEY`, and `APIFY_API_TOKEN`, belong in `server/.env`, which is ignored by git.
 
 Create a local server config from the safe example:
 
@@ -121,8 +121,13 @@ Configure the mode in your private server config:
 auth_mode = local
 
 [dali_job_auth]
-jwt_secret = use_a_long_private_random_value
 access_ttl_seconds = 604800
+```
+
+Set the JWT signing secret in the server process environment:
+
+```powershell
+$env:DALIJOB_JWT_SECRET = "use_a_long_private_random_value"
 ```
 
 When `local` auth is enabled, use the client `/auth` page or the `/api/v1/auth/register` and `/api/v1/auth/login` endpoints. The server returns a DaliJob bearer token, and the client sends it on later API requests.

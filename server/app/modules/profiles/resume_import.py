@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import io
 import json
-import os
 import re
 from typing import Protocol
 
@@ -11,6 +10,7 @@ from openai import OpenAI
 from pydantic import BaseModel, ValidationError
 from pypdf import PdfReader
 
+from app.core.secrets import get_provider_secret
 from app.modules.profiles.schemas import ResumeData
 
 MAX_RESUME_BYTES = 8 * 1024 * 1024
@@ -202,7 +202,7 @@ async def extract_resume_text(file: UploadFile) -> str:
 
 class OpenAIResumeProfileParser:
     def __init__(self, model: str) -> None:
-        api_key = os.getenv("OPENAI_API_KEY", "").strip()
+        api_key = get_provider_secret("OPENAI_API_KEY")
         if not api_key:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

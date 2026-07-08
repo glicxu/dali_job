@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from hashlib import sha256
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -10,6 +9,7 @@ from urllib.request import Request, urlopen
 
 from fastapi import HTTPException, status
 
+from app.core.secrets import get_provider_secret
 from app.modules.jobs.schemas import IndeedJobSearchResult
 from app.modules.resume_job_match.job_url_import import clean_job_text, strip_html_fragment
 
@@ -130,7 +130,7 @@ def normalize_indeed_item(item: dict[str, Any]) -> IndeedJobSearchResult | None:
 
 class ApifyIndeedClient:
     def __init__(self, token: str | None = None) -> None:
-        self._token = (token or os.getenv("APIFY_API_TOKEN", "")).strip()
+        self._token = (token or get_provider_secret("APIFY_API_TOKEN")).strip()
 
     def search(self, *, keyword: str, location: str, max_results: int = 5) -> list[IndeedJobSearchResult]:
         if not self._token:

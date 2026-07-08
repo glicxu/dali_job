@@ -676,7 +676,7 @@ The server should avoid creating independent SQLAlchemy engines outside this pat
 
 `ProcessConfig` should allow easy switching between local, staging, and production databases by changing only the ini file passed at startup.
 
-The database schema should be DaliJob-specific. The default schema name should be `dali_job` unless a config file specifies another schema through the `mysql.active_db_schema` setting.
+The database schema should be DaliJob-specific. The default schema name should be `jobs` unless a config file specifies another schema through the `mysql.active_db_schema` setting.
 
 Database setup and seed operations should be scriptable. The project should include Python scripts under a top-level `scripts/` folder that load the same `ProcessConfig` ini file and use `DbMan` to create, migrate, validate, and seed the configured schema.
 

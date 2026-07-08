@@ -67,6 +67,7 @@ celery -A app.workers.celery_app worker --loglevel=info
 Required server variables:
 
 - `OPENAI_API_KEY`
+- `DALIJOB_JWT_SECRET`
 - `REDIS_URL`
 - `OBJECT_STORAGE_ENDPOINT`
 - `OBJECT_STORAGE_BUCKET`
@@ -94,7 +95,7 @@ Required `ProcessConfig` database section:
 user = dali_user
 passwd = local_password
 active_server = local_db_host
-active_db_schema = dali_job
+active_db_schema = jobs
 port = 3306
 pool_size = 5
 pool_max_overflow = 10
@@ -131,7 +132,7 @@ python scripts/seed_database.py --config local.ini
 python scripts/validate_database.py --config local.ini
 ```
 
-These scripts should operate on the schema specified by the config file, such as `mysql.active_db_schema = dali_job`.
+These scripts should operate on the schema specified by the config file, such as `mysql.active_db_schema = jobs`.
 
 Future integration variables:
 

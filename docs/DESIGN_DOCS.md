@@ -17,6 +17,7 @@ DaliJob is designed as a long-term career operating system, not a job board and 
 - [GITHUB_ISSUES.md](GITHUB_ISSUES.md) - starter backlog that can be copied into GitHub issues.
 - [TESTING_STRATEGY.md](TESTING_STRATEGY.md) - unit, integration, end-to-end, AI evaluation, and security testing.
 - [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) - local, staging, production, CI/CD, observability, and operations guidance.
+- [US3_PROD_DEPLOYMENT_PLAN.md](US3_PROD_DEPLOYMENT_PLAN.md) - concrete plan for deploying DaliJob on us3 at `https://jobmatch.dalifin.com`.
 
 ## Product Phases
 

@@ -42,10 +42,12 @@ def clear_secret_cache() -> None:
     _get_secret_from_db.cache_clear()
 
 
-def _normalize_secret_value(value: Any, env_name: str) -> str:
+def _normalize_secret_value(value: Any, env_name: str, *, _depth: int = 0) -> str:
     text = str(value or "").strip()
     if not text:
         return ""
+    if _depth > 3:
+        return text
 
     if text[0] in {'"', "{", "["}:
         try:
@@ -53,12 +55,16 @@ def _normalize_secret_value(value: Any, env_name: str) -> str:
         except json.JSONDecodeError:
             return text
         if isinstance(parsed, str):
-            return parsed.strip()
+            return _normalize_secret_value(parsed, env_name, _depth=_depth + 1)
         if isinstance(parsed, dict):
             for key in (env_name, env_name.lower(), "api_key", "token", "credential"):
                 candidate = parsed.get(key)
                 if candidate:
-                    return str(candidate).strip()
+                    return _normalize_secret_value(candidate, env_name, _depth=_depth + 1)
+            if len(parsed) == 1:
+                only_value = next(iter(parsed.values()))
+                if only_value:
+                    return _normalize_secret_value(only_value, env_name, _depth=_depth + 1)
         return ""
 
     return text

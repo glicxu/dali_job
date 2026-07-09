@@ -35,6 +35,13 @@ def test_provider_secret_unwraps_json_string_from_database(monkeypatch):
     assert secrets.get_provider_secret("APIFY_API_TOKEN") == "apify_api_test"
 
 
+def test_provider_secret_unwraps_nested_json_string_from_database(monkeypatch):
+    _install_fake_dali_secret(monkeypatch, '"{\\"OPENAI_API_KEY\\":\\"sk-test\\"}"')
+    monkeypatch.setenv("OPENAI_API_KEY", "env-openai")
+
+    assert secrets.get_provider_secret("OPENAI_API_KEY") == "sk-test"
+
+
 def test_provider_secret_extracts_token_from_json_object(monkeypatch):
     _install_fake_dali_secret(monkeypatch, '{"token":"apify_api_test"}')
     monkeypatch.setenv("APIFY_API_TOKEN", "env-apify")

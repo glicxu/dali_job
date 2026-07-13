@@ -132,12 +132,29 @@ export function ProfileEditor() {
     setSectionText(makeSectionText(normalized));
   }
 
-  function upsertResumeProfile(profile: ResumeProfile) {
+  function toggleProfileSelection(profile: ResumeProfile) {
+    if (selectedId === profile.id) {
+      resetEditor();
+      return;
+    }
+    setEditorFromProfile(profile);
+  }
+
+  function resetEditor() {
+    setSelectedId(null);
+    setTitle("Master Resume");
+    setResumeData(emptyResumeData);
+    setSectionText(makeSectionText(emptyResumeData));
+  }
+
+  function upsertResumeProfile(profile: ResumeProfile, options: { select?: boolean } = { select: true }) {
     setResumeProfiles((current) => {
       const withoutSaved = current.filter((item) => item.id !== profile.id);
       return sortResumeProfiles([...withoutSaved, profile]);
     });
-    setEditorFromProfile(profile);
+    if (options.select) {
+      setEditorFromProfile(profile);
+    }
   }
 
   async function loadResumeProfiles(selectId?: number) {
@@ -145,19 +162,13 @@ export function ProfileEditor() {
     setIsLoading(true);
     try {
       const payload = await listResumeProfiles();
-      setResumeProfiles(payload.resume_profiles);
-      const nextSelection =
-        payload.resume_profiles.find((profile) => profile.id === selectId) ??
-        payload.resume_profiles.find((profile) => profile.id === selectedId) ??
-        payload.resume_profiles[0] ??
-        null;
+      const sortedProfiles = sortResumeProfiles(payload.resume_profiles);
+      setResumeProfiles(sortedProfiles);
+      const nextSelection = selectId ? sortedProfiles.find((profile) => profile.id === selectId) ?? null : null;
       if (nextSelection) {
         setEditorFromProfile(nextSelection);
       } else {
-        setSelectedId(null);
-        setTitle("Master Resume");
-        setResumeData(emptyResumeData);
-        setSectionText(makeSectionText(emptyResumeData));
+        resetEditor();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Resume profiles failed to load.");
@@ -224,7 +235,7 @@ export function ProfileEditor() {
     setStatus(null);
     try {
       const updated = await updateResumeProfile(profile.id, { is_default: true });
-      upsertResumeProfile(updated);
+      upsertResumeProfile(updated, { select: selectedId === updated.id });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Default resume update failed.");
     }
@@ -272,8 +283,9 @@ export function ProfileEditor() {
     try {
       const saved = await applyResumeProfileSuggestions(resumeImport);
       setResumeImport(null);
-      upsertResumeProfile(saved);
-      setStatus("Resume suggestions saved as a new resume profile.");
+      upsertResumeProfile(saved, { select: false });
+      resetEditor();
+      setStatus("Resume suggestions saved as a new resume profile. Select it from the list to view or edit it.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Applying resume suggestions failed.");
     } finally {
@@ -290,7 +302,7 @@ export function ProfileEditor() {
       {error ? <div className="error-banner">{error}</div> : null}
       {status ? <div className="status-banner">{status}</div> : null}
 
-      <section className="profile-card">
+      <section className="profile-card profile-import-card">
         <div className="profile-card-header">
           <div>
             <h2>Import Master Resume</h2>
@@ -316,90 +328,104 @@ export function ProfileEditor() {
         ) : null}
       </section>
 
-      <section className="profile-card">
-        <div className="profile-card-header">
-          <div>
-            <h2>Resume Profiles</h2>
-            <p className="metadata">Your default resume appears first.</p>
-          </div>
-          <button type="button" className="secondary-button" onClick={() => void createBlankResumeProfile()}>
-            New Resume
-          </button>
-        </div>
-        {resumeProfiles.length ? (
-          <div className="resume-profile-list">
-            {resumeProfiles.map((profile) => (
-              <ResumeProfileCard
-                key={profile.id}
-                profile={profile}
-                isSelected={profile.id === selectedId}
-                onOpen={() => setEditorFromProfile(profile)}
-                onSetDefault={() => void setDefaultProfile(profile)}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="empty">No resume profiles yet.</p>
-        )}
-      </section>
-
-      <form className="profile-card" onSubmit={saveResumeProfile}>
-        <div className="profile-card-header">
-          <div>
-            <h2>Full Resume Profile</h2>
-            {selectedProfile ? <p className="metadata">Resume Profile ID: {selectedProfile.id}</p> : null}
-          </div>
-          <div className="button-row">
-            {selectedProfile ? (
-              <button type="button" className="secondary-button" onClick={() => void removeSelectedResumeProfile()}>
-                Delete
-              </button>
-            ) : null}
-            <button type="submit" disabled={isSaving}>
-              {isSaving ? "Saving..." : "Save Resume"}
+      <section className="profile-workspace">
+        <section className="profile-card resume-profiles-list-card">
+          <div className="profile-card-header">
+            <div>
+              <h2>Resume Profiles</h2>
+              <p className="metadata">Your default resume appears first.</p>
+            </div>
+            <button type="button" className="secondary-button" onClick={() => void createBlankResumeProfile()}>
+              New Resume
             </button>
           </div>
-        </div>
+          {resumeProfiles.length ? (
+            <div className="resume-profile-list">
+              {resumeProfiles.map((profile) => (
+                <ResumeProfileCard
+                  key={profile.id}
+                  profile={profile}
+                  isSelected={profile.id === selectedId}
+                  onOpen={() => toggleProfileSelection(profile)}
+                  onSetDefault={() => void setDefaultProfile(profile)}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="empty">No resume profiles yet.</p>
+          )}
+        </section>
 
-        <div className="profile-grid">
-          <label>
-            Resume Title
-            <input value={title} onChange={(event) => setTitle(event.target.value)} />
-          </label>
-          <label>
-            Headline
-            <input
-              value={resumeData.headline ?? ""}
-              onChange={(event) =>
-                setResumeData({ ...resumeData, headline: event.target.value || null })
-              }
-            />
-          </label>
-        </div>
+        <div className="profile-detail-pane">
+          {selectedProfile ? (
+            <form className="profile-card" onSubmit={saveResumeProfile}>
+              <div className="profile-card-header">
+                <div>
+                  <h2>Full Resume Profile</h2>
+                  <p className="metadata">Resume Profile ID: {selectedProfile.id}</p>
+                </div>
+                <div className="button-row">
+                  <button type="button" className="secondary-button" onClick={() => void removeSelectedResumeProfile()}>
+                    Delete
+                  </button>
+                  <button type="submit" disabled={isSaving}>
+                    {isSaving ? "Saving..." : "Save Resume"}
+                  </button>
+                </div>
+              </div>
 
-        <label>
-          Summary
-          <textarea
-            value={resumeData.summary ?? ""}
-            onChange={(event) => setResumeData({ ...resumeData, summary: event.target.value || null })}
-          />
-        </label>
+              <div className="profile-grid">
+                <label>
+                  Resume Title
+                  <input value={title} onChange={(event) => setTitle(event.target.value)} />
+                </label>
+                <label>
+                  Headline
+                  <input
+                    value={resumeData.headline ?? ""}
+                    onChange={(event) =>
+                      setResumeData({ ...resumeData, headline: event.target.value || null })
+                    }
+                  />
+                </label>
+              </div>
 
-        <div className="profile-columns">
-          {editableSections.map((key) => (
-            <label key={key} className="section-editor">
-              {sectionLabels[key]}
-              <textarea
-                value={sectionText[key]}
-                onChange={(event) =>
-                  setSectionText((current) => ({ ...current, [key]: event.target.value }))
-                }
-                placeholder="One item per line"
-              />
-            </label>
-          ))}
+              <label>
+                Summary
+                <textarea
+                  value={resumeData.summary ?? ""}
+                  onChange={(event) => setResumeData({ ...resumeData, summary: event.target.value || null })}
+                />
+              </label>
+
+              <div className="profile-columns">
+                {editableSections.map((key) => (
+                  <label key={key} className="section-editor">
+                    {sectionLabels[key]}
+                    <textarea
+                      value={sectionText[key]}
+                      onChange={(event) =>
+                        setSectionText((current) => ({ ...current, [key]: event.target.value }))
+                      }
+                      placeholder="One item per line"
+                    />
+                  </label>
+                ))}
+              </div>
+            </form>
+          ) : (
+            <section className="profile-card">
+              <div className="profile-card-header">
+                <div>
+                  <h2>Full Resume Profile</h2>
+                  <p className="metadata">No resume profile selected.</p>
+                </div>
+              </div>
+              <p className="empty">Select a resume profile from the list to view or edit its full details.</p>
+            </section>
+          )}
         </div>
-      </form>
+      </section>
     </div>
   );
 }
@@ -420,7 +446,7 @@ function ProfileEditorPreview() {
       <div className="warning-banner">
         Login is required to upload, parse, edit, and save resume profiles.
       </div>
-      <section className="profile-card">
+      <section className="profile-card profile-import-card">
         <div className="profile-card-header">
           <div>
             <h2>Import Master Resume</h2>
@@ -434,65 +460,69 @@ function ProfileEditorPreview() {
           </button>
         </form>
       </section>
-      <section className="profile-card">
-        <div className="profile-card-header">
-          <div>
-            <h2>Resume Profiles</h2>
-            <p className="metadata">Your default resume appears first.</p>
+      <section className="profile-workspace">
+        <section className="profile-card resume-profiles-list-card">
+          <div className="profile-card-header">
+            <div>
+              <h2>Resume Profiles</h2>
+              <p className="metadata">Your default resume appears first.</p>
+            </div>
+            <button type="button" className="secondary-button" disabled>
+              New Resume
+            </button>
           </div>
-          <button type="button" className="secondary-button" disabled>
-            New Resume
-          </button>
-        </div>
-        <div className="resume-profile-list">
-          <article className="resume-profile-card selected">
-            <button type="button" className="resume-profile-open" disabled>
-              <span className="resume-profile-title">
-                Software Engineering Resume
-                <span className="default-label">Default</span>
-              </span>
-              <span className="metadata">{previewData.headline}</span>
-              <span className="resume-profile-preview">{profilePreview(previewData)}</span>
-            </button>
-            <button type="button" className="secondary-button default-button" disabled>
-              Default
-            </button>
-          </article>
+          <div className="resume-profile-list">
+            <article className="resume-profile-card selected">
+              <button type="button" className="resume-profile-open" disabled>
+                <span className="resume-profile-title">
+                  Software Engineering Resume
+                  <span className="default-label">Default</span>
+                </span>
+                <span className="metadata">{previewData.headline}</span>
+                <span className="resume-profile-preview">{profilePreview(previewData)}</span>
+              </button>
+              <button type="button" className="secondary-button default-button" disabled>
+                Default
+              </button>
+            </article>
+          </div>
+        </section>
+        <div className="profile-detail-pane">
+          <form className="profile-card">
+            <div className="profile-card-header">
+              <div>
+                <h2>Full Resume Profile</h2>
+                <p className="metadata">Preview only</p>
+              </div>
+              <button type="button" disabled>
+                Save Resume
+              </button>
+            </div>
+            <div className="profile-grid">
+              <label>
+                Resume Title
+                <input value="Software Engineering Resume" readOnly />
+              </label>
+              <label>
+                Headline
+                <input value={previewData.headline ?? ""} readOnly />
+              </label>
+            </div>
+            <label>
+              Summary
+              <textarea value={previewData.summary ?? ""} readOnly />
+            </label>
+            <div className="profile-columns">
+              {editableSections.slice(0, 6).map((key) => (
+                <label className="section-editor" key={key}>
+                  {sectionLabels[key]}
+                  <textarea value={sectionText[key]} readOnly />
+                </label>
+              ))}
+            </div>
+          </form>
         </div>
       </section>
-      <form className="profile-card">
-        <div className="profile-card-header">
-          <div>
-            <h2>Full Resume Profile</h2>
-            <p className="metadata">Preview only</p>
-          </div>
-          <button type="button" disabled>
-            Save Resume
-          </button>
-        </div>
-        <div className="profile-grid">
-          <label>
-            Resume Title
-            <input value="Software Engineering Resume" readOnly />
-          </label>
-          <label>
-            Headline
-            <input value={previewData.headline ?? ""} readOnly />
-          </label>
-        </div>
-        <label>
-          Summary
-          <textarea value={previewData.summary ?? ""} readOnly />
-        </label>
-        <div className="profile-columns">
-          {editableSections.slice(0, 6).map((key) => (
-            <label className="section-editor" key={key}>
-              {sectionLabels[key]}
-              <textarea value={sectionText[key]} readOnly />
-            </label>
-          ))}
-        </div>
-      </form>
       <a className="button-link" href="/auth">
         Login / Register to Edit Profiles
       </a>

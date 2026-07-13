@@ -15,6 +15,11 @@ from app.modules.auth.security import decode_access_token
 
 DEFAULT_AUTH_SECRET = "change-me-dalijob-auth-local-development-only"
 DEFAULT_ACCESS_TTL_SECONDS = 60 * 60 * 24 * 7
+INVALID_AUTH_SECRETS = {
+    "",
+    "change-me",
+    "change-me-dalijob-auth-local-development-only",
+}
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -39,12 +44,12 @@ def get_dev_identity() -> AuthenticatedIdentity:
 
 def get_auth_secret() -> str:
     env_secret = os.getenv("DALIJOB_JWT_SECRET", "").strip()
-    if env_secret:
-        return env_secret
-    return (
-        read_config_value("dali_job_auth", "jwt_secret", DEFAULT_AUTH_SECRET)
-        or DEFAULT_AUTH_SECRET
-    )
+    if env_secret.lower() in INVALID_AUTH_SECRETS:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="DALIJOB_JWT_SECRET must be configured to a non-default value when local auth is enabled.",
+        )
+    return env_secret
 
 
 def get_access_ttl_seconds() -> int:
@@ -90,8 +95,9 @@ def get_current_identity(
     if creds is None or not creds.credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token")
 
+    secret = get_auth_secret()
     try:
-        payload = decode_access_token(creds.credentials, get_auth_secret())
+        payload = decode_access_token(creds.credentials, secret)
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid token") from exc
 

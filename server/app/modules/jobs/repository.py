@@ -3,19 +3,28 @@ from __future__ import annotations
 from hashlib import sha256
 
 from sqlalchemy import desc, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.auth.dependencies import AuthenticatedIdentity
-from app.modules.jobs.models import JobCache, JobResumeMatch, UserEditedJob, UserSavedJob
+from app.modules.jobs.models import JobCache, JobResumeMatch, UserEditedJob, UserSavedJob, utc_now
 from app.modules.jobs.schemas import JobDescriptionData, JobSaveRequest, JobUpdateRequest
 from app.modules.jobs.service import JobDescriptionParser
 from app.modules.profiles.repository import ensure_account_for_identity
 
 
-def source_url_hash(source_url: str | None) -> str | None:
+def normalize_source_url(source_url: str | None) -> str | None:
     if not source_url:
         return None
-    return sha256(source_url.strip().encode("utf-8")).hexdigest()
+    normalized = source_url.strip()
+    return normalized or None
+
+
+def source_url_hash(source_url: str | None) -> str | None:
+    normalized = normalize_source_url(source_url)
+    if not normalized:
+        return None
+    return sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def _latest_match_for_user_job(
@@ -144,19 +153,59 @@ def get_user_job_by_cache_id(db: Session, identity: AuthenticatedIdentity, jobs_
     )
 
 
-def get_cached_job_by_source_url(db: Session, source_url: str | None) -> JobCache | None:
-    hashed_url = source_url_hash(source_url)
-    if not hashed_url:
+def get_cached_job_by_source_url(
+    db: Session,
+    source_url: str | None,
+    *,
+    include_deleted: bool = False,
+) -> JobCache | None:
+    normalized_url = normalize_source_url(source_url)
+    hashed_url = source_url_hash(normalized_url)
+    if not normalized_url or not hashed_url:
         return None
+    query = select(JobCache).where(
+        JobCache.source_url_hash == hashed_url,
+        JobCache.source_url == normalized_url,
+    )
+    if not include_deleted:
+        query = query.where(JobCache.deleted_at.is_(None))
     return db.scalar(
-        select(JobCache)
-        .where(
-            JobCache.source_url_hash == hashed_url,
-            JobCache.source_url == source_url,
-            JobCache.deleted_at.is_(None),
-        )
-        .order_by(desc(JobCache.updated_at))
+        query
+        .order_by(JobCache.deleted_at.is_(None).desc(), desc(JobCache.updated_at))
         .limit(1)
+    )
+
+
+def _reactivate_cache_job(job_cache: JobCache) -> None:
+    if job_cache.deleted_at is not None:
+        job_cache.deleted_at = None
+
+
+def _active_or_deleted_cached_job(db: Session, source_url: str | None) -> JobCache | None:
+    return get_cached_job_by_source_url(db, source_url, include_deleted=True)
+
+
+def _reread_cache_job_after_unique_conflict(
+    db: Session,
+    *,
+    conflict: IntegrityError,
+    source_url: str | None,
+    raw_description_text: str,
+    job_data: JobDescriptionData | None = None,
+    title: str = "",
+    company: str = "",
+) -> JobCache:
+    cached_job = _active_or_deleted_cached_job(db, source_url)
+    if cached_job is None:
+        raise conflict
+    _reactivate_cache_job(cached_job)
+    return _fill_cache_job(
+        db,
+        cached_job,
+        raw_description_text=raw_description_text,
+        job_data=job_data,
+        title=title,
+        company=company,
     )
 
 
@@ -207,7 +256,7 @@ def _create_cache_job(
     job_cache = JobCache(
         title=(job_data.title if job_data and job_data.title else title).strip(),
         company=(job_data.company if job_data and job_data.company else company).strip(),
-        source_url=source_url,
+        source_url=normalize_source_url(source_url),
         source_url_hash=source_url_hash(source_url),
         raw_description_text=raw_description_text,
         job_data=stored_job_data,
@@ -271,14 +320,37 @@ def get_or_create_cache_job(
                 title=title,
                 company=company,
             )
-    return _create_cache_job(
-        db,
-        source_url=source_url,
-        raw_description_text=raw_description_text,
-        job_data=job_data,
-        title=title,
-        company=company,
-    )
+        deleted_cached_job = _active_or_deleted_cached_job(db, source_url)
+        if deleted_cached_job is not None and deleted_cached_job.deleted_at is not None:
+            _reactivate_cache_job(deleted_cached_job)
+            return _fill_cache_job(
+                db,
+                deleted_cached_job,
+                raw_description_text=raw_description_text,
+                job_data=job_data,
+                title=title,
+                company=company,
+            )
+    try:
+        with db.begin_nested():
+            return _create_cache_job(
+                db,
+                source_url=source_url,
+                raw_description_text=raw_description_text,
+                job_data=job_data,
+                title=title,
+                company=company,
+            )
+    except IntegrityError as exc:
+        return _reread_cache_job_after_unique_conflict(
+            db,
+            conflict=exc,
+            source_url=source_url,
+            raw_description_text=raw_description_text,
+            job_data=job_data,
+            title=title,
+            company=company,
+        )
 
 
 def create_user_edited_job(
@@ -481,6 +553,30 @@ def job_response_for_identity(db: Session, identity: AuthenticatedIdentity, user
     job_cache = get_job_cache_for_saved_job(db, user_job)
     edited_job = get_user_edited_job_for_saved_job(db, user_job)
     return _job_response(user_job, job_cache, edited_job, _latest_match_for_user_job(db, identity, user_job.id))
+
+
+def delete_user_job(db: Session, user_job: UserSavedJob) -> None:
+    user_job.deleted_at = utc_now()
+    db.flush()
+
+
+def delete_user_jobs(
+    db: Session,
+    identity: AuthenticatedIdentity,
+    job_ids: list[int],
+) -> tuple[list[int], list[int]]:
+    unique_job_ids = list(dict.fromkeys(job_ids))
+    deleted_job_ids: list[int] = []
+    missing_job_ids: list[int] = []
+    for job_id in unique_job_ids:
+        user_job = get_user_job_for_identity(db, identity, job_id)
+        if user_job is None:
+            missing_job_ids.append(job_id)
+            continue
+        user_job.deleted_at = utc_now()
+        deleted_job_ids.append(job_id)
+    db.flush()
+    return deleted_job_ids, missing_job_ids
 
 
 def create_job(db: Session, identity: AuthenticatedIdentity, payload: JobSaveRequest) -> dict:

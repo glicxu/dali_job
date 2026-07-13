@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   analyzeJob,
+  bulkDeleteJobs,
   createJob,
   draftJobFromUrl,
   emptyJobDescriptionData,
@@ -19,6 +20,7 @@ import {
 } from "../lib/api";
 
 type ImportMode = "url" | "manual";
+type BulkMode = "match" | "remove" | null;
 type ArrayField =
   | "responsibilities"
   | "required_skills"
@@ -269,8 +271,9 @@ export function JobsManager() {
   const [isParsing, setIsParsing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [analyzingJobId, setAnalyzingJobId] = useState<number | null>(null);
-  const [isBulkMatching, setIsBulkMatching] = useState(false);
+  const [bulkMode, setBulkMode] = useState<BulkMode>(null);
   const [selectedBulkJobIds, setSelectedBulkJobIds] = useState<number[]>([]);
+  const [isBulkRemoving, setIsBulkRemoving] = useState(false);
 
   const sortedJobs = useMemo(() => jobs, [jobs]);
 
@@ -330,12 +333,17 @@ export function JobsManager() {
   }
 
   function startBulkMatch() {
-    setIsBulkMatching(true);
+    setBulkMode("match");
     setSelectedBulkJobIds([]);
   }
 
-  function cancelBulkMatch() {
-    setIsBulkMatching(false);
+  function startBulkRemove() {
+    setBulkMode("remove");
+    setSelectedBulkJobIds([]);
+  }
+
+  function cancelBulkMode() {
+    setBulkMode(null);
     setSelectedBulkJobIds([]);
   }
 
@@ -344,6 +352,31 @@ export function JobsManager() {
     const params = new URLSearchParams();
     params.set("job_ids", selectedBulkJobIds.join(","));
     window.location.href = `/match?${params.toString()}`;
+  }
+
+  async function removeSelectedJobs() {
+    if (!selectedBulkJobIds.length) return;
+    setError(null);
+    setStatus(null);
+    setIsBulkRemoving(true);
+    try {
+      const result = await bulkDeleteJobs(selectedBulkJobIds);
+      setJobs((current) => current.filter((job) => !result.deleted_job_ids.includes(job.id)));
+      if (editor?.id && result.deleted_job_ids.includes(editor.id)) {
+        setEditor(null);
+      }
+      if (matchDataJob?.id && result.deleted_job_ids.includes(matchDataJob.id)) {
+        setMatchDataJob(null);
+      }
+      setStatus(
+        `${result.deleted_job_ids.length} saved job${result.deleted_job_ids.length === 1 ? "" : "s"} removed.`,
+      );
+      cancelBulkMode();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Bulk remove failed.");
+    } finally {
+      setIsBulkRemoving(false);
+    }
   }
 
   async function parseDraft(event: FormEvent<HTMLFormElement>) {
@@ -514,27 +547,46 @@ export function JobsManager() {
           <div className="profile-card-header">
             <h2>Saved Jobs</h2>
             <div className="button-row">
-              {isBulkMatching ? (
+              {bulkMode ? (
                 <>
-                  <button type="button" className="secondary-button" onClick={cancelBulkMatch}>
+                  <button type="button" className="secondary-button" onClick={cancelBulkMode}>
                     Cancel
                   </button>
-                  <button type="button" disabled={!selectedBulkJobIds.length} onClick={matchSelectedJobs}>
-                    Match with Selected
-                  </button>
+                  {bulkMode === "match" ? (
+                    <button type="button" disabled={!selectedBulkJobIds.length} onClick={matchSelectedJobs}>
+                      Match with Selected
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={!selectedBulkJobIds.length || isBulkRemoving}
+                      onClick={() => void removeSelectedJobs()}
+                    >
+                      {isBulkRemoving ? "Removing..." : "Remove Selected"}
+                    </button>
+                  )}
                 </>
               ) : (
-                <button type="button" onClick={startBulkMatch}>
-                  Bulk Match
-                </button>
+                <>
+                  <button type="button" onClick={startBulkMatch}>
+                    Bulk Match
+                  </button>
+                  <button type="button" className="secondary-button" onClick={startBulkRemove}>
+                    Bulk Remove
+                  </button>
+                </>
               )}
               <button type="button" className="secondary-button" onClick={() => void loadJobs()}>
                 Refresh
               </button>
             </div>
           </div>
-          {isBulkMatching ? (
-            <p className="metadata">Select saved jobs to compare against one resume on the Match page.</p>
+          {bulkMode ? (
+            <p className="metadata">
+              {bulkMode === "match"
+                ? "Select saved jobs to compare against one resume on the Match page."
+                : "Select saved jobs to remove from your saved jobs list."}
+            </p>
           ) : null}
           {isLoading ? <p className="empty">Loading jobs.</p> : null}
           {!isLoading && !sortedJobs.length ? <p className="empty">No saved jobs.</p> : null}
@@ -545,10 +597,10 @@ export function JobsManager() {
               const isSelected = editor?.id === job.id || matchDataJob?.id === job.id;
               return (
                 <article
-                  className={`job-row${isBulkMatching ? " job-row-bulk" : ""}${isSelected ? " selected" : ""}`}
+                  className={`job-row${bulkMode ? " job-row-bulk" : ""}${isSelected ? " selected" : ""}`}
                   key={job.id}
                 >
-                  {isBulkMatching ? (
+                  {bulkMode ? (
                     <label className="bulk-job-checkbox" aria-label={`Select ${job.title || "Untitled Job"}`}>
                       <input
                         type="checkbox"
@@ -710,6 +762,9 @@ function JobsManagerPreview() {
             <div className="button-row">
               <button type="button" disabled>
                 Bulk Match
+              </button>
+              <button type="button" className="secondary-button" disabled>
+                Bulk Remove
               </button>
               <button type="button" className="secondary-button" disabled>
                 Refresh

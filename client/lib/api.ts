@@ -191,6 +191,11 @@ export type JobUpdatePayload = Partial<JobSavePayload> & {
   notes?: string | null;
 };
 
+export type JobBulkDeleteResponse = {
+  deleted_job_ids: number[];
+  missing_job_ids: number[];
+};
+
 export type PendingMatchedJob = JobSavePayload & {
   match_score: number;
   matched_resume_profile_id: number | null;
@@ -652,6 +657,19 @@ export function updateJob(jobId: number, payload: JobUpdatePayload): Promise<Sto
   return requestJson<StoredJob>(`/jobs/${jobId}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
+  });
+}
+
+export function deleteJob(jobId: number): Promise<void> {
+  return requestJson<void>(`/jobs/${jobId}`, {
+    method: "DELETE",
+  });
+}
+
+export function bulkDeleteJobs(jobIds: number[]): Promise<JobBulkDeleteResponse> {
+  return requestJson<JobBulkDeleteResponse>("/jobs/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ job_ids: jobIds }),
   });
 }
 

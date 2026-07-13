@@ -150,7 +150,10 @@ def bulk_payload_as_match_request(payload: BulkSavedJobMatchRequest) -> ResumeJo
 
 
 @router.post("/job-url-extract", response_model=JobUrlExtractResponse)
-def extract_job_url(payload: JobUrlExtractRequest) -> JobUrlExtractResponse:
+def extract_job_url(
+    payload: JobUrlExtractRequest,
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> JobUrlExtractResponse:
     extracted_text = fetch_job_description_from_url(str(payload.job_url))
     return JobUrlExtractResponse(
         job_url=str(payload.job_url),

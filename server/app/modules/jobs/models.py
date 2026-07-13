@@ -41,7 +41,7 @@ class JobCache(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     company: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    source_url_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    source_url_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True, unique=True)
     raw_description_text: Mapped[str] = mapped_column(Text, nullable=False)
     job_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)

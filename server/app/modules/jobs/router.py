@@ -10,6 +10,8 @@ from app.modules.auth.dependencies import AuthenticatedIdentity, get_current_ide
 from app.modules.jobs import repository
 from app.modules.jobs.schemas import (
     JobDescriptionData,
+    JobBulkDeleteRequest,
+    JobBulkDeleteResponse,
     JobDraftResponse,
     JobImportRequest,
     JobListDiscoverRequest,
@@ -129,6 +131,7 @@ def draft_job_description(
     payload: JobImportRequest,
     parser: JobDescriptionParser = Depends(get_job_description_parser),
     db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> JobDraftResponse:
     return build_job_draft(payload, parser, db)
 
@@ -166,6 +169,7 @@ def import_job_description(
 def discover_job_list(
     payload: JobListDiscoverRequest,
     db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> JobListDiscoverResponse:
     list_url = str(payload.list_url)
     discovery = discover_job_list_from_url(list_url, max_results=payload.max_results)
@@ -265,6 +269,17 @@ def create_job(
     return repository.create_job(db, identity, payload)
 
 
+@router.post("/bulk-delete", response_model=JobBulkDeleteResponse)
+def bulk_delete_jobs(
+    payload: JobBulkDeleteRequest,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> JobBulkDeleteResponse:
+    deleted_job_ids, missing_job_ids = repository.delete_user_jobs(db, identity, payload.job_ids)
+    db.commit()
+    return JobBulkDeleteResponse(deleted_job_ids=deleted_job_ids, missing_job_ids=missing_job_ids)
+
+
 @router.get("/{job_id}", response_model=JobResponse)
 def get_job(
     job_id: int,
@@ -303,3 +318,16 @@ def update_job(
     if user_job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
     return repository.update_job(db, identity, user_job, payload)
+
+
+@router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_job(
+    job_id: int,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> None:
+    user_job = repository.get_user_job_for_identity(db, identity, job_id)
+    if user_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+    repository.delete_user_job(db, user_job)
+    db.commit()

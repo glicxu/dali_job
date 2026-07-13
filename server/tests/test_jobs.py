@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -241,6 +243,94 @@ def test_update_saved_job_stores_private_detail_edits() -> None:
     assert payload["notes"] == "Updated after review."
 
 
+def test_delete_saved_job_soft_removes_it_from_list() -> None:
+    client = create_test_client()
+    create_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "title": "Backend Engineer",
+            "company": "Example Co",
+            "raw_description_text": "Build APIs using Python and PostgreSQL for customer workflows.",
+            "job_data": {
+                "title": "Backend Engineer",
+                "company": "Example Co",
+                "summary": "Build backend services.",
+                "responsibilities": ["Build APIs using Python."],
+                "required_skills": ["Python"],
+                "preferred_skills": [],
+                "required_experience": [],
+                "preferred_experience": [],
+                "education": [],
+                "certifications": [],
+                "tools_and_technologies": ["Python"],
+                "keywords": ["backend"],
+                "seniority_level": "",
+                "employment_type": "",
+                "security_clearance": "",
+                "work_location": "",
+                "salary_range": "",
+                "application_deadline": "",
+            },
+        },
+    )
+    assert create_response.status_code == 200
+    job_id = create_response.json()["id"]
+
+    delete_response = client.delete(f"/api/v1/jobs/{job_id}")
+
+    assert delete_response.status_code == 204
+    assert client.get("/api/v1/jobs").json() == []
+
+
+def test_bulk_delete_saved_jobs_removes_selected_jobs_only() -> None:
+    client = create_test_client()
+
+    def create_saved_job(title: str) -> int:
+        response = client.post(
+            "/api/v1/jobs",
+            json={
+                "title": title,
+                "company": "Example Co",
+                "raw_description_text": "Build APIs using Python and PostgreSQL for customer workflows.",
+                "job_data": {
+                    "title": title,
+                    "company": "Example Co",
+                    "summary": "Build backend services.",
+                    "responsibilities": ["Build APIs using Python."],
+                    "required_skills": ["Python"],
+                    "preferred_skills": [],
+                    "required_experience": [],
+                    "preferred_experience": [],
+                    "education": [],
+                    "certifications": [],
+                    "tools_and_technologies": ["Python"],
+                    "keywords": ["backend"],
+                    "seniority_level": "",
+                    "employment_type": "",
+                    "security_clearance": "",
+                    "work_location": "",
+                    "salary_range": "",
+                    "application_deadline": "",
+                },
+            },
+        )
+        assert response.status_code == 200
+        return response.json()["id"]
+
+    first_id = create_saved_job("Backend Engineer")
+    second_id = create_saved_job("Data Engineer")
+    third_id = create_saved_job("Platform Engineer")
+
+    response = client.post("/api/v1/jobs/bulk-delete", json={"job_ids": [first_id, third_id, 999999]})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["deleted_job_ids"] == [first_id, third_id]
+    assert payload["missing_job_ids"] == [999999]
+    remaining_jobs = client.get("/api/v1/jobs").json()
+    assert [job["id"] for job in remaining_jobs] == [second_id]
+
+
 def test_updating_saved_job_does_not_mutate_cached_url_job(monkeypatch) -> None:
     client = create_test_client()
     monkeypatch.setattr(
@@ -338,6 +428,109 @@ def test_list_jobs_uses_latest_match_in_batched_query() -> None:
     assert jobs[0]["matched_resume_source"] == "resume_profile"
     assert jobs[0]["match_data"] == {"summary": "Latest match."}
     assert latest_match["match_score"] == 8
+
+
+def test_cache_job_reuses_existing_source_url_hash() -> None:
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+    with session_factory() as session:
+        first = job_repository.get_or_create_cache_job(
+            session,
+            source_url="https://example.com/jobs/backend-engineer",
+            raw_description_text="Build APIs using Python and PostgreSQL for customer workflows.",
+            title="Backend Engineer",
+            company="Example Co",
+        )
+        second = job_repository.get_or_create_cache_job(
+            session,
+            source_url=" https://example.com/jobs/backend-engineer ",
+            raw_description_text="Build APIs using Python and PostgreSQL for customer workflows.",
+            title="Backend Engineer",
+            company="Example Co",
+        )
+
+    assert second.id == first.id
+
+
+def test_cache_job_unique_conflict_reuses_winning_row(monkeypatch) -> None:
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+    with session_factory() as session:
+        first = job_repository.get_or_create_cache_job(
+            session,
+            source_url="https://example.com/jobs/backend-engineer",
+            raw_description_text="Build APIs using Python and PostgreSQL for customer workflows.",
+            title="Backend Engineer",
+            company="Example Co",
+        )
+        original_lookup = job_repository.get_cached_job_by_source_url
+        lookup_calls = 0
+
+        def miss_once_then_lookup(db, source_url, *, include_deleted=False):
+            nonlocal lookup_calls
+            lookup_calls += 1
+            if lookup_calls == 1:
+                return None
+            return original_lookup(db, source_url, include_deleted=include_deleted)
+
+        monkeypatch.setattr(job_repository, "get_cached_job_by_source_url", miss_once_then_lookup)
+
+        second = job_repository.get_or_create_cache_job(
+            session,
+            source_url="https://example.com/jobs/backend-engineer",
+            raw_description_text="Build APIs using Python and PostgreSQL for customer workflows.",
+            title="Backend Engineer",
+            company="Example Co",
+        )
+
+    assert second.id == first.id
+
+
+def test_cache_job_reactivates_soft_deleted_source_url() -> None:
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+    with session_factory() as session:
+        first = job_repository.get_or_create_cache_job(
+            session,
+            source_url="https://example.com/jobs/backend-engineer",
+            raw_description_text="Build APIs using Python and PostgreSQL for customer workflows.",
+            title="Backend Engineer",
+            company="Example Co",
+        )
+        first.deleted_at = datetime.now(timezone.utc)
+        session.flush()
+
+        reimported = job_repository.get_or_create_cache_job(
+            session,
+            source_url="https://example.com/jobs/backend-engineer",
+            raw_description_text="Build APIs using Python and PostgreSQL for customer workflows.",
+            title="Backend Engineer",
+            company="Example Co",
+        )
+
+    assert reimported.id == first.id
+    assert reimported.deleted_at is None
 
 
 def test_bulk_job_list_discovery_returns_reviewable_candidates(monkeypatch) -> None:

@@ -171,7 +171,16 @@ def test_alembic_has_initial_schema_revision() -> None:
     config.set_main_option("script_location", str(server_dir / "app" / "db" / "migrations"))
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == "20260707_0015"
+    assert script.get_current_head() == "20260713_0016"
+
+
+def test_jobs_cache_source_url_hash_is_unique_in_metadata() -> None:
+    engine = create_engine("sqlite:///:memory:", future=True)
+
+    Base.metadata.create_all(bind=engine)
+
+    indexes = {index["name"]: index for index in inspect(engine).get_indexes("jobs_cache")}
+    assert bool(indexes["ix_jobs_cache_source_url_hash"]["unique"]) is True
 
 
 def test_resume_profile_repository_creates_local_resume_json() -> None:

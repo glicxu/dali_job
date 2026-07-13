@@ -164,6 +164,15 @@ class JobUpdateRequest(BaseModel):
     notes: str | None = None
 
 
+class JobBulkDeleteRequest(BaseModel):
+    job_ids: list[int] = Field(..., min_length=1, max_length=100)
+
+
+class JobBulkDeleteResponse(BaseModel):
+    deleted_job_ids: list[int] = Field(default_factory=list)
+    missing_job_ids: list[int] = Field(default_factory=list)
+
+
 class JobResponse(BaseModel):
     id: int
     workspace_id: int

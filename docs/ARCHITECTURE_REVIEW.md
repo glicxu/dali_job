@@ -2,6 +2,8 @@
 
 This review captures the current functional and architectural state of DaliJob and highlights useful next steps, risks, and low-value areas to avoid overbuilding.
 
+The use-case split, phased delivery order, dependencies, and acceptance criteria are maintained in the [DaliJob Implementation Plan](IMPLEMENTATION_PLAN.md).
+
 ## Current Assessment
 
 DaliJob has a reasonable MVP foundation:
@@ -203,13 +205,15 @@ Recommended direction:
 
 ## Recommended Next Build Order
 
-1. Harden production authentication rules.
-2. Enforce `jobs_cache` versus `user_edited_jobs` boundaries on the server.
-3. Add application tracking as a separate product area.
-4. Add deletion/archive/export controls for user-owned data.
-5. Add match snapshots or version references.
-6. Move bulk import, bulk match, provider search, and expensive AI work to background jobs.
-7. Add interview preparation once saved jobs, resume profiles, and application tracking are stable.
+The detailed build order now lives in the [implementation plan](IMPLEMENTATION_PLAN.md). At a high level:
+
+1. Establish a safe, reproducible baseline for the implemented resume, jobs, and matching use cases.
+2. Add user-controlled deletion/archive and historically meaningful match inputs.
+3. Deliver application tracking as a separate end-to-end product slice.
+4. Add immutable application documents and next actions.
+5. Move expensive provider work behind a durable background execution boundary.
+6. Add interview preparation and outcome analytics only after application history exists.
+7. Add email, calendar, and generation integrations only after the manual core loop is stable.
 
 ## Architectural Principle
 

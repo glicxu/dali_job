@@ -15,6 +15,7 @@ Key documents:
 - [API Specification](docs/API_SPEC.md)
 - [ER Diagram](docs/ER_DIAGRAM.md)
 - [Folder Structure](docs/FOLDER_STRUCTURE.md)
+- [Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
 - [Implementation Checklist](docs/IMPLEMENTATION_CHECKLIST.md)
 - [GitHub Issues](docs/GITHUB_ISSUES.md)
 - [Testing Strategy](docs/TESTING_STRATEGY.md)

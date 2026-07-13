@@ -1,5 +1,7 @@
 # DaliJob Implementation Checklist
 
+Use the [DaliJob Implementation Plan](IMPLEMENTATION_PLAN.md) for current priority, use-case boundaries, dependencies, and release exit criteria. This checklist remains the detailed implemented/planned capability inventory.
+
 ## Phase 0: Project Foundation
 
 - [x] Create top-level `server/` FastAPI project.

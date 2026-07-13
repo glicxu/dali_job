@@ -2,6 +2,8 @@
 
 Status checked on 2026-07-08.
 
+Implementation sequencing for these use cases is defined in the [DaliJob Implementation Plan](IMPLEMENTATION_PLAN.md). This review remains the current-state and business rationale; the plan is the executable delivery document.
+
 ## Executive View
 
 DaliJob is best understood as a private career-search operating system for job seekers, not as a public job board and not as a standalone resume builder. The strongest business position in the current repo is:

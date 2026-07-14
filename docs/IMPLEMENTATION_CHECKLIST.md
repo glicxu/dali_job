@@ -189,14 +189,14 @@ The sections below are grouped by product area. The order above should guide imp
 
 ### Application Tracking
 
-- [ ] Create application table and status enum.
-- [ ] Add application CRUD.
-- [ ] Add status transition endpoint.
-- [ ] Add application timeline events.
-- [ ] Add notes.
-- [ ] Add tasks and reminders.
-- [ ] Build tracker UI.
-- [ ] Build application detail UI.
+- [x] Create application table and status enum.
+- [x] Add application CRUD.
+- [x] Add status transition endpoint.
+- [x] Add application timeline events.
+- [x] Add notes.
+- [x] Add tasks and reminders.
+- [x] Build tracker UI.
+- [x] Build application detail UI.
 
 ### Document Management
 

@@ -24,6 +24,11 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "jobs_cache",
         "user_saved_jobs",
         "job_resume_matches",
+        "applications",
+        "application_status_history",
+        "application_events",
+        "application_notes",
+        "application_tasks",
     }.issubset(Base.metadata.tables.keys())
     assert "skills" not in Base.metadata.tables
     assert "experiences" not in Base.metadata.tables
@@ -37,6 +42,7 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
     job_cache_columns = set(Base.metadata.tables["jobs_cache"].columns.keys())
     user_saved_job_columns = set(Base.metadata.tables["user_saved_jobs"].columns.keys())
     job_resume_match_columns = set(Base.metadata.tables["job_resume_matches"].columns.keys())
+    application_columns = set(Base.metadata.tables["applications"].columns.keys())
 
     assert {
         "id",
@@ -140,6 +146,23 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
     assert "matched_resume_document_id" not in job_cache_columns
     assert "matched_resume_source" not in job_cache_columns
     assert Base.metadata.tables["jobs_cache"].columns["job_data"].nullable is True
+    assert {
+        "id",
+        "workspace_id",
+        "user_id",
+        "user_job_id",
+        "status",
+        "priority",
+        "match_score",
+        "salary_notes",
+        "applied_at",
+        "next_action_at",
+        "next_action_label",
+        "notes",
+        "created_at",
+        "updated_at",
+        "archived_at",
+    }.issubset(application_columns)
 
 
 def test_foundation_metadata_can_create_tables() -> None:
@@ -156,6 +179,11 @@ def test_foundation_metadata_can_create_tables() -> None:
     assert inspector.has_table("jobs_cache")
     assert inspector.has_table("user_saved_jobs")
     assert inspector.has_table("job_resume_matches")
+    assert inspector.has_table("applications")
+    assert inspector.has_table("application_status_history")
+    assert inspector.has_table("application_events")
+    assert inspector.has_table("application_notes")
+    assert inspector.has_table("application_tasks")
     assert not inspector.has_table("skills")
     assert not inspector.has_table("experiences")
     assert not inspector.has_table("profiles")
@@ -171,7 +199,7 @@ def test_alembic_has_initial_schema_revision() -> None:
     config.set_main_option("script_location", str(server_dir / "app" / "db" / "migrations"))
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == "20260713_0016"
+    assert script.get_current_head() == "20260713_0017"
 
 
 def test_jobs_cache_source_url_hash_is_unique_in_metadata() -> None:

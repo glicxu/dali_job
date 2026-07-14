@@ -83,7 +83,12 @@ a {
   max-width: none;
 }
 
+.applications-page {
+  max-width: none;
+}
+
 .profile-page > div:first-child,
+.applications-page > div:first-child,
 .profile-import-card {
   max-width: 1040px;
 }
@@ -332,6 +337,12 @@ li span {
   margin-top: 24px;
 }
 
+.applications-manager {
+  display: grid;
+  gap: 18px;
+  margin-top: 24px;
+}
+
 .debug-tool {
   display: grid;
   gap: 18px;
@@ -459,10 +470,26 @@ li span {
   background: #eef2f7;
   border-radius: 6px;
   color: #1f2933;
+  display: inline-flex;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
+  justify-content: center;
   padding: 5px 8px;
   white-space: nowrap;
+}
+
+.status-applied,
+.status-interviewing,
+.status-offer {
+  background: #e3f9e5;
+  color: #0e6245;
+}
+
+.status-rejected,
+.status-withdrawn,
+.status-archived {
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .button-link {
@@ -490,6 +517,37 @@ li span {
   gap: 12px;
 }
 
+.application-list {
+  display: grid;
+  gap: 12px;
+}
+
+.application-row {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e4e7eb;
+  border-radius: 6px;
+  color: inherit;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 120px minmax(0, 1fr);
+  padding: 12px;
+  text-align: left;
+}
+
+.application-row.selected {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 1px #4f46e5;
+}
+
+.application-row strong,
+.application-row .metadata {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .saved-jobs-workspace {
   align-items: flex-start;
   display: grid;
@@ -505,12 +563,21 @@ li span {
   width: 100%;
 }
 
+.applications-workspace {
+  align-items: flex-start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(420px, 0.85fr) minmax(520px, 1.15fr);
+  width: 100%;
+}
+
 .saved-jobs-list-card {
   max-height: calc(100vh - 64px);
   overflow: auto;
 }
 
-.resume-profiles-list-card {
+.resume-profiles-list-card,
+.applications-list-card {
   max-height: calc(100vh - 64px);
   overflow: auto;
 }
@@ -523,6 +590,13 @@ li span {
 }
 
 .profile-detail-pane {
+  display: grid;
+  gap: 18px;
+  position: sticky;
+  top: 32px;
+}
+
+.applications-detail-pane {
   display: grid;
   gap: 18px;
   position: sticky;
@@ -914,6 +988,10 @@ li span {
   gap: 10px;
 }
 
+.compact-form textarea {
+  min-height: 96px;
+}
+
 .item-list {
   display: grid;
   gap: 10px;
@@ -987,17 +1065,20 @@ li span {
 @media (max-width: 1180px) {
   .saved-jobs-workspace,
   .profile-workspace,
+  .applications-workspace,
   .job-search-workspace {
     grid-template-columns: 1fr;
   }
 
   .saved-jobs-list-card,
-  .resume-profiles-list-card {
+  .resume-profiles-list-card,
+  .applications-list-card {
     max-height: none;
   }
 
   .saved-jobs-detail-pane,
   .profile-detail-pane,
+  .applications-detail-pane,
   .job-search-detail-pane {
     position: static;
   }
@@ -1043,6 +1124,10 @@ li span {
   }
 
   .resume-profile-card {
+    grid-template-columns: 1fr;
+  }
+
+  .application-row {
     grid-template-columns: 1fr;
   }
 

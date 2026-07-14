@@ -354,6 +354,110 @@ export type DashboardResponse = {
   recently_saved_jobs: DashboardRecentJob[];
 };
 
+export type ApplicationStatus =
+  | "interested"
+  | "applied"
+  | "interviewing"
+  | "offer"
+  | "rejected"
+  | "withdrawn"
+  | "archived";
+
+export type ApplicationPriority = "low" | "normal" | "high";
+
+export type ApplicationJobSummary = {
+  id: number | null;
+  title: string;
+  company: string;
+  source_url: string | null;
+  summary: string;
+  work_location: string;
+  application_deadline: string;
+};
+
+export type TrackedApplication = {
+  id: number;
+  workspace_id: number;
+  user_id: number;
+  user_job_id: number | null;
+  status: ApplicationStatus;
+  priority: ApplicationPriority;
+  match_score: number | null;
+  salary_notes: string | null;
+  applied_at: string | null;
+  next_action_at: string | null;
+  next_action_label: string | null;
+  notes: string | null;
+  job: ApplicationJobSummary | null;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+};
+
+export type ApplicationStatusHistory = {
+  id: number;
+  application_id: number;
+  from_status: string | null;
+  to_status: string;
+  source: string;
+  reason: string | null;
+  created_at: string;
+};
+
+export type ApplicationEvent = {
+  id: number;
+  application_id: number;
+  event_type: string;
+  source: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+};
+
+export type ApplicationNote = {
+  id: number;
+  application_id: number;
+  body: string;
+  created_at: string;
+};
+
+export type ApplicationTask = {
+  id: number;
+  application_id: number;
+  title: string;
+  due_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+};
+
+export type ApplicationDetail = TrackedApplication & {
+  status_history: ApplicationStatusHistory[];
+  events: ApplicationEvent[];
+  notes_list: ApplicationNote[];
+  tasks: ApplicationTask[];
+};
+
+export type ApplicationCreatePayload = {
+  user_job_id: number;
+  status?: ApplicationStatus;
+  priority?: ApplicationPriority;
+  match_score?: number | null;
+  salary_notes?: string | null;
+  applied_at?: string | null;
+  next_action_at?: string | null;
+  next_action_label?: string | null;
+  notes?: string | null;
+};
+
+export type ApplicationUpdatePayload = {
+  priority?: ApplicationPriority;
+  match_score?: number | null;
+  salary_notes?: string | null;
+  applied_at?: string | null;
+  next_action_at?: string | null;
+  next_action_label?: string | null;
+  notes?: string | null;
+};
+
 export const emptyResumeData: ResumeData = {
   headline: null,
   summary: null,
@@ -475,6 +579,72 @@ export function getCurrentUser(): Promise<CurrentUser> {
 
 export function getDashboard(): Promise<DashboardResponse> {
   return requestJson<DashboardResponse>("/dashboard");
+}
+
+export function listApplications(status?: ApplicationStatus): Promise<TrackedApplication[]> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return requestJson<TrackedApplication[]>(`/applications${query}`);
+}
+
+export function createApplication(payload: ApplicationCreatePayload): Promise<ApplicationDetail> {
+  return requestJson<ApplicationDetail>("/applications", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getApplication(applicationId: number): Promise<ApplicationDetail> {
+  return requestJson<ApplicationDetail>(`/applications/${applicationId}`);
+}
+
+export function updateApplication(
+  applicationId: number,
+  payload: ApplicationUpdatePayload,
+): Promise<ApplicationDetail> {
+  return requestJson<ApplicationDetail>(`/applications/${applicationId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function changeApplicationStatus(
+  applicationId: number,
+  status: ApplicationStatus,
+  reason?: string,
+): Promise<ApplicationDetail> {
+  return requestJson<ApplicationDetail>(`/applications/${applicationId}/status`, {
+    method: "POST",
+    body: JSON.stringify({ status, reason: reason || undefined }),
+  });
+}
+
+export function addApplicationNote(applicationId: number, body: string): Promise<ApplicationNote> {
+  return requestJson<ApplicationNote>(`/applications/${applicationId}/notes`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+}
+
+export function addApplicationTask(
+  applicationId: number,
+  title: string,
+  dueAt?: string | null,
+): Promise<ApplicationTask> {
+  return requestJson<ApplicationTask>(`/applications/${applicationId}/tasks`, {
+    method: "POST",
+    body: JSON.stringify({ title, due_at: dueAt || null }),
+  });
+}
+
+export function updateApplicationTask(
+  applicationId: number,
+  taskId: number,
+  payload: { title?: string; due_at?: string | null; completed?: boolean },
+): Promise<ApplicationTask> {
+  return requestJson<ApplicationTask>(`/applications/${applicationId}/tasks/${taskId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function listDocuments(): Promise<DocumentListResponse> {

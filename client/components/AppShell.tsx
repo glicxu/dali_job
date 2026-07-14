@@ -77,6 +77,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <a href="/">Home</a>
           <a href="/match">Match</a>
           <a href="/jobs">Jobs</a>
+          <a href="/applications">Applications</a>
           <a href="/jobs/search">Job Search</a>
           <a href="/jobs/import">Bulk Import</a>
           <a href="/profile">Profile</a>
@@ -104,6 +105,7 @@ function PublicShell({ children }: { children: ReactNode }) {
           <a href="/">Home</a>
           <a href="/match">Match</a>
           <a href="/jobs">Jobs</a>
+          <a href="/applications">Applications</a>
           <a href="/jobs/search">Job Search</a>
           <a href="/jobs/import">Bulk Import</a>
           <a href="/profile">Profile</a>

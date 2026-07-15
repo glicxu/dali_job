@@ -253,9 +253,9 @@ The current model is sound for the MVP because:
 
 The main tradeoff is that JSON fields are flexible but harder to query deeply. That is acceptable for the MVP. If analytics later needs heavy querying across skills, requirements, or job fields, selected values can be indexed, derived, or normalized without replacing the current design.
 
-## Future Application Tracking
+## Application Tracking
 
-When application tracking is implemented, add a separate `applications` table instead of overloading `user_saved_jobs`.
+Application tracking uses a separate `applications` table instead of overloading `user_saved_jobs`.
 
 Recommended relationship:
 
@@ -269,13 +269,15 @@ Example application fields:
 - `user_id`
 - `user_job_id`
 - `status`
+- `stage`
 - `applied_at`
 - `next_action_at`
 - `notes`
+- `archived_at`
 - `created_at`
 - `updated_at`
 
-This keeps a saved job separate from a specific application attempt.
+One saved job can have multiple application attempts. Lifecycle status, optional interview stage, and archival are separate concepts. Status history, events, notes, and tasks are child entities of an application. A nullable uniqueness guard prevents concurrent accidental active duplicates while allowing explicitly confirmed duplicates and later attempts after terminal or archived outcomes.
 
 ## Rules To Preserve
 

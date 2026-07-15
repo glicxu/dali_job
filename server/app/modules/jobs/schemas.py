@@ -171,6 +171,19 @@ class JobBulkDeleteRequest(BaseModel):
 class JobBulkDeleteResponse(BaseModel):
     deleted_job_ids: list[int] = Field(default_factory=list)
     missing_job_ids: list[int] = Field(default_factory=list)
+    blocked_jobs: list["RecordDependency"] = Field(default_factory=list)
+
+
+class RecordDependency(BaseModel):
+    record_id: int
+    dependency_type: str
+    dependency_count: int
+    message: str
+
+
+class RecordDependencyResponse(BaseModel):
+    can_delete: bool
+    dependencies: list[RecordDependency] = Field(default_factory=list)
 
 
 class JobResponse(BaseModel):
@@ -192,6 +205,7 @@ class JobResponse(BaseModel):
     match_data: dict | None = None
     created_at: datetime
     updated_at: datetime
+    archived_at: datetime | None = None
 
 
 class JobResumeMatchResponse(BaseModel):
@@ -205,4 +219,18 @@ class JobResumeMatchResponse(BaseModel):
     resume_source: str
     match_score: int = Field(..., ge=0, le=10)
     match_data: dict
+    resume_data_snapshot: dict
+    job_data_snapshot: dict
+    provider: str
+    model_name: str | None = None
+    prompt_version: str
+    schema_version: str
+    provider_execution_reference: str | None = None
+    resume_is_stale: bool = False
+    job_is_stale: bool = False
+    is_stale: bool = False
     created_at: datetime
+
+
+class JobResumeMatchListResponse(BaseModel):
+    matches: list[JobResumeMatchResponse]

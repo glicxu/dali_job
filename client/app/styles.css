@@ -480,7 +480,8 @@ li span {
 
 .status-applied,
 .status-interviewing,
-.status-offer {
+.status-offer,
+.status-accepted {
   background: #e3f9e5;
   color: #0e6245;
 }

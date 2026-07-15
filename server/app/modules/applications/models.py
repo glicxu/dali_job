@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -16,10 +16,21 @@ class Application(Base):
     __tablename__ = "applications"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('interested', 'applied', 'interviewing', 'offer', 'rejected', 'withdrawn', 'archived')",
+            "status IN ('interested', 'applied', 'interviewing', 'offer', 'accepted', 'rejected', 'withdrawn')",
             name="ck_applications_status",
         ),
+        CheckConstraint(
+            "stage IS NULL OR stage IN ('recruiter_contact', 'assessment', 'phone_screen', 'technical_interview', 'final_interview')",
+            name="ck_applications_stage",
+        ),
         CheckConstraint("priority IN ('low', 'normal', 'high')", name="ck_applications_priority"),
+        UniqueConstraint(
+            "workspace_id",
+            "user_id",
+            "user_job_id",
+            "active_duplicate_guard",
+            name="uq_applications_active_saved_job_guard",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -42,6 +53,8 @@ class Application(Base):
         index=True,
     )
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="interested", index=True)
+    stage: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    active_duplicate_guard: Mapped[int | None] = mapped_column(Integer, nullable=True)
     priority: Mapped[str] = mapped_column(String(20), nullable=False, default="normal")
     match_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     salary_notes: Mapped[str | None] = mapped_column(Text, nullable=True)

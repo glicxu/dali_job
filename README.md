@@ -135,6 +135,18 @@ When `local` auth is enabled, use the client `/auth` page or the `/api/v1/auth/r
 
 Long term, one registration across multiple Dalifin apps should be handled by a shared identity database or standalone auth service. That is different from requiring users to log in through another app such as app_server.
 
+Production configurations (`env = production` or `env = prod`) must use `auth_mode = local` and a non-default `DALIJOB_JWT_SECRET`. The server refuses to start with `dev` or `disabled` authentication in production. It also validates that every non-health, non-login API route has an authentication dependency.
+
+Provider-backed actions use configurable in-process per-user and per-IP limits:
+
+```ini
+[provider_limits]
+user_per_minute = 20
+ip_per_minute = 60
+```
+
+The environment variables `DALIJOB_PROVIDER_USER_LIMIT_PER_MINUTE` and `DALIJOB_PROVIDER_IP_LIMIT_PER_MINUTE` override these values. Provider calls emit structured logs containing provider, feature, user identifier, duration, outcome, and available usage units without logging resume text, job text, credentials, or provider response bodies. These in-process limits are appropriate for the current single-server deployment; a shared limiter is required before running multiple server instances.
+
 ## Document Storage
 
 The current document-management slice stores uploaded files on the server filesystem and records metadata in SQL. Configure the storage folder in your private config:

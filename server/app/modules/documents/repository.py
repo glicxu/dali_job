@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.modules.auth.dependencies import AuthenticatedIdentity
 from app.modules.documents.models import Document, DocumentVersion
+from app.modules.jobs.models import JobResumeMatch
+from app.modules.profiles.models import ResumeProfile
 from app.modules.profiles.repository import ensure_account_for_identity
 
 
@@ -107,3 +109,40 @@ def create_document_with_version(
     db.add(version)
     db.flush()
     return _document_response(document, version)
+
+
+def document_dependencies(db: Session, document: Document) -> list[dict]:
+    profile_count = db.scalar(
+        select(func.count(ResumeProfile.id)).where(
+            ResumeProfile.source_document_id == document.id,
+            ResumeProfile.deleted_at.is_(None),
+        )
+    ) or 0
+    match_count = db.scalar(
+        select(func.count(JobResumeMatch.id)).where(JobResumeMatch.resume_document_id == document.id)
+    ) or 0
+    dependencies: list[dict] = []
+    if profile_count:
+        dependencies.append(
+            {
+                "dependency_type": "resume_profile",
+                "dependency_count": profile_count,
+                "message": f"{profile_count} active resume profile{'s' if profile_count != 1 else ''} use this document.",
+            }
+        )
+    if match_count:
+        dependencies.append(
+            {
+                "dependency_type": "match_history",
+                "dependency_count": match_count,
+                "message": f"{match_count} historical match{'es' if match_count != 1 else ''} reference this document.",
+            }
+        )
+    return dependencies
+
+
+def soft_delete_document(db: Session, document: Document) -> None:
+    from app.modules.documents.models import utc_now
+
+    document.deleted_at = utc_now()
+    db.flush()

@@ -117,5 +117,5 @@ class OpenAIJobDescriptionParser:
         except (json.JSONDecodeError, ValidationError) as exc:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"OpenAI returned an invalid job description response: {exc}",
+                detail="The job parser returned an invalid response. Retry or use manual job entry.",
             ) from exc

@@ -805,16 +805,12 @@ Lists applications.
 Query params:
 
 - `status`
-- `company_id`
-- `q`
-- `applied_after`
-- `applied_before`
-- `limit`
-- `cursor`
+- `stage`
+- `include_archived` (default `false`)
 
 ### `POST /applications`
 
-Creates an application from an existing job or inline job data.
+Creates an application from an existing saved job (`user_job_id`). If another active application exists, the server returns `409 duplicate_active_application`; retrying with `confirm_duplicate: true` explicitly permits another attempt.
 
 ### `GET /applications/{applicationId}`
 
@@ -826,7 +822,7 @@ Updates priority, notes, salary notes, next action, and other metadata.
 
 ### `POST /applications/{applicationId}/status`
 
-Changes status and appends status history.
+Changes status using the server-owned transition graph and appends immutable status history and an actor-attributed event. Invalid transitions return `409 invalid_application_transition`.
 
 Body:
 
@@ -836,6 +832,16 @@ Body:
   "reason": "Submitted through company portal"
 }
 ```
+
+Lifecycle statuses are `interested`, `applied`, `interviewing`, `offer`, `accepted`, `rejected`, and `withdrawn`. Optional stage values are `recruiter_contact`, `assessment`, `phone_screen`, `technical_interview`, and `final_interview`. Archival is not a status.
+
+### `POST /applications/{applicationId}/archive`
+
+Sets `archived_at` without changing lifecycle status.
+
+### `POST /applications/{applicationId}/restore`
+
+Clears `archived_at`. If restoring would create an accidental active duplicate, the server returns `409`; pass `confirm_duplicate: true` to restore intentionally.
 
 ### `GET /applications/{applicationId}/events`
 

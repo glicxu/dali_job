@@ -1,16 +1,23 @@
 from __future__ import annotations
 
 from hashlib import sha256
+import json
+from typing import Literal
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.modules.applications.models import Application
 from app.modules.auth.dependencies import AuthenticatedIdentity
 from app.modules.jobs.models import JobCache, JobResumeMatch, UserEditedJob, UserSavedJob, utc_now
 from app.modules.jobs.schemas import JobDescriptionData, JobSaveRequest, JobUpdateRequest
 from app.modules.jobs.service import JobDescriptionParser
+from app.modules.profiles import repository as profile_repository
 from app.modules.profiles.repository import ensure_account_for_identity
+
+CacheWriteSource = Literal["source_extraction", "provider_normalization"]
+TRUSTED_CACHE_WRITE_SOURCES = {"source_extraction", "provider_normalization"}
 
 
 def normalize_source_url(source_url: str | None) -> str | None:
@@ -61,6 +68,12 @@ def _effective_job_fields(
     return title, company, source_url, raw_description_text, job_data
 
 
+def canonical_json_hash(value: dict | None) -> str:
+    payload = value or {}
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def _job_response(
     user_saved_job: UserSavedJob,
     job_cache: JobCache | None,
@@ -87,10 +100,31 @@ def _job_response(
         "match_data": latest_match.match_data if latest_match else None,
         "created_at": user_saved_job.created_at,
         "updated_at": user_saved_job.updated_at,
+        "archived_at": user_saved_job.archived_at,
     }
 
 
-def _match_response(match: JobResumeMatch) -> dict:
+def _match_response(
+    match: JobResumeMatch,
+    *,
+    current_resume_data: dict | None = None,
+    current_job_data: dict | None = None,
+) -> dict:
+    resume_is_stale = bool(
+        match.resume_snapshot_hash
+        and (
+            (match.resume_profile_id is not None and current_resume_data is None)
+            or (
+                current_resume_data is not None
+                and canonical_json_hash(current_resume_data) != match.resume_snapshot_hash
+            )
+        )
+    )
+    job_is_stale = bool(
+        match.job_snapshot_hash
+        and current_job_data is not None
+        and canonical_json_hash(current_job_data) != match.job_snapshot_hash
+    )
     return {
         "id": match.id,
         "workspace_id": match.workspace_id,
@@ -102,11 +136,21 @@ def _match_response(match: JobResumeMatch) -> dict:
         "resume_source": match.resume_source,
         "match_score": match.match_score,
         "match_data": match.match_data,
+        "resume_data_snapshot": match.resume_data_snapshot,
+        "job_data_snapshot": match.job_data_snapshot,
+        "provider": match.provider,
+        "model_name": match.model_name,
+        "prompt_version": match.prompt_version,
+        "schema_version": match.schema_version,
+        "provider_execution_reference": match.provider_execution_reference,
+        "resume_is_stale": resume_is_stale,
+        "job_is_stale": job_is_stale,
+        "is_stale": resume_is_stale or job_is_stale,
         "created_at": match.created_at,
     }
 
 
-def list_jobs(db: Session, identity: AuthenticatedIdentity) -> list[dict]:
+def list_jobs(db: Session, identity: AuthenticatedIdentity, *, include_archived: bool = False) -> list[dict]:
     user, workspace = ensure_account_for_identity(db, identity)
     latest_match_ids = (
         select(
@@ -120,7 +164,7 @@ def list_jobs(db: Session, identity: AuthenticatedIdentity) -> list[dict]:
         .group_by(JobResumeMatch.user_job_id)
         .subquery()
     )
-    rows = db.execute(
+    query = (
         select(UserSavedJob, JobCache, UserEditedJob, JobResumeMatch)
         .outerjoin(JobCache, UserSavedJob.jobs_cache_id == JobCache.id)
         .outerjoin(UserEditedJob, UserSavedJob.user_edited_job_id == UserEditedJob.id)
@@ -133,8 +177,10 @@ def list_jobs(db: Session, identity: AuthenticatedIdentity) -> list[dict]:
             (UserSavedJob.jobs_cache_id.is_(None)) | (JobCache.deleted_at.is_(None)),
             (UserSavedJob.user_edited_job_id.is_(None)) | (UserEditedJob.deleted_at.is_(None)),
         )
-        .order_by(desc(UserSavedJob.updated_at))
-    ).all()
+    )
+    if not include_archived:
+        query = query.where(UserSavedJob.archived_at.is_(None))
+    rows = db.execute(query.order_by(desc(UserSavedJob.updated_at))).all()
     return [
         _job_response(user_saved_job, job_cache, user_edited_job, latest_match)
         for user_saved_job, job_cache, user_edited_job, latest_match in rows
@@ -308,7 +354,10 @@ def get_or_create_cache_job(
     title: str = "",
     company: str = "",
     reuse_cached_url: bool = True,
+    cache_write_source: CacheWriteSource,
 ) -> JobCache:
+    if cache_write_source not in TRUSTED_CACHE_WRITE_SOURCES:
+        raise ValueError("Shared job cache writes require a trusted source path.")
     if reuse_cached_url:
         cached_job = get_cached_job_by_source_url(db, source_url)
         if cached_job is not None:
@@ -445,6 +494,7 @@ def create_user_job(
     user, workspace = ensure_account_for_identity(db, identity)
     existing = get_user_job_by_cache_id(db, identity, jobs_cache_id) if jobs_cache_id is not None else None
     if existing is not None:
+        existing.archived_at = None
         if notes is not None:
             existing.notes = notes.strip() or None
         if user_edited_job_id is not None:
@@ -475,14 +525,29 @@ def create_job_from_description(
     job_data: JobDescriptionData,
     notes: str | None = None,
     reuse_cached_url: bool = True,
+    cache_write_source: CacheWriteSource | None = None,
 ) -> dict:
-    if source_url:
+    existing_cache = get_cached_job_by_source_url(db, source_url) if source_url else None
+    if existing_cache is not None:
+        if cache_write_source is not None:
+            if cache_write_source not in TRUSTED_CACHE_WRITE_SOURCES:
+                raise ValueError("Shared job cache writes require a trusted source path.")
+            existing_cache = _fill_cache_job(
+                db,
+                existing_cache,
+                raw_description_text=raw_description_text,
+                job_data=job_data,
+            )
+        user_job = create_user_job(db, identity, jobs_cache_id=existing_cache.id, notes=notes)
+        return _job_response(user_job, existing_cache, None, _latest_match_for_user_job(db, identity, user_job.id))
+    if source_url and cache_write_source is not None:
         job_cache = get_or_create_cache_job(
             db,
             source_url=source_url,
             raw_description_text=raw_description_text,
             job_data=job_data,
             reuse_cached_url=reuse_cached_url,
+            cache_write_source=cache_write_source,
         )
         user_job = create_user_job(db, identity, jobs_cache_id=job_cache.id, notes=notes)
         return _job_response(user_job, job_cache, None, _latest_match_for_user_job(db, identity, user_job.id))
@@ -510,6 +575,7 @@ def create_job_from_source(
     company: str = "",
     notes: str | None = None,
     reuse_cached_url: bool = True,
+    cache_write_source: CacheWriteSource,
 ) -> dict:
     if source_url:
         job_cache = get_or_create_cache_job(
@@ -520,6 +586,7 @@ def create_job_from_source(
             company=company,
             job_data=None,
             reuse_cached_url=reuse_cached_url,
+            cache_write_source=cache_write_source,
         )
         user_job = create_user_job(db, identity, jobs_cache_id=job_cache.id, notes=notes)
         return _job_response(user_job, job_cache, None, _latest_match_for_user_job(db, identity, user_job.id))
@@ -549,34 +616,72 @@ def get_user_job_for_identity(db: Session, identity: AuthenticatedIdentity, user
     )
 
 
+def saved_job_dependencies(db: Session, user_job: UserSavedJob) -> list[dict]:
+    application_count = db.scalar(
+        select(func.count(Application.id)).where(Application.user_job_id == user_job.id)
+    ) or 0
+    if not application_count:
+        return []
+    return [
+        {
+            "record_id": user_job.id,
+            "dependency_type": "application",
+            "dependency_count": application_count,
+            "message": (
+                f"This saved job is referenced by {application_count} application"
+                f"{'s' if application_count != 1 else ''}. Archive it, or remove the application relationship before deleting it."
+            ),
+        }
+    ]
+
+
+def archive_user_job(db: Session, user_job: UserSavedJob) -> None:
+    user_job.archived_at = utc_now()
+    db.flush()
+
+
+def restore_user_job(db: Session, user_job: UserSavedJob) -> None:
+    user_job.archived_at = None
+    db.flush()
+
+
 def job_response_for_identity(db: Session, identity: AuthenticatedIdentity, user_job: UserSavedJob) -> dict:
     job_cache = get_job_cache_for_saved_job(db, user_job)
     edited_job = get_user_edited_job_for_saved_job(db, user_job)
     return _job_response(user_job, job_cache, edited_job, _latest_match_for_user_job(db, identity, user_job.id))
 
 
-def delete_user_job(db: Session, user_job: UserSavedJob) -> None:
+def delete_user_job(db: Session, user_job: UserSavedJob) -> list[dict]:
+    dependencies = saved_job_dependencies(db, user_job)
+    if dependencies:
+        return dependencies
     user_job.deleted_at = utc_now()
     db.flush()
+    return []
 
 
 def delete_user_jobs(
     db: Session,
     identity: AuthenticatedIdentity,
     job_ids: list[int],
-) -> tuple[list[int], list[int]]:
+) -> tuple[list[int], list[int], list[dict]]:
     unique_job_ids = list(dict.fromkeys(job_ids))
     deleted_job_ids: list[int] = []
     missing_job_ids: list[int] = []
+    blocked_jobs: list[dict] = []
     for job_id in unique_job_ids:
         user_job = get_user_job_for_identity(db, identity, job_id)
         if user_job is None:
             missing_job_ids.append(job_id)
             continue
+        dependencies = saved_job_dependencies(db, user_job)
+        if dependencies:
+            blocked_jobs.extend(dependencies)
+            continue
         user_job.deleted_at = utc_now()
         deleted_job_ids.append(job_id)
     db.flush()
-    return deleted_job_ids, missing_job_ids
+    return deleted_job_ids, missing_job_ids, blocked_jobs
 
 
 def create_job(db: Session, identity: AuthenticatedIdentity, payload: JobSaveRequest) -> dict:
@@ -587,20 +692,10 @@ def create_job(db: Session, identity: AuthenticatedIdentity, payload: JobSaveReq
             "company": payload.company.strip() or payload.job_data.company,
         }
     )
-    job_cache = None
-    if source_url:
-        job_cache = get_or_create_cache_job(
-            db,
-            source_url=source_url,
-            raw_description_text=payload.raw_description_text.strip(),
-            job_data=None if payload.save_as_user_edit else job_data,
-            title=payload.title.strip(),
-            company=payload.company.strip(),
-            reuse_cached_url=True,
-        )
+    job_cache = get_cached_job_by_source_url(db, source_url) if source_url else None
 
-    if source_url and not payload.save_as_user_edit:
-        user_job = create_user_job(db, identity, jobs_cache_id=job_cache.id if job_cache else None, notes=payload.notes)
+    if job_cache is not None and not payload.save_as_user_edit:
+        user_job = create_user_job(db, identity, jobs_cache_id=job_cache.id, notes=payload.notes)
         return _job_response(user_job, job_cache, None, _latest_match_for_user_job(db, identity, user_job.id))
 
     edited_job = create_user_edited_job(
@@ -685,8 +780,26 @@ def create_job_resume_match(
     resume_source: str,
     match_score: int,
     match_data: dict,
+    resume_data_snapshot: dict | None = None,
+    job_data_snapshot: dict | None = None,
+    provider: str = "openai",
+    model_name: str | None = None,
+    prompt_version: str = "resume-job-match-v1",
+    schema_version: str = "resume-job-match-v1",
+    provider_execution_reference: str | None = None,
 ) -> dict:
     user, workspace = ensure_account_for_identity(db, identity)
+    if resume_data_snapshot is None and resume_profile_id is not None:
+        profile = profile_repository.get_resume_profile_for_identity(db, identity, resume_profile_id)
+        resume_data_snapshot = profile.resume_data if profile is not None else None
+    if job_data_snapshot is None:
+        user_job = get_user_job_for_identity(db, identity, user_job_id)
+        if user_job is not None:
+            cache_job = get_job_cache_for_saved_job(db, user_job)
+            edited_job = get_user_edited_job_for_saved_job(db, user_job)
+            job_data_snapshot = _effective_job_fields(cache_job, edited_job)[4]
+    resume_snapshot = resume_data_snapshot or {}
+    job_snapshot = job_data_snapshot or {}
     match = JobResumeMatch(
         workspace_id=workspace.id,
         user_id=user.id,
@@ -697,8 +810,60 @@ def create_job_resume_match(
         resume_source=resume_source,
         match_score=match_score,
         match_data=match_data,
+        resume_data_snapshot=resume_snapshot,
+        job_data_snapshot=job_snapshot,
+        resume_snapshot_hash=canonical_json_hash(resume_snapshot),
+        job_snapshot_hash=canonical_json_hash(job_snapshot),
+        provider=provider,
+        model_name=model_name,
+        prompt_version=prompt_version,
+        schema_version=schema_version,
+        provider_execution_reference=provider_execution_reference,
     )
     db.add(match)
     db.flush()
     db.refresh(match)
     return _match_response(match)
+
+
+def list_job_resume_matches(
+    db: Session,
+    identity: AuthenticatedIdentity,
+    user_job: UserSavedJob,
+) -> list[dict]:
+    user, workspace = ensure_account_for_identity(db, identity)
+    job_cache = get_job_cache_for_saved_job(db, user_job)
+    edited_job = get_user_edited_job_for_saved_job(db, user_job)
+    current_job_data = _effective_job_fields(job_cache, edited_job)[4]
+    matches = db.scalars(
+        select(JobResumeMatch)
+        .where(
+            JobResumeMatch.workspace_id == workspace.id,
+            JobResumeMatch.user_id == user.id,
+            JobResumeMatch.user_job_id == user_job.id,
+        )
+        .order_by(desc(JobResumeMatch.created_at), desc(JobResumeMatch.id))
+    ).all()
+    responses: list[dict] = []
+    for match in matches:
+        current_resume_data = None
+        if match.resume_profile_id is not None:
+            profile = profile_repository.get_resume_profile_for_identity(db, identity, match.resume_profile_id)
+            current_resume_data = profile.resume_data if profile is not None else None
+        elif match.resume_document_id is not None:
+            from app.modules.documents import repository as document_repository
+
+            document = document_repository.get_document_for_identity(db, identity, match.resume_document_id)
+            if document is None:
+                current_resume_data = {}
+            else:
+                version = document_repository.get_latest_version(db, document)
+                current_resume_data = {"raw_resume_text": version.extracted_text if version else ""}
+        responses.append(
+            _match_response(
+                match,
+                current_resume_data=current_resume_data,
+                current_job_data=current_job_data,
+            )
+        )
+    return responses

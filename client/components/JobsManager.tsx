@@ -3,17 +3,22 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   analyzeJob,
+  archiveJob,
   bulkDeleteJobs,
   createJob,
+  deleteJob,
   draftJobFromUrl,
   emptyJobDescriptionData,
   getAuthToken,
   JobDescriptionData,
+  JobResumeMatchHistory,
   JobSavePayload,
   listDocuments,
   listJobs,
+  listJobMatches,
   listResumeProfiles,
   ResumeProfile,
+  restoreJob,
   StoredJob,
   StoredDocument,
   updateJob,
@@ -43,6 +48,7 @@ type JobEditorState = {
   showSaveButton: boolean;
   hasUserEdits: boolean;
   isEditing: boolean;
+  archived_at: string | null;
 };
 
 type SupportedRequirementView = {
@@ -113,6 +119,7 @@ function emptyEditorState(): JobEditorState {
     showSaveButton: true,
     hasUserEdits: true,
     isEditing: true,
+    archived_at: null,
   };
 }
 
@@ -132,6 +139,7 @@ function editorFromJob(job: StoredJob, showSaveButton = true): JobEditorState {
     showSaveButton,
     hasUserEdits: false,
     isEditing: false,
+    archived_at: job.archived_at,
   };
 }
 
@@ -265,6 +273,7 @@ export function JobsManager() {
   const [jobUrl, setJobUrl] = useState("");
   const [editor, setEditor] = useState<JobEditorState | null>(null);
   const [matchDataJob, setMatchDataJob] = useState<StoredJob | null>(null);
+  const [matchHistory, setMatchHistory] = useState<JobResumeMatchHistory[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -274,6 +283,7 @@ export function JobsManager() {
   const [bulkMode, setBulkMode] = useState<BulkMode>(null);
   const [selectedBulkJobIds, setSelectedBulkJobIds] = useState<number[]>([]);
   const [isBulkRemoving, setIsBulkRemoving] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   const sortedJobs = useMemo(() => jobs, [jobs]);
 
@@ -281,7 +291,7 @@ export function JobsManager() {
     setError(null);
     setIsLoading(true);
     try {
-      setJobs(await listJobs());
+      setJobs(await listJobs(showArchived));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load jobs.");
     } finally {
@@ -300,7 +310,7 @@ export function JobsManager() {
         setResumeProfiles([]);
         setDocuments([]);
       });
-  }, []);
+  }, [showArchived]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -310,8 +320,7 @@ export function JobsManager() {
     const requestedJob = jobs.find((job) => job.id === requestedJobId);
     if (requestedJob) {
       if (requestedView === "match" && requestedJob.match_data) {
-        setMatchDataJob(requestedJob);
-        setEditor(null);
+        void openMatchHistory(requestedJob);
       } else {
         setEditor(editorFromJob(requestedJob));
         setMatchDataJob(null);
@@ -368,9 +377,11 @@ export function JobsManager() {
       if (matchDataJob?.id && result.deleted_job_ids.includes(matchDataJob.id)) {
         setMatchDataJob(null);
       }
-      setStatus(
-        `${result.deleted_job_ids.length} saved job${result.deleted_job_ids.length === 1 ? "" : "s"} removed.`,
-      );
+      const removedMessage = `${result.deleted_job_ids.length} saved job${result.deleted_job_ids.length === 1 ? "" : "s"} removed.`;
+      const blockedMessage = result.blocked_jobs.length
+        ? ` ${result.blocked_jobs.map((item) => item.message).join(" ")}`
+        : "";
+      setStatus(`${removedMessage}${blockedMessage}`);
       cancelBulkMode();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Bulk remove failed.");
@@ -397,6 +408,7 @@ export function JobsManager() {
         showSaveButton: true,
         hasUserEdits: false,
         isEditing: true,
+        archived_at: null,
       });
       setStatus("Review and edit the parsed job before saving.");
     } catch (err) {
@@ -483,6 +495,57 @@ export function JobsManager() {
     }
   }
 
+  async function openMatchHistory(job: StoredJob) {
+    setError(null);
+    try {
+      const payload = await listJobMatches(job.id);
+      setMatchHistory(payload.matches);
+      setMatchDataJob(job);
+      setEditor(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Match history failed to load.");
+    }
+  }
+
+  async function archiveSavedJob(jobId: number) {
+    setError(null);
+    try {
+      await archiveJob(jobId);
+      setEditor(null);
+      setMatchDataJob(null);
+      setStatus("Saved job archived.");
+      await loadJobs();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Job archive failed.");
+    }
+  }
+
+  async function restoreSavedJob(jobId: number) {
+    setError(null);
+    try {
+      await restoreJob(jobId);
+      setEditor(null);
+      setStatus("Saved job restored.");
+      await loadJobs();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Job restore failed.");
+    }
+  }
+
+  async function permanentlyRemoveSavedJob(jobId: number) {
+    if (!window.confirm("Remove this saved job? This cannot be undone from the website.")) return;
+    setError(null);
+    try {
+      await deleteJob(jobId);
+      setEditor(null);
+      setMatchDataJob(null);
+      setStatus("Saved job removed.");
+      await loadJobs();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Job removal failed.");
+    }
+  }
+
   return (
     <div className="jobs-manager">
       {error ? <div className="error-banner">{error}</div> : null}
@@ -539,6 +602,9 @@ export function JobsManager() {
           onChange={setEditor}
           onJobDataChange={setJobDataField}
           onClose={() => setEditor(null)}
+          onArchive={archiveSavedJob}
+          onRestore={restoreSavedJob}
+          onDelete={permanentlyRemoveSavedJob}
         />
       ) : null}
 
@@ -547,6 +613,14 @@ export function JobsManager() {
           <div className="profile-card-header">
             <h2>Saved Jobs</h2>
             <div className="button-row">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={showArchived}
+                  onChange={(event) => setShowArchived(event.target.checked)}
+                />{" "}
+                Show archived
+              </label>
               {bulkMode ? (
                 <>
                   <button type="button" className="secondary-button" onClick={cancelBulkMode}>
@@ -613,7 +687,10 @@ export function JobsManager() {
                     <span className="score-badge">{job.match_score === null ? "N/A" : `${job.match_score}/10`}</span>
                   </div>
                   <div>
-                    <h2>{job.title || "Untitled Job"}</h2>
+                    <h2>
+                      {job.title || "Untitled Job"}
+                      {job.archived_at ? " (Archived)" : ""}
+                    </h2>
                     <p className="metadata">
                       {job.company || "Unknown company"} | {jobData.work_location || "Location not set"} |{" "}
                       {jobData.application_deadline || "Deadline Unavailable"}
@@ -646,10 +723,7 @@ export function JobsManager() {
                           type="button"
                           className="secondary-button"
                           disabled={!job.match_data}
-                          onClick={() => {
-                            setMatchDataJob(job);
-                            setEditor(null);
-                          }}
+                          onClick={() => void openMatchHistory(job)}
                         >
                           Match Data
                         </button>
@@ -681,6 +755,9 @@ export function JobsManager() {
               onChange={setEditor}
               onJobDataChange={setJobDataField}
               onClose={() => setEditor(null)}
+              onArchive={archiveSavedJob}
+              onRestore={restoreSavedJob}
+              onDelete={permanentlyRemoveSavedJob}
             />
           ) : null}
 
@@ -688,6 +765,7 @@ export function JobsManager() {
             <MatchDataViewer
               job={matchDataJob}
               resumeLabel={resumeReferenceLabel(matchDataJob, resumeProfiles, documents)}
+              matches={matchHistory}
               onClose={() => setMatchDataJob(null)}
             />
           ) : null}
@@ -814,13 +892,25 @@ function JobsManagerPreview() {
 function MatchDataViewer({
   job,
   resumeLabel,
+  matches,
   onClose,
 }: {
   job: StoredJob;
   resumeLabel: string;
+  matches: JobResumeMatchHistory[];
   onClose: () => void;
 }) {
-  const matchData = matchDataViewFromJob(job);
+  const [selectedMatchId, setSelectedMatchId] = useState<number | null>(matches[0]?.id ?? null);
+  const selectedMatch = matches.find((item) => item.id === selectedMatchId) ?? matches[0] ?? null;
+  const viewedJob = selectedMatch ? { ...job, match_data: selectedMatch.match_data } : job;
+  const matchData = matchDataViewFromJob(viewedJob);
+  const selectedResumeLabel = selectedMatch?.id === matches[0]?.id
+    ? resumeLabel
+    : selectedMatch?.resume_profile_id
+      ? `Resume profile #${selectedMatch.resume_profile_id}`
+      : selectedMatch?.resume_document_id
+        ? `Document #${selectedMatch.resume_document_id}`
+        : resumeLabel;
 
   return (
     <section className="profile-card">
@@ -830,13 +920,39 @@ function MatchDataViewer({
           <p className="metadata">
             {job.title || "Untitled Job"} | {job.company || "Unknown company"}
           </p>
-          <p className="metadata">Compared resume: {resumeLabel}</p>
+          <p className="metadata">Compared resume: {selectedResumeLabel}</p>
         </div>
         <button type="button" className="secondary-button" onClick={onClose}>
           Close
         </button>
       </div>
-      {job.match_data ? (
+      {matches.length > 1 ? (
+        <div className="button-row" aria-label="Match history">
+          {matches.map((match) => (
+            <button
+              type="button"
+              className={match.id === selectedMatch?.id ? "" : "secondary-button"}
+              key={match.id}
+              onClick={() => setSelectedMatchId(match.id)}
+            >
+              {match.match_score}/10 | {new Date(match.created_at).toLocaleDateString()}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {selectedMatch?.is_stale ? (
+        <div className="warning-banner">
+          This historical result is older than the current {selectedMatch.resume_is_stale ? "resume" : ""}
+          {selectedMatch.resume_is_stale && selectedMatch.job_is_stale ? " and " : ""}
+          {selectedMatch.job_is_stale ? "job data" : ""}. Run Match again to create a new result; this one will remain unchanged.
+        </div>
+      ) : null}
+      {selectedMatch ? (
+        <p className="metadata">
+          {selectedMatch.provider} | {selectedMatch.model_name || "Model unavailable"} | Prompt {selectedMatch.prompt_version}
+        </p>
+      ) : null}
+      {viewedJob.match_data ? (
         <section className="result-panel" aria-live="polite">
           <div className="score-row">
             <div className="score">{matchData.match_score ?? "N/A"}</div>
@@ -891,7 +1007,7 @@ function MatchDataViewer({
 
           <details>
             <summary>Raw Match JSON</summary>
-            <pre className="text-preview">{JSON.stringify(job.match_data, null, 2)}</pre>
+            <pre className="text-preview">{JSON.stringify(viewedJob.match_data, null, 2)}</pre>
           </details>
         </section>
       ) : (
@@ -951,6 +1067,9 @@ function JobEditor({
   onChange,
   onJobDataChange,
   onClose,
+  onArchive,
+  onRestore,
+  onDelete,
 }: {
   editor: JobEditorState;
   isSaving: boolean;
@@ -958,6 +1077,9 @@ function JobEditor({
   onChange: (value: JobEditorState) => void;
   onJobDataChange: <K extends keyof JobDescriptionData>(key: K, value: JobDescriptionData[K]) => void;
   onClose: () => void;
+  onArchive: (jobId: number) => Promise<void>;
+  onRestore: (jobId: number) => Promise<void>;
+  onDelete: (jobId: number) => Promise<void>;
 }) {
   const isSavedJob = Boolean(editor.id);
   const canEdit = !isSavedJob || editor.isEditing;
@@ -987,6 +1109,22 @@ function JobEditor({
           </p>
         </div>
         <div className="button-row">
+          {editor.id ? (
+            editor.archived_at ? (
+              <button type="button" className="secondary-button" onClick={() => void onRestore(editor.id!)}>
+                Restore
+              </button>
+            ) : (
+              <button type="button" className="secondary-button" onClick={() => void onArchive(editor.id!)}>
+                Archive
+              </button>
+            )
+          ) : null}
+          {editor.id ? (
+            <button type="button" className="secondary-button" onClick={() => void onDelete(editor.id!)}>
+              Delete
+            </button>
+          ) : null}
           <button type="button" className="secondary-button" onClick={onClose}>
             Close
           </button>

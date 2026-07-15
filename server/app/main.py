@@ -12,9 +12,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import load_runtime_config
 from app.core.logging import configure_logging
+from app.core.provider_ops import ProviderRateLimiter
 from app.db.session import dispose_db_engines
 from app.modules.applications.router import router as applications_router
 from app.modules.auth.router import auth_router, router as auth_base_router
+from app.modules.auth.policy import validate_route_authorization
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.documents.router import router as documents_router
 from app.modules.health.router import router as health_router
@@ -24,6 +26,20 @@ from app.modules.profiles.router import resume_profiles_router, router as profil
 from app.modules.resume_job_match.router import router as resume_job_match_router
 
 LOGGER = logging.getLogger(__name__)
+
+API_ROUTERS = (
+    auth_base_router,
+    auth_router,
+    applications_router,
+    dashboard_router,
+    documents_router,
+    health_router,
+    job_search_router,
+    jobs_router,
+    profile_router,
+    resume_profiles_router,
+    resume_job_match_router,
+)
 
 
 @asynccontextmanager
@@ -46,9 +62,11 @@ async def lifespan(app: FastAPI):
 def create_app(config_path: Optional[str] = None) -> FastAPI:
     runtime = load_runtime_config(config_path)
     configure_logging(runtime.log_level)
+    validate_route_authorization(API_ROUTERS)
 
     app = FastAPI(title="DaliJob API", version="0.1.0", lifespan=lifespan)
     app.state.runtime = runtime
+    app.state.provider_rate_limiter = ProviderRateLimiter()
 
     app.add_middleware(
         CORSMiddleware,

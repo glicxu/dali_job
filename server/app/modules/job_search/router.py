@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db_session
+from app.core.provider_ops import GuardedProviderProxy, run_provider_call
 from app.modules.auth.dependencies import AuthenticatedIdentity, get_current_identity
 from app.modules.job_search.apify_indeed import ApifyIndeedClient, get_apify_indeed_client
 from app.modules.jobs import repository
@@ -25,14 +27,40 @@ from app.modules.resume_job_match.service import OpenAIResumeJobMatcher, ResumeJ
 router = APIRouter(prefix="/job-search", tags=["job-search"])
 
 
-def get_job_search_description_parser(request: Request) -> JobDescriptionParser:
+def get_job_search_description_parser(
+    request: Request,
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> JobDescriptionParser:
     runtime = request.app.state.runtime
-    return OpenAIJobDescriptionParser(model=runtime.openai_model)
+    return cast(
+        JobDescriptionParser,
+        GuardedProviderProxy(
+            factory=lambda: OpenAIJobDescriptionParser(model=runtime.openai_model),
+            method_name="parse",
+            request=request,
+            identity=identity,
+            provider="openai",
+            feature="job_search_import_parse",
+        ),
+    )
 
 
-def get_job_search_resume_matcher(request: Request) -> ResumeJobMatcher:
+def get_job_search_resume_matcher(
+    request: Request,
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> ResumeJobMatcher:
     runtime = request.app.state.runtime
-    return OpenAIResumeJobMatcher(model=runtime.openai_model)
+    return cast(
+        ResumeJobMatcher,
+        GuardedProviderProxy(
+            factory=lambda: OpenAIResumeJobMatcher(model=runtime.openai_model),
+            method_name="compare",
+            request=request,
+            identity=identity,
+            provider="openai",
+            feature="job_search_resume_match",
+        ),
+    )
 
 
 def _match_data_from_result(result: ResumeJobMatchResponse) -> dict:
@@ -104,20 +132,30 @@ def _create_resume_profile_match(
         resume_source="resume_profile",
         match_score=result.match_score,
         match_data=_match_data_from_result(result),
+        model_name=result.provider_model_name,
+        provider_execution_reference=result.provider_execution_reference,
     )
 
 
 @router.post("/indeed", response_model=IndeedJobSearchResponse)
 def search_indeed_jobs(
     payload: IndeedJobSearchRequest,
+    request: Request,
     db: Session = Depends(get_db_session),
     client: ApifyIndeedClient = Depends(get_apify_indeed_client),
-    _identity: AuthenticatedIdentity = Depends(get_current_identity),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> IndeedJobSearchResponse:
-    results = client.search(
-        keyword=payload.keyword.strip(),
-        location=payload.location.strip(),
-        max_results=payload.max_results,
+    results = run_provider_call(
+        request,
+        identity,
+        provider="apify",
+        feature="job_search",
+        operation=lambda: client.search(
+            keyword=payload.keyword.strip(),
+            location=payload.location.strip(),
+            max_results=payload.max_results,
+        ),
+        usage_units=len,
     )
     for result in results:
         cached_job = repository.get_cached_job_by_source_url(db, result.source_url)
@@ -163,6 +201,7 @@ def import_indeed_search_results(
                 raw_description_text=raw_text,
                 title=result.title,
                 company=result.company,
+                cache_write_source="provider_normalization",
             )
             match_score = None
             match_id = None
@@ -210,6 +249,11 @@ def import_indeed_search_results(
             )
         except HTTPException as exc:
             failed.append({"source_url": response_source_url, "reason": str(exc.detail)})
-        except Exception as exc:
-            failed.append({"source_url": response_source_url, "reason": str(exc)})
+        except Exception:
+            failed.append(
+                {
+                    "source_url": response_source_url,
+                    "reason": "This job could not be imported. Retry or add it manually.",
+                }
+            )
     return JobListImportResponse(imported=imported, failed=failed)

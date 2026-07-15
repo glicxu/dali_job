@@ -10,8 +10,10 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.session import get_db_session
 from app.main import create_app
+from app.main import API_ROUTERS
 from app.modules.auth import dependencies as auth_dependencies
 from app.modules.auth.dependencies import AuthenticatedIdentity, DEFAULT_AUTH_SECRET, get_auth_secret
+from app.modules.auth.policy import validate_route_authorization
 from app.modules.auth.security import hash_password, verify_password
 from app.modules.jobs import router as jobs_router
 from app.modules.jobs.router import get_job_description_parser
@@ -268,3 +270,7 @@ def test_scraping_helper_routes_accept_valid_local_token(monkeypatch) -> None:
     assert draft_response.status_code == 200
     assert discover_response.status_code == 200
     assert extract_response.status_code == 200
+
+
+def test_all_non_public_api_routes_have_identity_dependency() -> None:
+    validate_route_authorization(API_ROUTERS)

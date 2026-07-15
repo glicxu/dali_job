@@ -14,7 +14,7 @@ from app.modules.auth.dependencies import AuthenticatedIdentity
 from app.modules.jobs import repository as job_repository
 from app.modules.jobs import router as jobs_router
 from app.modules.jobs.router import get_job_description_parser
-from app.modules.jobs.schemas import JobDescriptionData
+from app.modules.jobs.schemas import JobDescriptionData, JobUpdateRequest
 from app.modules.resume_job_match.job_url_import import JobLinkCandidate, JobListDiscoveryResult
 from app.modules.resume_job_match.schemas import ResumeJobMatchRequest, ResumeJobMatchResponse
 
@@ -447,6 +447,7 @@ def test_cache_job_reuses_existing_source_url_hash() -> None:
             raw_description_text="Build APIs using Python and PostgreSQL for customer workflows.",
             title="Backend Engineer",
             company="Example Co",
+            cache_write_source="source_extraction",
         )
         second = job_repository.get_or_create_cache_job(
             session,
@@ -454,6 +455,7 @@ def test_cache_job_reuses_existing_source_url_hash() -> None:
             raw_description_text="Build APIs using Python and PostgreSQL for customer workflows.",
             title="Backend Engineer",
             company="Example Co",
+            cache_write_source="source_extraction",
         )
 
     assert second.id == first.id
@@ -476,6 +478,7 @@ def test_cache_job_unique_conflict_reuses_winning_row(monkeypatch) -> None:
             raw_description_text="Build APIs using Python and PostgreSQL for customer workflows.",
             title="Backend Engineer",
             company="Example Co",
+            cache_write_source="source_extraction",
         )
         original_lookup = job_repository.get_cached_job_by_source_url
         lookup_calls = 0
@@ -495,6 +498,7 @@ def test_cache_job_unique_conflict_reuses_winning_row(monkeypatch) -> None:
             raw_description_text="Build APIs using Python and PostgreSQL for customer workflows.",
             title="Backend Engineer",
             company="Example Co",
+            cache_write_source="source_extraction",
         )
 
     assert second.id == first.id
@@ -517,6 +521,7 @@ def test_cache_job_reactivates_soft_deleted_source_url() -> None:
             raw_description_text="Build APIs using Python and PostgreSQL for customer workflows.",
             title="Backend Engineer",
             company="Example Co",
+            cache_write_source="source_extraction",
         )
         first.deleted_at = datetime.now(timezone.utc)
         session.flush()
@@ -527,10 +532,98 @@ def test_cache_job_reactivates_soft_deleted_source_url() -> None:
             raw_description_text="Build APIs using Python and PostgreSQL for customer workflows.",
             title="Backend Engineer",
             company="Example Co",
+            cache_write_source="source_extraction",
         )
 
     assert reimported.id == first.id
     assert reimported.deleted_at is None
+
+
+def test_user_save_payload_cannot_create_shared_cache_entry() -> None:
+    client = create_test_client()
+
+    response = client.post(
+        "/api/v1/jobs",
+        json={
+            "title": "User Supplied Title",
+            "company": "User Supplied Company",
+            "source_url": "https://example.com/jobs/untrusted",
+            "raw_description_text": "User supplied job text.",
+            "job_data": {
+                "title": "User Supplied Title",
+                "company": "User Supplied Company",
+                "summary": "User supplied summary.",
+            },
+            "save_as_user_edit": False,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["jobs_cache_id"] is None
+    assert payload["user_edited_job_id"] is not None
+
+
+def test_one_users_job_edit_does_not_change_shared_cache_or_another_users_view() -> None:
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    user_a = AuthenticatedIdentity("user-a", "a@example.com", "User A", provider="test")
+    user_b = AuthenticatedIdentity("user-b", "b@example.com", "User B", provider="test")
+    source_url = "https://example.com/jobs/shared-role"
+    source_data = JobDescriptionData(
+        title="Shared Backend Engineer",
+        company="Example Co",
+        summary="Build shared backend services.",
+        required_skills=["Python"],
+    )
+
+    with session_factory() as session:
+        saved_a = job_repository.create_job_from_description(
+            session,
+            user_a,
+            source_url=source_url,
+            raw_description_text="Trusted extracted source text.",
+            job_data=source_data,
+            cache_write_source="source_extraction",
+        )
+        saved_b = job_repository.create_job_from_description(
+            session,
+            user_b,
+            source_url=source_url,
+            raw_description_text="Ignored user input because the cache already exists.",
+            job_data=JobDescriptionData(title="Poisoned title"),
+        )
+        user_job_a = job_repository.get_user_job_for_identity(session, user_a, saved_a["id"])
+        assert user_job_a is not None
+        job_repository.update_job(
+            session,
+            user_a,
+            user_job_a,
+            JobUpdateRequest(
+                title="User A Private Title",
+                job_data=source_data.model_copy(
+                    update={"title": "User A Private Title", "required_skills": ["Private Skill"]}
+                ),
+            ),
+        )
+
+        cache = job_repository.get_cached_job_by_source_url(session, source_url)
+        user_job_b = job_repository.get_user_job_for_identity(session, user_b, saved_b["id"])
+        assert cache is not None
+        assert user_job_b is not None
+        response_b = job_repository.job_response_for_identity(session, user_b, user_job_b)
+
+        assert cache.title == "Shared Backend Engineer"
+        assert cache.job_data["required_skills"] == ["Python"]
+        assert response_b["title"] == "Shared Backend Engineer"
+        assert response_b["job_data"]["required_skills"] == ["Python"]
+        assert job_repository.get_user_job_for_identity(session, user_b, saved_a["id"]) is None
 
 
 def test_bulk_job_list_discovery_returns_reviewable_candidates(monkeypatch) -> None:

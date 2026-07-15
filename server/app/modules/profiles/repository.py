@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import desc, select, update
+from sqlalchemy import desc, func, select, update
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.dev_identity import (
@@ -224,6 +224,24 @@ def soft_delete_resume_profile(db: Session, resume_profile: ResumeProfile) -> No
     resume_profile.deleted_at = utc_now()
     resume_profile.is_default = False
     db.flush()
+
+
+def resume_profile_dependencies(db: Session, resume_profile: ResumeProfile) -> list[dict]:
+    # Import locally to avoid coupling profile model initialization to the jobs module.
+    from app.modules.jobs.models import JobResumeMatch
+
+    match_count = db.scalar(
+        select(func.count(JobResumeMatch.id)).where(JobResumeMatch.resume_profile_id == resume_profile.id)
+    ) or 0
+    if not match_count:
+        return []
+    return [
+        {
+            "dependency_type": "match_history",
+            "dependency_count": match_count,
+            "message": f"{match_count} historical match{'es' if match_count != 1 else ''} use this resume profile.",
+        }
+    ]
     _ensure_one_default_profile(db, resume_profile.workspace_id, resume_profile.user_id)
     db.flush()
 

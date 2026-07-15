@@ -59,6 +59,10 @@ class PendingMatchedJob(BaseModel):
     matched_resume_document_id: int | None = None
     matched_resume_source: str
     match_data: dict[str, Any] = Field(default_factory=dict)
+    resume_data_snapshot: dict[str, Any] = Field(default_factory=dict)
+    job_data_snapshot: dict[str, Any] = Field(default_factory=dict)
+    model_name: str | None = None
+    provider_execution_reference: str | None = None
 
 
 class ResumeJobMatchResponse(BaseModel):
@@ -79,6 +83,8 @@ class ResumeJobMatchResponse(BaseModel):
     supported_requirements: list[SupportedRequirement] = Field(default_factory=list)
     unsupported_requirements: list[UnsupportedRequirement] = Field(default_factory=list)
     recommended_resume_updates: list[str] = Field(default_factory=list)
+    provider_model_name: str | None = Field(default=None, exclude=True)
+    provider_execution_reference: str | None = Field(default=None, exclude=True)
 
 
 class JobUrlExtractRequest(BaseModel):

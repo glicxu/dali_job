@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db_session
+from app.core.provider_ops import GuardedProviderProxy, run_provider_call
 from app.modules.auth.dependencies import AuthenticatedIdentity, get_current_identity
 from app.modules.jobs import repository
 from app.modules.jobs.schemas import (
@@ -18,7 +20,9 @@ from app.modules.jobs.schemas import (
     JobListDiscoverResponse,
     JobListImportRequest,
     JobListImportResponse,
+    JobResumeMatchListResponse,
     JobResponse,
+    RecordDependencyResponse,
     JobSaveRequest,
     JobUpdateRequest,
 )
@@ -31,14 +35,40 @@ from app.modules.resume_job_match.service import OpenAIResumeJobMatcher, ResumeJ
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
-def get_job_description_parser(request: Request) -> JobDescriptionParser:
+def get_job_description_parser(
+    request: Request,
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> JobDescriptionParser:
     runtime = request.app.state.runtime
-    return OpenAIJobDescriptionParser(model=runtime.openai_model)
+    return cast(
+        JobDescriptionParser,
+        GuardedProviderProxy(
+            factory=lambda: OpenAIJobDescriptionParser(model=runtime.openai_model),
+            method_name="parse",
+            request=request,
+            identity=identity,
+            provider="openai",
+            feature="job_description_parse",
+        ),
+    )
 
 
-def get_resume_job_matcher(request: Request) -> ResumeJobMatcher:
+def get_resume_job_matcher(
+    request: Request,
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> ResumeJobMatcher:
     runtime = request.app.state.runtime
-    return OpenAIResumeJobMatcher(model=runtime.openai_model)
+    return cast(
+        ResumeJobMatcher,
+        GuardedProviderProxy(
+            factory=lambda: OpenAIResumeJobMatcher(model=runtime.openai_model),
+            method_name="compare",
+            request=request,
+            identity=identity,
+            provider="openai",
+            feature="resume_job_match",
+        ),
+    )
 
 
 def resolve_raw_job_text(payload: JobImportRequest) -> str:
@@ -47,7 +77,13 @@ def resolve_raw_job_text(payload: JobImportRequest) -> str:
     return (payload.job_description_text or "").strip()
 
 
-def build_job_draft(payload: JobImportRequest, parser: JobDescriptionParser, db: Session | None = None) -> JobDraftResponse:
+def build_job_draft(
+    payload: JobImportRequest,
+    parser: JobDescriptionParser,
+    db: Session | None = None,
+    *,
+    raw_text_override: str | None = None,
+) -> JobDraftResponse:
     if db is not None and payload.job_url:
         cached_job = repository.get_cached_job_by_source_url(db, str(payload.job_url))
         if cached_job is not None:
@@ -58,8 +94,18 @@ def build_job_draft(payload: JobImportRequest, parser: JobDescriptionParser, db:
                 job_data=job_data,
                 fields_missing=[],
             )
-    raw_text = resolve_raw_job_text(payload)
+    raw_text = raw_text_override if raw_text_override is not None else resolve_raw_job_text(payload)
     job_data = parser.parse(raw_text)
+    if db is not None and payload.job_url:
+        cached_job = repository.get_or_create_cache_job(
+            db,
+            source_url=str(payload.job_url),
+            raw_description_text=raw_text,
+            job_data=job_data,
+            cache_write_source="source_extraction",
+        )
+        raw_text = cached_job.raw_description_text
+        job_data = JobDescriptionData.model_validate(cached_job.job_data)
     missing_fields = [
         field
         for field in ("title", "company", "summary")
@@ -115,30 +161,45 @@ def _create_resume_profile_match(
         resume_source="resume_profile",
         match_score=result.match_score,
         match_data=_match_data_from_result(result),
+        model_name=result.provider_model_name,
+        provider_execution_reference=result.provider_execution_reference,
     )
 
 
 @router.get("", response_model=list[JobResponse])
 def list_jobs(
+    include_archived: bool = False,
     db: Session = Depends(get_db_session),
     identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> list[dict]:
-    return repository.list_jobs(db, identity)
+    return repository.list_jobs(db, identity, include_archived=include_archived)
 
 
 @router.post("/draft", response_model=JobDraftResponse)
 def draft_job_description(
     payload: JobImportRequest,
+    request: Request,
     parser: JobDescriptionParser = Depends(get_job_description_parser),
     db: Session = Depends(get_db_session),
     identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> JobDraftResponse:
-    return build_job_draft(payload, parser, db)
+    raw_text = None
+    if payload.job_url and repository.get_cached_job_by_source_url(db, str(payload.job_url)) is None:
+        raw_text = run_provider_call(
+            request,
+            identity,
+            provider="web_extraction",
+            feature="job_url_extract",
+            operation=lambda: fetch_job_page_text_from_url(str(payload.job_url)),
+            usage_units=lambda text: len(text),
+        )
+    return build_job_draft(payload, parser, db, raw_text_override=raw_text)
 
 
 @router.post("/import-description", response_model=JobResponse)
 def import_job_description(
     payload: JobImportRequest,
+    request: Request,
     parser: JobDescriptionParser = Depends(get_job_description_parser),
     db: Session = Depends(get_db_session),
     identity: AuthenticatedIdentity = Depends(get_current_identity),
@@ -154,7 +215,18 @@ def import_job_description(
                 raw_description_text=cached_job.raw_description_text,
                 job_data=job_data,
             )
-    raw_text = resolve_raw_job_text(payload)
+    raw_text = (
+        run_provider_call(
+            request,
+            identity,
+            provider="web_extraction",
+            feature="job_url_extract",
+            operation=lambda: fetch_job_page_text_from_url(str(payload.job_url)),
+            usage_units=lambda text: len(text),
+        )
+        if payload.job_url
+        else resolve_raw_job_text(payload)
+    )
     job_data = parser.parse(raw_text)
     return repository.create_job_from_description(
         db,
@@ -162,17 +234,26 @@ def import_job_description(
         source_url=str(payload.job_url) if payload.job_url else None,
         raw_description_text=raw_text,
         job_data=job_data,
+        cache_write_source="source_extraction" if payload.job_url else None,
     )
 
 
 @router.post("/import-list/discover", response_model=JobListDiscoverResponse)
 def discover_job_list(
     payload: JobListDiscoverRequest,
+    request: Request,
     db: Session = Depends(get_db_session),
     identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> JobListDiscoverResponse:
     list_url = str(payload.list_url)
-    discovery = discover_job_list_from_url(list_url, max_results=payload.max_results)
+    discovery = run_provider_call(
+        request,
+        identity,
+        provider="web_extraction",
+        feature="job_list_discovery",
+        operation=lambda: discover_job_list_from_url(list_url, max_results=payload.max_results),
+        usage_units=lambda result: len(result.links),
+    )
     discovered = discovery.links
     candidates = []
     for candidate in discovered:
@@ -198,6 +279,7 @@ def discover_job_list(
 @router.post("/import-list", response_model=JobListImportResponse)
 def import_job_list(
     payload: JobListImportRequest,
+    request: Request,
     parser: JobDescriptionParser = Depends(get_job_description_parser),
     matcher: ResumeJobMatcher = Depends(get_resume_job_matcher),
     db: Session = Depends(get_db_session),
@@ -217,12 +299,20 @@ def import_job_list(
             if cached_job is not None:
                 raw_text = cached_job.raw_description_text
             else:
-                raw_text = fetch_job_page_text_from_url(source_url)
+                raw_text = run_provider_call(
+                    request,
+                    identity,
+                    provider="web_extraction",
+                    feature="job_url_extract",
+                    operation=lambda: fetch_job_page_text_from_url(source_url),
+                    usage_units=lambda text: len(text),
+                )
             saved_job = repository.create_job_from_source(
                 db,
                 identity,
                 source_url=source_url,
                 raw_description_text=raw_text,
+                cache_write_source="source_extraction",
             )
             match_score = None
             match_id = None
@@ -255,8 +345,13 @@ def import_job_list(
             )
         except HTTPException as exc:
             failed.append({"source_url": source_url, "reason": str(exc.detail)})
-        except Exception as exc:
-            failed.append({"source_url": source_url, "reason": str(exc)})
+        except Exception:
+            failed.append(
+                {
+                    "source_url": source_url,
+                    "reason": "This job could not be imported. Retry or add it manually.",
+                }
+            )
     return JobListImportResponse(imported=imported, failed=failed)
 
 
@@ -275,9 +370,13 @@ def bulk_delete_jobs(
     db: Session = Depends(get_db_session),
     identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> JobBulkDeleteResponse:
-    deleted_job_ids, missing_job_ids = repository.delete_user_jobs(db, identity, payload.job_ids)
+    deleted_job_ids, missing_job_ids, blocked_jobs = repository.delete_user_jobs(db, identity, payload.job_ids)
     db.commit()
-    return JobBulkDeleteResponse(deleted_job_ids=deleted_job_ids, missing_job_ids=missing_job_ids)
+    return JobBulkDeleteResponse(
+        deleted_job_ids=deleted_job_ids,
+        missing_job_ids=missing_job_ids,
+        blocked_jobs=blocked_jobs,
+    )
 
 
 @router.get("/{job_id}", response_model=JobResponse)
@@ -290,6 +389,57 @@ def get_job(
     if user_job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
     return repository.job_response_for_identity(db, identity, user_job)
+
+
+@router.get("/{job_id}/dependencies", response_model=RecordDependencyResponse)
+def get_job_dependencies(
+    job_id: int,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> RecordDependencyResponse:
+    user_job = repository.get_user_job_for_identity(db, identity, job_id)
+    if user_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+    dependencies = repository.saved_job_dependencies(db, user_job)
+    return RecordDependencyResponse(can_delete=not dependencies, dependencies=dependencies)
+
+
+@router.get("/{job_id}/matches", response_model=JobResumeMatchListResponse)
+def list_job_matches(
+    job_id: int,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> JobResumeMatchListResponse:
+    user_job = repository.get_user_job_for_identity(db, identity, job_id)
+    if user_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+    return JobResumeMatchListResponse(matches=repository.list_job_resume_matches(db, identity, user_job))
+
+
+@router.post("/{job_id}/archive", status_code=status.HTTP_204_NO_CONTENT)
+def archive_job(
+    job_id: int,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> None:
+    user_job = repository.get_user_job_for_identity(db, identity, job_id)
+    if user_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+    repository.archive_user_job(db, user_job)
+    db.commit()
+
+
+@router.post("/{job_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
+def restore_job(
+    job_id: int,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> None:
+    user_job = repository.get_user_job_for_identity(db, identity, job_id)
+    if user_job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+    repository.restore_user_job(db, user_job)
+    db.commit()
 
 
 @router.post("/{job_id}/analyze", response_model=JobResponse)
@@ -329,5 +479,13 @@ def delete_job(
     user_job = repository.get_user_job_for_identity(db, identity, job_id)
     if user_job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
-    repository.delete_user_job(db, user_job)
+    dependencies = repository.delete_user_job(db, user_job)
+    if dependencies:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": dependencies[0]["message"],
+                "dependencies": dependencies,
+            },
+        )
     db.commit()

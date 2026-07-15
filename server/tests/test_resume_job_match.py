@@ -1069,3 +1069,58 @@ def test_job_url_rejects_private_hosts() -> None:
         assert "not allowed" in str(exc)
     else:
         raise AssertionError("private host should be rejected")
+
+
+def test_match_history_preserves_snapshots_and_detects_resume_staleness() -> None:
+    client = create_test_client()
+    profile_response = client.post(
+        "/api/v1/resume-profiles",
+        json={
+            "title": "Backend Resume",
+            "resume_data": {
+                "headline": "Backend Engineer",
+                "summary": "Built FastAPI services with Python.",
+                "experience": ["Built FastAPI services with Python."],
+                "skills": ["Python", "FastAPI"],
+                "education": [],
+                "certifications": [],
+                "projects": [],
+                "awards": [],
+                "publications": [],
+                "languages": [],
+                "volunteer": [],
+                "target_roles": [],
+                "notes": [],
+            },
+        },
+    )
+    profile_id = profile_response.json()["id"]
+
+    match_response = client.post(
+        "/api/v1/resume-job-matches",
+        json={
+            "resume_profile_id": profile_id,
+            "job_description_text": "Build APIs using PostgreSQL and Kubernetes.",
+        },
+    )
+    assert match_response.status_code == 200
+    job_id = match_response.json()["saved_job_id"]
+
+    history = client.get(f"/api/v1/jobs/{job_id}/matches").json()["matches"]
+    assert len(history) == 1
+    assert history[0]["resume_data_snapshot"]["skills"] == ["Python", "FastAPI"]
+    assert history[0]["job_data_snapshot"]["required_skills"] == ["PostgreSQL"]
+    assert history[0]["is_stale"] is False
+
+    updated_data = profile_response.json()["resume_data"]
+    updated_data["skills"] = ["Python", "FastAPI", "Kubernetes"]
+    update_response = client.patch(
+        f"/api/v1/resume-profiles/{profile_id}",
+        json={"resume_data": updated_data},
+    )
+    assert update_response.status_code == 200
+
+    stale_history = client.get(f"/api/v1/jobs/{job_id}/matches").json()["matches"]
+    assert stale_history[0]["resume_is_stale"] is True
+    assert stale_history[0]["is_stale"] is True
+    assert stale_history[0]["resume_data_snapshot"]["skills"] == ["Python", "FastAPI"]

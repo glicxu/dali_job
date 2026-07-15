@@ -80,3 +80,25 @@ def test_document_upload_list_text_and_download(tmp_path) -> None:
         assert document.title == "Master Resume"
         assert version.sha256
         assert version.storage_path
+
+    profile_response = client.post(
+        "/api/v1/resume-profiles",
+        json={
+            "title": "Imported Resume",
+            "source_document_id": uploaded["id"],
+            "source_document_version_id": uploaded["latest_version"]["id"],
+            "resume_data": {},
+        },
+    )
+    assert profile_response.status_code == 200
+
+    dependencies = client.get(f"/api/v1/documents/{uploaded['id']}/dependencies")
+    assert dependencies.status_code == 200
+    assert dependencies.json()["dependencies"][0]["dependency_type"] == "resume_profile"
+
+    blocked_delete = client.delete(f"/api/v1/documents/{uploaded['id']}")
+    assert blocked_delete.status_code == 409
+
+    forced_delete = client.delete(f"/api/v1/documents/{uploaded['id']}?force=true")
+    assert forced_delete.status_code == 204
+    assert client.get("/api/v1/documents").json()["documents"] == []

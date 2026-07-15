@@ -121,6 +121,7 @@ class UserSavedJob(Base):
         default=utc_now,
         onupdate=utc_now,
     )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
@@ -167,4 +168,13 @@ class JobResumeMatch(Base):
     resume_source: Mapped[str] = mapped_column(String(64), nullable=False)
     match_score: Mapped[int] = mapped_column(Integer, nullable=False)
     match_data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    resume_data_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    job_data_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    resume_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    job_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    provider: Mapped[str] = mapped_column(String(64), nullable=False, default="openai")
+    model_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    prompt_version: Mapped[str] = mapped_column(String(64), nullable=False, default="resume-job-match-v1")
+    schema_version: Mapped[str] = mapped_column(String(64), nullable=False, default="resume-job-match-v1")
+    provider_execution_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)

@@ -9,7 +9,12 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db_session
 from app.modules.auth.dependencies import AuthenticatedIdentity, get_current_identity
 from app.modules.documents import repository
-from app.modules.documents.schemas import DocumentListResponse, DocumentResponse, DocumentTextResponse
+from app.modules.documents.schemas import (
+    DocumentDependencyResponse,
+    DocumentListResponse,
+    DocumentResponse,
+    DocumentTextResponse,
+)
 from app.modules.documents.storage import (
     extract_redacted_text,
     read_supported_upload,
@@ -102,3 +107,42 @@ def download_document(
     if not path.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stored file is missing.")
     return FileResponse(path, media_type=latest.content_type, filename=latest.file_name)
+
+
+@router.get("/{document_id}/dependencies", response_model=DocumentDependencyResponse)
+def get_document_dependencies(
+    document_id: int,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> DocumentDependencyResponse:
+    document = repository.get_document_for_identity(db, identity, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+    dependencies = repository.document_dependencies(db, document)
+    return DocumentDependencyResponse(
+        can_delete_without_warning=not dependencies,
+        dependencies=dependencies,
+    )
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document(
+    document_id: int,
+    force: bool = False,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> None:
+    document = repository.get_document_for_identity(db, identity, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+    dependencies = repository.document_dependencies(db, document)
+    if dependencies and not force:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "This document is in use. Review the dependencies before deleting it.",
+                "dependencies": dependencies,
+            },
+        )
+    repository.soft_delete_document(db, document)
+    db.commit()

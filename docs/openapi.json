@@ -133,6 +133,15 @@
             "schema": {
               "anyOf": [
                 {
+                  "enum": [
+                    "interested",
+                    "applied",
+                    "interviewing",
+                    "offer",
+                    "accepted",
+                    "rejected",
+                    "withdrawn"
+                  ],
                   "type": "string"
                 },
                 {
@@ -140,6 +149,39 @@
                 }
               ],
               "title": "Status"
+            }
+          },
+          {
+            "name": "stage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "recruiter_contact",
+                    "assessment",
+                    "phone_screen",
+                    "technical_interview",
+                    "final_interview"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Stage"
+            }
+          },
+          {
+            "name": "include_archived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Archived"
             }
           }
         ],
@@ -346,6 +388,110 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ApplicationStatusChangeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/applications/{application_id}/archive": {
+      "post": {
+        "tags": [
+          "applications"
+        ],
+        "summary": "Archive Application",
+        "operationId": "archive_application_api_v1_applications__application_id__archive_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "application_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Application Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/applications/{application_id}/restore": {
+      "post": {
+        "tags": [
+          "applications"
+        ],
+        "summary": "Restore Application",
+        "operationId": "restore_application_api_v1_applications__application_id__restore_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "application_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Application Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplicationArchiveRequest"
               }
             }
           }
@@ -746,6 +892,54 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Delete Document",
+        "operationId": "delete_document_api_v1_documents__document_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Force"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/documents/{document_id}/text": {
@@ -840,6 +1034,53 @@
         }
       }
     },
+    "/api/v1/documents/{document_id}/dependencies": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Get Document Dependencies",
+        "operationId": "get_document_dependencies_api_v1_documents__document_id__dependencies_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentDependencyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/health": {
       "get": {
         "tags": [
@@ -884,13 +1125,7 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "type": "object",
-                  "title": "Response Database Health Api V1 Health Db Get"
-                }
+                "schema": {}
               }
             }
           }
@@ -996,27 +1231,49 @@
         ],
         "summary": "List Jobs",
         "operationId": "list_jobs_api_v1_jobs_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "include_archived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Archived"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
+                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/JobResponse"
                   },
-                  "type": "array",
                   "title": "Response List Jobs Api V1 Jobs Get"
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       },
       "post": {
         "tags": [
@@ -1024,15 +1281,20 @@
         ],
         "summary": "Create Job",
         "operationId": "create_job_api_v1_jobs_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/JobSaveRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -1055,12 +1317,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/jobs/draft": {
@@ -1433,6 +1690,180 @@
         }
       }
     },
+    "/api/v1/jobs/{job_id}/dependencies": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Get Job Dependencies",
+        "operationId": "get_job_dependencies_api_v1_jobs__job_id__dependencies_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordDependencyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/{job_id}/matches": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "List Job Matches",
+        "operationId": "list_job_matches_api_v1_jobs__job_id__matches_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResumeMatchListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/{job_id}/archive": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Archive Job",
+        "operationId": "archive_job_api_v1_jobs__job_id__archive_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/{job_id}/restore": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Restore Job",
+        "operationId": "restore_job_api_v1_jobs__job_id__restore_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/jobs/{job_id}/analyze": {
       "post": {
         "tags": [
@@ -1524,6 +1955,53 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/api/v1/profile/resume-imports/{document_id}/retry": {
+      "post": {
+        "tags": [
+          "profile"
+        ],
+        "summary": "Retry Resume Import",
+        "operationId": "retry_resume_import_api_v1_profile_resume_imports__document_id__retry_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumeImportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/profile/resume-imports/apply": {
@@ -1763,11 +2241,68 @@
               "type": "integer",
               "title": "Resume Profile Id"
             }
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Force"
+            }
           }
         ],
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/resume-profiles/{resume_profile_id}/dependencies": {
+      "get": {
+        "tags": [
+          "resume-profiles"
+        ],
+        "summary": "Get Resume Profile Dependencies",
+        "operationId": "get_resume_profile_dependencies_api_v1_resume_profiles__resume_profile_id__dependencies_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "resume_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Resume Profile Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumeProfileDependencyResponse"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -1969,6 +2504,17 @@
   },
   "components": {
     "schemas": {
+      "ApplicationArchiveRequest": {
+        "properties": {
+          "confirm_duplicate": {
+            "type": "boolean",
+            "title": "Confirm Duplicate",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "ApplicationArchiveRequest"
+      },
       "ApplicationCreateRequest": {
         "properties": {
           "user_job_id": {
@@ -1982,12 +2528,30 @@
               "applied",
               "interviewing",
               "offer",
+              "accepted",
               "rejected",
-              "withdrawn",
-              "archived"
+              "withdrawn"
             ],
             "title": "Status",
             "default": "interested"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "recruiter_contact",
+                  "assessment",
+                  "phone_screen",
+                  "technical_interview",
+                  "final_interview"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
           },
           "priority": {
             "type": "string",
@@ -2068,6 +2632,11 @@
               }
             ],
             "title": "Notes"
+          },
+          "confirm_duplicate": {
+            "type": "boolean",
+            "title": "Confirm Duplicate",
+            "default": false
           }
         },
         "type": "object",
@@ -2104,6 +2673,17 @@
           "status": {
             "type": "string",
             "title": "Status"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
           },
           "priority": {
             "type": "string",
@@ -2208,6 +2788,13 @@
               }
             ],
             "title": "Archived At"
+          },
+          "allowed_status_transitions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Status Transitions"
           },
           "status_history": {
             "items": {
@@ -2416,6 +3003,17 @@
             "type": "string",
             "title": "Status"
           },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
           "priority": {
             "type": "string",
             "title": "Priority"
@@ -2519,6 +3117,13 @@
               }
             ],
             "title": "Archived At"
+          },
+          "allowed_status_transitions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Status Transitions"
           }
         },
         "type": "object",
@@ -2543,9 +3148,9 @@
               "applied",
               "interviewing",
               "offer",
+              "accepted",
               "rejected",
-              "withdrawn",
-              "archived"
+              "withdrawn"
             ],
             "title": "Status"
           },
@@ -2747,6 +3352,24 @@
       },
       "ApplicationUpdateRequest": {
         "properties": {
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "recruiter_contact",
+                  "assessment",
+                  "phone_screen",
+                  "technical_interview",
+                  "final_interview"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
           "priority": {
             "anyOf": [
               {
@@ -2863,7 +3486,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File"
           }
         },
@@ -2877,7 +3500,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File"
           },
           "title": {
@@ -3281,6 +3904,49 @@
         ],
         "title": "DashboardResponse"
       },
+      "DocumentDependency": {
+        "properties": {
+          "dependency_type": {
+            "type": "string",
+            "title": "Dependency Type"
+          },
+          "dependency_count": {
+            "type": "integer",
+            "title": "Dependency Count"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dependency_type",
+          "dependency_count",
+          "message"
+        ],
+        "title": "DocumentDependency"
+      },
+      "DocumentDependencyResponse": {
+        "properties": {
+          "can_delete_without_warning": {
+            "type": "boolean",
+            "title": "Can Delete Without Warning"
+          },
+          "dependencies": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentDependency"
+            },
+            "type": "array",
+            "title": "Dependencies"
+          }
+        },
+        "type": "object",
+        "required": [
+          "can_delete_without_warning"
+        ],
+        "title": "DocumentDependencyResponse"
+      },
       "DocumentListResponse": {
         "properties": {
           "documents": {
@@ -3654,6 +4320,13 @@
             },
             "type": "array",
             "title": "Missing Job Ids"
+          },
+          "blocked_jobs": {
+            "items": {
+              "$ref": "#/components/schemas/RecordDependency"
+            },
+            "type": "array",
+            "title": "Blocked Jobs"
           }
         },
         "type": "object",
@@ -4244,6 +4917,18 @@
             "type": "string",
             "format": "date-time",
             "title": "Updated At"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
           }
         },
         "type": "object",
@@ -4259,6 +4944,171 @@
           "updated_at"
         ],
         "title": "JobResponse"
+      },
+      "JobResumeMatchListResponse": {
+        "properties": {
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/JobResumeMatchResponse"
+            },
+            "type": "array",
+            "title": "Matches"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matches"
+        ],
+        "title": "JobResumeMatchListResponse"
+      },
+      "JobResumeMatchResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "workspace_id": {
+            "type": "integer",
+            "title": "Workspace Id"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "user_job_id": {
+            "type": "integer",
+            "title": "User Job Id"
+          },
+          "jobs_cache_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jobs Cache Id"
+          },
+          "resume_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Profile Id"
+          },
+          "resume_document_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Document Id"
+          },
+          "resume_source": {
+            "type": "string",
+            "title": "Resume Source"
+          },
+          "match_score": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Match Score"
+          },
+          "match_data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Match Data"
+          },
+          "resume_data_snapshot": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Resume Data Snapshot"
+          },
+          "job_data_snapshot": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Job Data Snapshot"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "provider_execution_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Execution Reference"
+          },
+          "resume_is_stale": {
+            "type": "boolean",
+            "title": "Resume Is Stale",
+            "default": false
+          },
+          "job_is_stale": {
+            "type": "boolean",
+            "title": "Job Is Stale",
+            "default": false
+          },
+          "is_stale": {
+            "type": "boolean",
+            "title": "Is Stale",
+            "default": false
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "workspace_id",
+          "user_id",
+          "user_job_id",
+          "resume_source",
+          "match_score",
+          "match_data",
+          "resume_data_snapshot",
+          "job_data_snapshot",
+          "provider",
+          "prompt_version",
+          "schema_version",
+          "created_at"
+        ],
+        "title": "JobResumeMatchResponse"
       },
       "JobSaveRequest": {
         "properties": {
@@ -4527,6 +5377,38 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Match Data"
+          },
+          "resume_data_snapshot": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Resume Data Snapshot"
+          },
+          "job_data_snapshot": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Job Data Snapshot"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
+          },
+          "provider_execution_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Execution Reference"
           }
         },
         "type": "object",
@@ -4539,6 +5421,54 @@
           "matched_resume_source"
         ],
         "title": "PendingMatchedJob"
+      },
+      "RecordDependency": {
+        "properties": {
+          "record_id": {
+            "type": "integer",
+            "title": "Record Id"
+          },
+          "dependency_type": {
+            "type": "string",
+            "title": "Dependency Type"
+          },
+          "dependency_count": {
+            "type": "integer",
+            "title": "Dependency Count"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "record_id",
+          "dependency_type",
+          "dependency_count",
+          "message"
+        ],
+        "title": "RecordDependency"
+      },
+      "RecordDependencyResponse": {
+        "properties": {
+          "can_delete": {
+            "type": "boolean",
+            "title": "Can Delete"
+          },
+          "dependencies": {
+            "items": {
+              "$ref": "#/components/schemas/RecordDependency"
+            },
+            "type": "array",
+            "title": "Dependencies"
+          }
+        },
+        "type": "object",
+        "required": [
+          "can_delete"
+        ],
+        "title": "RecordDependencyResponse"
       },
       "RegisterRequest": {
         "properties": {
@@ -4735,6 +5665,17 @@
           },
           "suggestions": {
             "$ref": "#/components/schemas/ResumeData"
+          },
+          "parse_warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parse Warning"
           }
         },
         "type": "object",
@@ -5001,6 +5942,49 @@
         "type": "object",
         "title": "ResumeProfileCreateRequest"
       },
+      "ResumeProfileDependency": {
+        "properties": {
+          "dependency_type": {
+            "type": "string",
+            "title": "Dependency Type"
+          },
+          "dependency_count": {
+            "type": "integer",
+            "title": "Dependency Count"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dependency_type",
+          "dependency_count",
+          "message"
+        ],
+        "title": "ResumeProfileDependency"
+      },
+      "ResumeProfileDependencyResponse": {
+        "properties": {
+          "can_delete_without_warning": {
+            "type": "boolean",
+            "title": "Can Delete Without Warning"
+          },
+          "dependencies": {
+            "items": {
+              "$ref": "#/components/schemas/ResumeProfileDependency"
+            },
+            "type": "array",
+            "title": "Dependencies"
+          }
+        },
+        "type": "object",
+        "required": [
+          "can_delete_without_warning"
+        ],
+        "title": "ResumeProfileDependencyResponse"
+      },
       "ResumeProfileListResponse": {
         "properties": {
           "resume_profiles": {
@@ -5212,13 +6196,6 @@
           "type": {
             "type": "string",
             "title": "Error Type"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "ctx": {
-            "type": "object",
-            "title": "Context"
           }
         },
         "type": "object",

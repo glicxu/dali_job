@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db_session
+from app.core.provider_ops import GuardedProviderProxy, run_provider_call
 from app.modules.auth.dependencies import AuthenticatedIdentity, get_current_identity
 from app.modules.documents import repository as document_repository
 from app.modules.jobs import repository as job_repository
@@ -29,14 +31,40 @@ from app.modules.resume_job_match.service import OpenAIResumeJobMatcher, ResumeJ
 router = APIRouter(prefix="/resume-job-matches", tags=["resume-job-matches"])
 
 
-def get_resume_job_matcher(request: Request) -> ResumeJobMatcher:
+def get_resume_job_matcher(
+    request: Request,
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> ResumeJobMatcher:
     runtime = request.app.state.runtime
-    return OpenAIResumeJobMatcher(model=runtime.openai_model)
+    return cast(
+        ResumeJobMatcher,
+        GuardedProviderProxy(
+            factory=lambda: OpenAIResumeJobMatcher(model=runtime.openai_model),
+            method_name="compare",
+            request=request,
+            identity=identity,
+            provider="openai",
+            feature="resume_job_match",
+        ),
+    )
 
 
-def get_match_job_description_parser(request: Request) -> JobDescriptionParser:
+def get_match_job_description_parser(
+    request: Request,
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> JobDescriptionParser:
     runtime = request.app.state.runtime
-    return OpenAIJobDescriptionParser(model=runtime.openai_model)
+    return cast(
+        JobDescriptionParser,
+        GuardedProviderProxy(
+            factory=lambda: OpenAIJobDescriptionParser(model=runtime.openai_model),
+            method_name="parse",
+            request=request,
+            identity=identity,
+            provider="openai",
+            feature="match_job_description_parse",
+        ),
+    )
 
 
 def resolve_resume_text(
@@ -88,6 +116,7 @@ def import_job_for_match(
     parser: JobDescriptionParser,
     db: Session,
     identity: AuthenticatedIdentity,
+    request: Request | None = None,
 ) -> tuple[str | None, str, JobDescriptionData]:
     if payload.job_url:
         source_url = str(payload.job_url)
@@ -104,11 +133,31 @@ def import_job_for_match(
         if cached_job is not None:
             job_data = job_repository.ensure_job_data(db, cached_job, parser)
             return cached_job.source_url, cached_job.raw_description_text, job_data
-        raw_text = fetch_job_page_text_from_url(source_url)
+        raw_text = (
+            run_provider_call(
+                request,
+                identity,
+                provider="web_extraction",
+                feature="job_url_extract",
+                operation=lambda: fetch_job_page_text_from_url(source_url),
+                usage_units=lambda text: len(text),
+            )
+            if request is not None
+            else fetch_job_page_text_from_url(source_url)
+        )
     else:
         source_url = None
         raw_text = (payload.job_description_text or "").strip()
     job_data = parser.parse(raw_text)
+    if source_url:
+        cached_job = job_repository.get_or_create_cache_job(
+            db,
+            source_url=source_url,
+            raw_description_text=raw_text,
+            job_data=job_data,
+            cache_write_source="source_extraction",
+        )
+        return cached_job.source_url, cached_job.raw_description_text, JobDescriptionData.model_validate(cached_job.job_data)
     return source_url, raw_text, job_data
 
 
@@ -152,9 +201,17 @@ def bulk_payload_as_match_request(payload: BulkSavedJobMatchRequest) -> ResumeJo
 @router.post("/job-url-extract", response_model=JobUrlExtractResponse)
 def extract_job_url(
     payload: JobUrlExtractRequest,
+    request: Request,
     identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> JobUrlExtractResponse:
-    extracted_text = fetch_job_description_from_url(str(payload.job_url))
+    extracted_text = run_provider_call(
+        request,
+        identity,
+        provider="web_extraction",
+        feature="job_url_extract",
+        operation=lambda: fetch_job_description_from_url(str(payload.job_url)),
+        usage_units=lambda text: len(text),
+    )
     return JobUrlExtractResponse(
         job_url=str(payload.job_url),
         extracted_text=extracted_text,
@@ -165,13 +222,14 @@ def extract_job_url(
 @router.post("", response_model=ResumeJobMatchResponse)
 def create_resume_job_match(
     payload: ResumeJobMatchRequest,
+    request: Request,
     matcher: ResumeJobMatcher = Depends(get_resume_job_matcher),
     parser: JobDescriptionParser = Depends(get_match_job_description_parser),
     db: Session = Depends(get_db_session),
     identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> ResumeJobMatchResponse:
     resume_data = resolve_resume_data_for_match(payload, db, identity)
-    source_url, raw_text, job_data_model = import_job_for_match(payload, parser, db, identity)
+    source_url, raw_text, job_data_model = import_job_for_match(payload, parser, db, identity, request)
     job_data = job_data_model.model_dump()
     resolved_payload = ResumeJobMatchRequest(
         resume_text=json.dumps(resume_data, ensure_ascii=False, indent=2),
@@ -193,6 +251,10 @@ def create_resume_job_match(
         matched_resume_document_id=resume_document_id,
         matched_resume_source=resume_source,
         match_data=match_data_from_result(result),
+        resume_data_snapshot=resume_data,
+        job_data_snapshot=job_data,
+        model_name=result.provider_model_name,
+        provider_execution_reference=result.provider_execution_reference,
     )
     if result.match_score >= 5:
         saved_job = job_repository.create_job_from_description(
@@ -212,6 +274,10 @@ def create_resume_job_match(
             resume_source=resume_source,
             match_score=result.match_score,
             match_data=match_data_from_result(result),
+            resume_data_snapshot=resume_data,
+            job_data_snapshot=job_data,
+            model_name=result.provider_model_name,
+            provider_execution_reference=result.provider_execution_reference,
         )
         result.saved_job_id = saved_job["id"]
         result.saved_match_id = saved_match["id"]
@@ -265,6 +331,10 @@ def create_bulk_saved_job_matches(
                 resume_source=resume_source,
                 match_score=result.match_score,
                 match_data=match_data_from_result(result),
+                resume_data_snapshot=resume_data,
+                job_data_snapshot=job_data,
+                model_name=result.provider_model_name,
+                provider_execution_reference=result.provider_execution_reference,
             )
             result.saved_job_id = user_job.id
             result.saved_match_id = saved_match["id"]
@@ -282,8 +352,13 @@ def create_bulk_saved_job_matches(
             )
         except HTTPException as exc:
             failed.append({"user_job_id": user_job_id, "reason": str(exc.detail)})
-        except Exception as exc:
-            failed.append({"user_job_id": user_job_id, "reason": str(exc)})
+        except Exception:
+            failed.append(
+                {
+                    "user_job_id": user_job_id,
+                    "reason": "This job could not be matched. Retry without changing the selected resume.",
+                }
+            )
 
     return BulkSavedJobMatchResponse(matched=matched, failed=failed)
 
@@ -311,6 +386,10 @@ def save_pending_matched_job(
         resume_source=payload.matched_resume_source,
         match_score=payload.match_score,
         match_data=payload.match_data or {"match_score": payload.match_score},
+        resume_data_snapshot=payload.resume_data_snapshot,
+        job_data_snapshot=payload.job_data_snapshot,
+        model_name=payload.model_name,
+        provider_execution_reference=payload.provider_execution_reference,
     )
     return SavePendingMatchedJobResponse(
         saved_job_id=saved_job["id"],

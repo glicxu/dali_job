@@ -60,3 +60,14 @@ class ResumeProfileResponse(BaseModel):
 
 class ResumeProfileListResponse(BaseModel):
     resume_profiles: list[ResumeProfileResponse]
+
+
+class ResumeProfileDependency(BaseModel):
+    dependency_type: str
+    dependency_count: int
+    message: str
+
+
+class ResumeProfileDependencyResponse(BaseModel):
+    can_delete_without_warning: bool
+    dependencies: list[ResumeProfileDependency] = Field(default_factory=list)

@@ -124,9 +124,15 @@ class OpenAIResumeJobMatcher:
             )
         try:
             payload = json.loads(content)
-            return ResumeJobMatchResponse.model_validate(payload)
+            result = ResumeJobMatchResponse.model_validate(payload)
+            return result.model_copy(
+                update={
+                    "provider_model_name": self._model,
+                    "provider_execution_reference": response.id,
+                }
+            )
         except (json.JSONDecodeError, ValidationError) as exc:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"OpenAI returned an invalid comparison response: {exc}",
+                detail="The matching provider returned an invalid response. Retry without changing your inputs.",
             ) from exc

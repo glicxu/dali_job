@@ -109,6 +109,7 @@ export type StoredJob = {
   match_data: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
+  archived_at: string | null;
 };
 
 export type JobDraftResponse = {
@@ -194,6 +195,41 @@ export type JobUpdatePayload = Partial<JobSavePayload> & {
 export type JobBulkDeleteResponse = {
   deleted_job_ids: number[];
   missing_job_ids: number[];
+  blocked_jobs: RecordDependency[];
+};
+
+export type RecordDependency = {
+  record_id?: number;
+  dependency_type: string;
+  dependency_count: number;
+  message: string;
+};
+
+export type RecordDependencyResponse = {
+  can_delete?: boolean;
+  can_delete_without_warning?: boolean;
+  dependencies: RecordDependency[];
+};
+
+export type JobResumeMatchHistory = {
+  id: number;
+  user_job_id: number;
+  resume_profile_id: number | null;
+  resume_document_id: number | null;
+  resume_source: string;
+  match_score: number;
+  match_data: Record<string, unknown>;
+  resume_data_snapshot: Record<string, unknown>;
+  job_data_snapshot: Record<string, unknown>;
+  provider: string;
+  model_name: string | null;
+  prompt_version: string;
+  schema_version: string;
+  provider_execution_reference: string | null;
+  resume_is_stale: boolean;
+  job_is_stale: boolean;
+  is_stale: boolean;
+  created_at: string;
 };
 
 export type PendingMatchedJob = JobSavePayload & {
@@ -202,6 +238,10 @@ export type PendingMatchedJob = JobSavePayload & {
   matched_resume_document_id: number | null;
   matched_resume_source: string;
   match_data?: Record<string, unknown>;
+  resume_data_snapshot?: Record<string, unknown>;
+  job_data_snapshot?: Record<string, unknown>;
+  model_name?: string | null;
+  provider_execution_reference?: string | null;
 };
 
 export type SavePendingMatchedJobResponse = {
@@ -262,6 +302,7 @@ export type ResumeImportResponse = {
   document_version_id: number;
   extracted_text_preview: string;
   suggestions: ResumeData;
+  parse_warning?: string | null;
 };
 
 export type CurrentUser = {
@@ -359,9 +400,16 @@ export type ApplicationStatus =
   | "applied"
   | "interviewing"
   | "offer"
+  | "accepted"
   | "rejected"
-  | "withdrawn"
-  | "archived";
+  | "withdrawn";
+
+export type ApplicationStage =
+  | "recruiter_contact"
+  | "assessment"
+  | "phone_screen"
+  | "technical_interview"
+  | "final_interview";
 
 export type ApplicationPriority = "low" | "normal" | "high";
 
@@ -381,6 +429,7 @@ export type TrackedApplication = {
   user_id: number;
   user_job_id: number | null;
   status: ApplicationStatus;
+  stage: ApplicationStage | null;
   priority: ApplicationPriority;
   match_score: number | null;
   salary_notes: string | null;
@@ -392,6 +441,7 @@ export type TrackedApplication = {
   created_at: string;
   updated_at: string;
   archived_at: string | null;
+  allowed_status_transitions: ApplicationStatus[];
 };
 
 export type ApplicationStatusHistory = {
@@ -439,6 +489,7 @@ export type ApplicationDetail = TrackedApplication & {
 export type ApplicationCreatePayload = {
   user_job_id: number;
   status?: ApplicationStatus;
+  stage?: ApplicationStage | null;
   priority?: ApplicationPriority;
   match_score?: number | null;
   salary_notes?: string | null;
@@ -446,9 +497,11 @@ export type ApplicationCreatePayload = {
   next_action_at?: string | null;
   next_action_label?: string | null;
   notes?: string | null;
+  confirm_duplicate?: boolean;
 };
 
 export type ApplicationUpdatePayload = {
+  stage?: ApplicationStage | null;
   priority?: ApplicationPriority;
   match_score?: number | null;
   salary_notes?: string | null;
@@ -517,6 +570,17 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly detail: unknown,
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
@@ -529,15 +593,19 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     let message = `Request failed with status ${response.status}`;
+    let detail: unknown = null;
     try {
       const payload = await response.json();
+      detail = payload.detail;
       if (typeof payload.detail === "string") {
         message = payload.detail;
+      } else if (payload.detail && typeof payload.detail.message === "string") {
+        message = payload.detail.message;
       }
     } catch {
       // Keep the status-based message when the server does not return JSON.
     }
-    throw new Error(message);
+    throw new ApiRequestError(message, response.status, detail);
   }
 
   if (response.status === 204) {
@@ -581,8 +649,16 @@ export function getDashboard(): Promise<DashboardResponse> {
   return requestJson<DashboardResponse>("/dashboard");
 }
 
-export function listApplications(status?: ApplicationStatus): Promise<TrackedApplication[]> {
-  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+export function listApplications(options: {
+  status?: ApplicationStatus;
+  stage?: ApplicationStage;
+  includeArchived?: boolean;
+} = {}): Promise<TrackedApplication[]> {
+  const params = new URLSearchParams();
+  if (options.status) params.set("status", options.status);
+  if (options.stage) params.set("stage", options.stage);
+  if (options.includeArchived) params.set("include_archived", "true");
+  const query = params.size ? `?${params.toString()}` : "";
   return requestJson<TrackedApplication[]>(`/applications${query}`);
 }
 
@@ -689,6 +765,28 @@ export function getDocumentText(documentId: number): Promise<DocumentTextRespons
   return requestJson<DocumentTextResponse>(`/documents/${documentId}/text`);
 }
 
+export function archiveApplication(applicationId: number): Promise<ApplicationDetail> {
+  return requestJson<ApplicationDetail>(`/applications/${applicationId}/archive`, { method: "POST" });
+}
+
+export function restoreApplication(
+  applicationId: number,
+  confirmDuplicate = false,
+): Promise<ApplicationDetail> {
+  return requestJson<ApplicationDetail>(`/applications/${applicationId}/restore`, {
+    method: "POST",
+    body: JSON.stringify({ confirm_duplicate: confirmDuplicate }),
+  });
+}
+
+export function getDocumentDependencies(documentId: number): Promise<RecordDependencyResponse> {
+  return requestJson<RecordDependencyResponse>(`/documents/${documentId}/dependencies`);
+}
+
+export function deleteDocument(documentId: number, force = false): Promise<void> {
+  return requestJson<void>(`/documents/${documentId}?force=${force}`, { method: "DELETE" });
+}
+
 export function getDocumentDownloadUrl(documentId: number): string {
   return `${getApiBaseUrl()}/documents/${documentId}/download`;
 }
@@ -741,8 +839,8 @@ export function savePendingMatchedJob(payload: PendingMatchedJob): Promise<SaveP
   });
 }
 
-export function listJobs(): Promise<StoredJob[]> {
-  return requestJson<StoredJob[]>("/jobs");
+export function listJobs(includeArchived = false): Promise<StoredJob[]> {
+  return requestJson<StoredJob[]>(`/jobs?include_archived=${includeArchived}`);
 }
 
 export function draftJobFromUrl(jobUrl: string): Promise<JobDraftResponse> {
@@ -836,6 +934,22 @@ export function deleteJob(jobId: number): Promise<void> {
   });
 }
 
+export function archiveJob(jobId: number): Promise<void> {
+  return requestJson<void>(`/jobs/${jobId}/archive`, { method: "POST" });
+}
+
+export function restoreJob(jobId: number): Promise<void> {
+  return requestJson<void>(`/jobs/${jobId}/restore`, { method: "POST" });
+}
+
+export function getJobDependencies(jobId: number): Promise<RecordDependencyResponse> {
+  return requestJson<RecordDependencyResponse>(`/jobs/${jobId}/dependencies`);
+}
+
+export function listJobMatches(jobId: number): Promise<{ matches: JobResumeMatchHistory[] }> {
+  return requestJson<{ matches: JobResumeMatchHistory[] }>(`/jobs/${jobId}/matches`);
+}
+
 export function bulkDeleteJobs(jobIds: number[]): Promise<JobBulkDeleteResponse> {
   return requestJson<JobBulkDeleteResponse>("/jobs/bulk-delete", {
     method: "POST",
@@ -870,6 +984,16 @@ export function deleteResumeProfile(resumeProfileId: number): Promise<void> {
   });
 }
 
+export function forceDeleteResumeProfile(resumeProfileId: number): Promise<void> {
+  return requestJson<void>(`/resume-profiles/${resumeProfileId}?force=true`, {
+    method: "DELETE",
+  });
+}
+
+export function getResumeProfileDependencies(resumeProfileId: number): Promise<RecordDependencyResponse> {
+  return requestJson<RecordDependencyResponse>(`/resume-profiles/${resumeProfileId}/dependencies`);
+}
+
 export async function importResumePdf(file: File): Promise<ResumeImportResponse> {
   const form = new FormData();
   form.append("file", file);
@@ -894,6 +1018,12 @@ export async function importResumePdf(file: File): Promise<ResumeImportResponse>
   }
 
   return response.json();
+}
+
+export function retryResumeImport(documentId: number): Promise<ResumeImportResponse> {
+  return requestJson<ResumeImportResponse>(`/profile/resume-imports/${documentId}/retry`, {
+    method: "POST",
+  });
 }
 
 export function applyResumeProfileSuggestions(importResult: ResumeImportResponse): Promise<ResumeProfile> {

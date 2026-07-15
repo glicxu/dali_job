@@ -5,10 +5,13 @@ import {
   applyResumeProfileSuggestions,
   createResumeProfile,
   deleteResumeProfile,
+  forceDeleteResumeProfile,
+  getResumeProfileDependencies,
   emptyResumeData,
   getAuthToken,
   importResumePdf,
   listResumeProfiles,
+  retryResumeImport,
   ResumeData,
   ResumeImportResponse,
   ResumeProfile,
@@ -246,7 +249,17 @@ export function ProfileEditor() {
     setError(null);
     setStatus(null);
     try {
-      await deleteResumeProfile(selectedProfile.id);
+      const dependencyReport = await getResumeProfileDependencies(selectedProfile.id);
+      if (dependencyReport.dependencies.length) {
+        const warning = dependencyReport.dependencies.map((item) => item.message).join("\n");
+        const confirmed = window.confirm(
+          `${warning}\n\nHistorical match snapshots will remain available, but this profile will no longer be selectable. Delete it?`,
+        );
+        if (!confirmed) return;
+        await forceDeleteResumeProfile(selectedProfile.id);
+      } else {
+        await deleteResumeProfile(selectedProfile.id);
+      }
       await loadResumeProfiles();
       setStatus("Resume profile deleted.");
     } catch (err) {
@@ -267,9 +280,33 @@ export function ProfileEditor() {
     try {
       const imported = await importResumePdf(file);
       setResumeImport(imported);
-      setStatus("Resume parsed for preview only. Nothing is saved until you click Apply JSON.");
+      setStatus(
+        imported.parse_warning
+          ? "The resume file and cleaned text were saved, but automatic parsing needs attention."
+          : "Resume parsed for preview only. Nothing is saved until you click Apply JSON.",
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Resume import failed.");
+    } finally {
+      setIsImportingResume(false);
+    }
+  }
+
+  async function retryImportedResume() {
+    if (!resumeImport) return;
+    setError(null);
+    setStatus(null);
+    setIsImportingResume(true);
+    try {
+      const retried = await retryResumeImport(resumeImport.document_id);
+      setResumeImport(retried);
+      setStatus(
+        retried.parse_warning
+          ? "Resume parsing is still unavailable. You can retry or create a manual profile from this saved document."
+          : "Resume parsing completed. Review the suggestions before applying them.",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Resume parsing retry failed.");
     } finally {
       setIsImportingResume(false);
     }
@@ -322,7 +359,9 @@ export function ProfileEditor() {
           <ResumeImportReview
             result={resumeImport}
             isApplying={isApplyingResume}
+            isRetrying={isImportingResume}
             onApply={applyResumeImport}
+            onRetry={retryImportedResume}
             onDiscard={() => setResumeImport(null)}
           />
         ) : null}
@@ -579,12 +618,16 @@ function ResumeProfileCard({
 function ResumeImportReview({
   result,
   isApplying,
+  isRetrying,
   onApply,
+  onRetry,
   onDiscard,
 }: {
   result: ResumeImportResponse;
   isApplying: boolean;
+  isRetrying: boolean;
   onApply: () => Promise<void>;
+  onRetry: () => Promise<void>;
   onDiscard: () => void;
 }) {
   const suggestions = result.suggestions;
@@ -597,14 +640,21 @@ function ResumeImportReview({
           <p className="metadata">{result.file_name}</p>
         </div>
         <div className="button-row">
+          {result.parse_warning ? (
+            <button type="button" className="secondary-button" disabled={isRetrying} onClick={() => void onRetry()}>
+              {isRetrying ? "Retrying..." : "Retry Parsing"}
+            </button>
+          ) : null}
           <button type="button" className="secondary-button" onClick={onDiscard}>
             Discard
           </button>
           <button type="button" disabled={isApplying} onClick={() => void onApply()}>
-            {isApplying ? "Applying..." : "Apply JSON"}
+            {isApplying ? "Applying..." : result.parse_warning ? "Create Manual Profile" : "Apply JSON"}
           </button>
         </div>
       </div>
+
+      {result.parse_warning ? <div className="warning-banner">{result.parse_warning}</div> : null}
 
       <div className="suggestion-grid">
         <ReviewText title="Headline" value={suggestions.headline} />

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DocumentVersionResponse(BaseModel):
@@ -40,3 +40,14 @@ class DocumentTextResponse(BaseModel):
     document_id: int
     version_id: int
     extracted_text: str
+
+
+class DocumentDependency(BaseModel):
+    dependency_type: str
+    dependency_count: int
+    message: str
+
+
+class DocumentDependencyResponse(BaseModel):
+    can_delete_without_warning: bool
+    dependencies: list[DocumentDependency] = Field(default_factory=list)

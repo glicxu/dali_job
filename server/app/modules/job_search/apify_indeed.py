@@ -160,15 +160,14 @@ class ApifyIndeedClient:
             with urlopen(request, timeout=APIFY_TIMEOUT_SECONDS) as response:
                 response_body = response.read().decode("utf-8", errors="replace")
         except HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")[:500]
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Apify Indeed scraper returned HTTP {exc.code}: {detail}",
+                detail="The job search provider could not complete the request. Retry shortly.",
             ) from exc
         except URLError as exc:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Could not reach Apify Indeed scraper: {exc.reason}",
+                detail="The job search provider is temporarily unreachable. Retry shortly.",
             ) from exc
         except TimeoutError as exc:
             raise HTTPException(

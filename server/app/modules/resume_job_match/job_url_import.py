@@ -944,7 +944,10 @@ def _fetch_url_text(url: str) -> tuple[str, str]:
             raise RenderableFetchError(exc.code, exc.reason) from exc
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Job URL returned HTTP {exc.code}.") from exc
     except URLError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Could not fetch job URL: {exc.reason}") from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The job URL is temporarily unreachable. Retry or paste the job description manually.",
+        ) from exc
 
     if len(raw) > MAX_JOB_PAGE_BYTES:
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Job page is too large to import.")
@@ -1022,7 +1025,7 @@ def _fetch_rendered_html(url: str) -> str:
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
                 "The static job page could not be read, and the rendered-page fallback failed. "
-                f"Playwright error: {exc}"
+                "Retry later or use the pasted job description fallback."
             ),
         ) from exc
 

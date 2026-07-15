@@ -118,6 +118,7 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "notes",
         "created_at",
         "updated_at",
+        "archived_at",
         "deleted_at",
     }.issubset(user_saved_job_columns)
     assert "title" not in user_saved_job_columns
@@ -140,6 +141,15 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "resume_source",
         "match_score",
         "match_data",
+        "resume_data_snapshot",
+        "job_data_snapshot",
+        "resume_snapshot_hash",
+        "job_snapshot_hash",
+        "provider",
+        "model_name",
+        "prompt_version",
+        "schema_version",
+        "provider_execution_reference",
         "created_at",
     }.issubset(job_resume_match_columns)
     assert "match_score" not in job_cache_columns
@@ -152,6 +162,8 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "user_id",
         "user_job_id",
         "status",
+        "stage",
+        "active_duplicate_guard",
         "priority",
         "match_score",
         "salary_notes",
@@ -163,6 +175,10 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "updated_at",
         "archived_at",
     }.issubset(application_columns)
+    application_constraints = {
+        constraint.name for constraint in Base.metadata.tables["applications"].constraints
+    }
+    assert "uq_applications_active_saved_job_guard" in application_constraints
 
 
 def test_foundation_metadata_can_create_tables() -> None:
@@ -199,7 +215,7 @@ def test_alembic_has_initial_schema_revision() -> None:
     config.set_main_option("script_location", str(server_dir / "app" / "db" / "migrations"))
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == "20260713_0017"
+    assert script.get_current_head() == "20260714_0019"
 
 
 def test_jobs_cache_source_url_hash_is_unique_in_metadata() -> None:

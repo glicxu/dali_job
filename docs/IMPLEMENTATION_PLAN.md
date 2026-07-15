@@ -18,7 +18,7 @@ DaliJob should not be implemented as one broad "career management" feature. Spli
 | UC-02 | Build a reusable resume foundation | Import, review, create, edit, and select resume profiles | Implemented |
 | UC-03 | Build a candidate job pipeline | Manually add, paste, import, search, analyze, and save jobs | Implemented; failure handling remains |
 | UC-04 | Decide where to apply | Compare a resume with jobs and review evidence and gaps | Implemented; result versioning remains |
-| UC-05 | Track an application | Convert a saved job into an application and maintain its status/history | Initial vertical slice implemented; lifecycle and release hardening remain |
+| UC-05 | Track an application | Convert a saved job into an application and maintain its status/history | Implemented; migration `20260714_0019` must be applied per environment |
 | UC-06 | Manage application materials | Attach exact resume and document versions to an application | Partially implemented at document-library level |
 | UC-07 | Manage next actions | Record tasks, deadlines, follow-ups, and reminders | Basic application tasks and due dates implemented; reminder behavior remains |
 | UC-08 | Prepare for interviews | Create interview records and generate reviewable preparation material | Not implemented |
@@ -63,6 +63,8 @@ Manual entry and pasted text remain supported fallbacks. OpenAI, Apify, scraping
 
 ### Phase 0: Protect The Current MVP While Preserving Change
 
+Implementation status: partially completed on 2026-07-14. UX-01, SEC-01, DATA-01, and the current single-server OPS-01 scope are complete. CI-01 and automated deployment migration-readiness work remain deferred.
+
 Use cases: UC-01 through the implemented UC-05 slice, OP-01 through OP-03.
 
 Goal: create a safe experimentation boundary around the implemented resume, job, matching, and application-tracking workflows without treating the current product or architecture as final.
@@ -80,52 +82,54 @@ Flexibility rules:
 
 #### User track
 
-1. **UX-01: Complete degraded-mode paths**
-   - On parse or extraction failure, retain entered data and offer retry or manual paste/edit.
-   - Ensure saved jobs can still be created and used when providers are unavailable.
-   - Preserve the user outcome without standardizing the final screen flow or component structure.
+1. [x] **UX-01: Complete degraded-mode paths** - Implemented 2026-07-14.
+   - [x] On parse or extraction failure, retain entered data and offer retry or manual paste/edit.
+   - [x] Ensure saved jobs can still be created and used when providers are unavailable.
+   - [x] Preserve the user outcome without standardizing the final screen flow or component structure.
 
 #### Ops/admin track
 
-1. **CI-01: Make clean-checkout CI reproducible**
-   - Use the simplest documented method to provide `DaliCommonLib` to Python CI jobs; an explicit checkout is acceptable until the library's packaging strategy is settled.
-   - Run server tests, migration checks, OpenAPI checks, client lint/tests, and client build as separate visible jobs.
-   - Document the current dependency provenance and make clear that it is replaceable.
+1. [ ] **CI-01: Make clean-checkout CI reproducible** - Deferred by the project owner; the private `DaliCommonLib` checkout will be addressed later.
+   - [ ] Use the simplest documented method to provide `DaliCommonLib` to Python CI jobs; an explicit checkout is acceptable until the library's packaging strategy is settled.
+   - [ ] Run server tests, migration checks, OpenAPI checks, client lint/tests, and client build as separate visible jobs.
+   - [x] Document the current dependency provenance and make clear that it is replaceable.
 
-2. **DB-01: Enforce migration readiness**
-   - Verify that the configured database is at the current Alembic head during deployment.
-   - Report the current and expected migration revisions through deployment diagnostics or a readiness check.
-   - Test both a fresh database upgrade and an upgrade from the previous supported revision.
-   - Keep schema migration commands in the release procedure so new code is not served against missing tables.
+2. [ ] **DB-01: Enforce migration readiness** - The readiness endpoint is implemented for head `20260714_0019`; deployment enforcement remains deferred.
+   - [ ] Verify that the configured database is at the current Alembic head during deployment.
+   - [x] Report the current and expected migration revisions through `/api/v1/health/db`.
+   - [ ] Test both a fresh database upgrade and an upgrade from the previous supported revision.
+   - [x] Keep schema migration commands in the release procedure so new code is not served against missing tables.
 
-3. **SEC-01: Enforce production startup policy**
-   - Reject production startup when `auth_mode` is `dev` or `disabled`.
-   - Continue rejecting missing, empty, or known-default local JWT secrets.
-   - Add a lightweight authorization inventory for every non-health `/api/v1` route and test the protected boundary without freezing route or response design.
+3. [x] **SEC-01: Enforce production startup policy** - Implemented 2026-07-14.
+   - [x] Reject production startup when `auth_mode` is `dev` or `disabled`.
+   - [x] Continue rejecting missing, empty, or known-default local JWT secrets.
+   - [x] Add a lightweight authorization inventory for every non-health `/api/v1` route and test the protected boundary without freezing route or response design.
 
-4. **DATA-01: Enforce shared-versus-private job ownership**
-   - Accept shared cache writes only from source extraction or provider-normalization paths.
-   - Store user edits and manual jobs in `user_edited_jobs`.
-   - Add cross-user tests proving that one user's edits cannot change another user's view of cached source data.
-   - Treat the ownership rule as stable while allowing table shapes, service boundaries, and repository implementations to evolve.
+4. [x] **DATA-01: Enforce shared-versus-private job ownership** - Implemented 2026-07-14.
+   - [x] Accept shared cache writes only from source extraction or provider-normalization paths.
+   - [x] Store user edits and manual jobs in `user_edited_jobs`.
+   - [x] Add cross-user tests proving that one user's edits cannot change another user's view of cached source data.
+   - [x] Treat the ownership rule as stable while allowing table shapes, service boundaries, and repository implementations to evolve.
 
-5. **OPS-01: Add provider guardrails**
-   - Start with one minimal structured provider-call record containing provider, feature, user, duration, outcome, and available usage units.
-   - Add configurable limits at the narrowest existing provider entry points; begin with simple per-user or per-IP limits and add broader quota accounting only when usage requires it.
-   - Return actionable timeout, quota, extraction, and parse errors without leaking secrets.
-   - Do not introduce a full operations dashboard, generalized provider framework, or background queue in this phase.
+5. [x] **OPS-01: Add provider guardrails** - Implemented for the current single-server deployment on 2026-07-14.
+   - [x] Start with one minimal structured provider-call record containing provider, feature, user, duration, outcome, and available usage units.
+   - [x] Add configurable limits at the narrowest existing provider entry points; begin with simple per-user or per-IP limits and add broader quota accounting only when usage requires it.
+   - [x] Return actionable timeout, quota, extraction, and parse errors without leaking secrets.
+   - [x] Do not introduce a full operations dashboard, generalized provider framework, or background queue in this phase.
 
 Exit criteria:
 
-- A clean CI runner builds and tests the server and client without an undeclared sibling checkout.
-- Deployment verifies that the configured database is at the expected Alembic head before the release is considered ready.
-- Production refuses unsafe auth configuration.
-- Auth, ownership, provider-limit, and shared-cache isolation tests pass.
-- Provider failures produce a recoverable user path rather than a generic 500.
-- Current UC-01 through UC-05 smoke tests pass end to end, including migration readiness for the application tracker.
-- Phase 0 tests protect the invariants above without making provisional APIs, schemas, or UI details costly to change.
+- [ ] A clean CI runner builds and tests the server and client without an undeclared sibling checkout.
+- [ ] Deployment verifies that the configured database is at the expected Alembic head before the release is considered ready.
+- [x] Production refuses unsafe auth configuration.
+- [x] Auth, ownership, provider-limit, and shared-cache isolation tests pass.
+- [x] Provider failures produce a recoverable user path rather than a generic 500.
+- [ ] Current UC-01 through UC-05 smoke tests pass end to end, including automated migration readiness for the application tracker.
+- [x] Phase 0 tests protect the invariants above without making provisional APIs, schemas, or UI details costly to change.
 
 ### Phase 1: Preserve User Control And Historical Meaning
+
+Implementation status: completed in the application and documented on 2026-07-14. Account/workspace export and hard-deletion execution remain future worker-backed implementation; this phase defines their contract in `DATA_LIFECYCLE.md`.
 
 Use cases: UC-01 through UC-04, OP-04.
 
@@ -133,38 +137,40 @@ Goal: ensure current data can be deleted or interpreted later now that applicati
 
 #### User track
 
-1. **DATA-02: Add archive and deletion controls**
-   - Add owner-scoped document deletion and saved-job archive/delete actions.
-   - Show dependency warnings before a resume profile or document used by another record is removed.
-   - Prevent deletion of a saved job while an application references it; require the application relationship to be resolved or retain the saved job as archived history.
+1. [x] **DATA-02: Add archive and deletion controls**
+   - [x] Add owner-scoped document deletion and saved-job archive/delete actions.
+   - [x] Show dependency warnings before a resume profile or document used by another record is removed.
+   - [x] Prevent deletion of a saved job while an application references it; require the application relationship to be resolved or retain the saved job as archived history.
 
-2. **MATCH-01: Preserve understandable match history**
-   - Display when a saved match is older than the current resume or job data.
-   - Let the user run a new match without overwriting the historical result.
+2. [x] **MATCH-01: Preserve understandable match history**
+   - [x] Display when a saved match is older than the current resume or job data.
+   - [x] Let the user run a new match without overwriting the historical result.
 
 #### Ops/admin track
 
-1. **DATA-02 support: Enforce safe record lifecycle**
-   - Add server-owned resume-profile dependency checks and orphan prevention.
-   - Add a server-owned saved-job dependency check that rejects deletion while an application references the saved job.
-   - Define whether soft-deleted shared cache records may be reactivated and keep that behavior server-owned.
+1. [x] **DATA-02 support: Enforce safe record lifecycle**
+   - [x] Add server-owned resume-profile dependency checks and orphan prevention.
+   - [x] Add a server-owned saved-job dependency check that rejects deletion while an application references the saved job.
+   - [x] Define whether soft-deleted shared cache records may be reactivated and keep that behavior server-owned.
 
-2. **MATCH-01 support: Version match inputs**
-   - Store immutable match-time snapshots of resume JSON and effective job JSON, or link to explicit immutable versions.
-   - Store model, prompt/schema version, timestamp, and provider execution reference.
+2. [x] **MATCH-01 support: Version match inputs**
+   - [x] Store immutable match-time snapshots of resume JSON and effective job JSON, or link to explicit immutable versions.
+   - [x] Store model, prompt/schema version, timestamp, and provider execution reference.
 
-3. **PRIV-01: Define data lifecycle**
-   - Document retention for uploaded files, extracted text, provider payloads, and AI outputs.
-   - Add account/workspace export and deletion design, including asynchronous cleanup and audit requirements.
+3. [x] **PRIV-01: Define data lifecycle**
+   - [x] Document retention for uploaded files, extracted text, provider payloads, and AI outputs.
+   - [x] Add account/workspace export and deletion design, including asynchronous cleanup and audit requirements.
 
 Exit criteria:
 
-- Users can archive or delete supported owned records without creating orphan references.
-- Attempts to delete a saved job referenced by an application are rejected with an actionable dependency message.
-- Historical matches remain explainable after resume or job edits.
-- The retention/export/deletion contract is documented and covered by repository tests where implemented.
+- [x] Users can archive or delete supported owned records without creating orphan references.
+- [x] Attempts to delete a saved job referenced by an application are rejected with an actionable dependency message.
+- [x] Historical matches remain explainable after resume or job edits.
+- [x] The retention/export/deletion contract is documented and covered by repository tests where implemented.
 
 ### Phase 2: Complete And Harden The Application Tracker Vertical Slice
+
+Implementation status: code complete on 2026-07-14. Configured-environment migration verification and browser-level end-to-end coverage remain open release checks.
 
 User use case: UC-05. Ops/admin support: OP-01, OP-03, and OP-05.
 
@@ -172,29 +178,29 @@ Goal: finish the implemented initial slice so the core career-search loop has du
 
 Current implementation:
 
-- Application tables, owner-scoped CRUD APIs, tracker UI, detail view, notes, timeline events, status history, basic tasks, and task due dates are implemented.
-- Migration `20260713_0017` creates the current application tables but must be applied and verified in each configured environment.
-- The current status model is provisional, duplicate active applications are not yet prevented, and allowed status transitions are not yet enforced by server rules.
+- Application tables, owner-scoped APIs, tracker/detail UI, notes, timeline events, status history, tasks, and task due dates are implemented.
+- Migration `20260714_0019` adds the final lifecycle vocabulary, interview stage, and concurrency-safe active-duplicate guard.
+- `GET /api/v1/health/db` reports `503 not_ready` until the configured database is at migration `20260714_0019`.
 
 #### User track
 
-- Preserve the implemented tracker list, application detail view, notes, tasks, and timeline workflow.
-- Add grouping or filtering by lifecycle status and optional application stage.
-- Keep "Create application" tied to a saved job; a saved job remains distinct from its application.
-- Complete owner-scoped list/filter, update, archive, and status-transition behavior through the client.
-- Warn when a duplicate active application exists and require explicit confirmation before creating another one for the same saved job.
+- [x] Preserve the tracker list, application detail view, notes, tasks, and timeline workflow.
+- [x] Add filtering by lifecycle status and optional application stage.
+- [x] Keep "Create application" tied to a saved job; a saved job remains distinct from its application.
+- [x] Complete owner-scoped list/filter, update, archive, restore, and status-transition behavior through the client.
+- [x] Warn when a duplicate active application exists and require explicit confirmation before creating another one for the same saved job.
 
 #### Ops/admin track
 
-- Retain the implemented `applications`, `application_status_history`, `application_events`, `application_notes`, and `application_tasks` tables.
-- Use a small lifecycle status vocabulary: `interested`, `applied`, `interviewing`, `offer`, `accepted`, `rejected`, and `withdrawn`.
-- Add a separate nullable `stage` for finer progress such as `recruiter_contact`, `assessment`, `phone_screen`, `technical_interview`, and `final_interview`.
-- Represent resume and cover-letter readiness through attached documents or application events rather than application status values.
-- Represent archival only through `archived_at`; remove `archived` from the lifecycle status vocabulary.
-- Define and enforce allowed lifecycle transitions in the server. The client may guide the user, but it is not the authority for transition validity.
-- Prevent accidental duplicate active applications through a server-owned check and concurrency-safe persistence rule. Archived or terminal applications must not silently block intentional new applications.
-- Reject deletion of a `user_saved_jobs` row while any application references it so application history retains its job context.
-- Finish migration, owner-authorization, transition-rule, duplicate-prevention, dependency, structured-event, and support-safe failure tests.
+- [x] Retain `applications`, `application_status_history`, `application_events`, `application_notes`, and `application_tasks`.
+- [x] Use `interested`, `applied`, `interviewing`, `offer`, `accepted`, `rejected`, and `withdrawn` as lifecycle statuses.
+- [x] Add nullable `stage`: `recruiter_contact`, `assessment`, `phone_screen`, `technical_interview`, or `final_interview`.
+- [x] Keep document readiness outside lifecycle status.
+- [x] Represent archival only through `archived_at`; remove `archived` from lifecycle status.
+- [x] Enforce allowed lifecycle transitions in the server and expose allowed next states to the client.
+- [x] Prevent accidental duplicate active applications with a server check and database uniqueness guard; allow explicit duplicates and new attempts after terminal/archive outcomes.
+- [x] Reject deletion of a `user_saved_jobs` row while any application references it.
+- [x] Add migration, owner-authorization, transition, duplicate, dependency, event, and readiness tests.
 
 Out of scope for this phase:
 
@@ -206,15 +212,15 @@ Out of scope for this phase:
 
 Acceptance criteria:
 
-- A user can create an application from a saved job and cannot create an accidental duplicate active application without confirmation.
-- Every status change produces an immutable event containing old status, new status, actor, and time.
-- Invalid transitions are rejected by server rules, not only hidden by the client.
-- Lifecycle status, interview stage, document readiness, and archival state are stored as separate concepts.
-- A saved job referenced by an application cannot be deleted.
-- User A cannot list, read, change, or infer User B's application records.
-- The tracker and detail page work without AI or provider access.
-- The configured database is verified at the Alembic head before the application routes are considered release-ready.
-- API contract, repository, migration, client, and end-to-end tests cover the complete slice. Application Tracking is not marked fully complete until all of these acceptance criteria pass.
+- [x] A user can create from a saved job and must confirm an active duplicate.
+- [x] Every status change appends an event containing old status, new status, actor, and time.
+- [x] Invalid transitions are rejected by server rules.
+- [x] Lifecycle status, interview stage, document readiness, and archival state remain separate concepts.
+- [x] A saved job referenced by an application cannot be deleted.
+- [x] User A cannot list, read, change, or infer User B's application records.
+- [x] The tracker and detail page work without AI or provider access.
+- [ ] Apply migration `20260714_0019` and verify `/api/v1/health/db` reports the configured database at the Alembic head.
+- [ ] API contract, repository, migration, client, and browser-level end-to-end tests cover the complete slice. Server/API tests and the production client build pass; browser-level end-to-end coverage remains.
 
 ### Phase 3: Add Application Materials And Next Actions
 
@@ -397,21 +403,20 @@ Phase 6 depends on stable application events, but it does not need to wait for i
 
 A release that links a user use case to ops/admin support is complete only when both track definitions are satisfied. The ops/admin track may finish independently when it improves safety or operability without changing candidate behavior.
 
-## First Executable Backlog
+## Current Executable Backlog
+
+UX-01, SEC-01, DATA-01, and the single-server OPS-01 guardrails are implemented. The current application migration was applied and verified. CI-01 and automated DB-01 release verification are intentionally deferred and remain required before a public or repeatable production release.
 
 ### Ops/admin track
 
-1. CI-01 clean-checkout dependency and job separation.
-2. DB-01 migration-head verification for fresh, upgraded, and deployed databases.
-3. SEC-01 production startup policy and route authorization matrix.
-4. DATA-01 shared cache/private edit enforcement.
-5. OPS-01 provider usage logging, limits, and error mapping.
+1. CI-01 clean-checkout dependency and job separation when private `DaliCommonLib` CI access is addressed.
+2. DB-01 automated migration-head verification for fresh, upgraded, and deployed databases before repeatable production releases.
+3. Replace in-process provider limits with a shared limiter before running multiple server instances.
 
 ### User track
 
-1. UX-01 parse/extraction retry and manual fallback.
-2. MATCH-01 understandable, version-aware match history.
-3. UC-05 application tracker completion: lifecycle/stage separation, duplicate confirmation, transition enforcement, saved-job deletion protection, filtering, and user-flow tests.
+1. MATCH-01 understandable, version-aware match history.
+2. UC-05 application tracker completion: lifecycle/stage separation, duplicate confirmation, transition enforcement, saved-job deletion protection, filtering, and user-flow tests.
 
 Complete the minimum Phase 0 ops/admin gates before treating the implemented application tracker as release-ready, but manage and review the two backlogs separately.
 

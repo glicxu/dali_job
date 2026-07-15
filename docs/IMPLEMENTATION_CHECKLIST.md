@@ -30,6 +30,21 @@ Use the [DaliJob Implementation Plan](IMPLEMENTATION_PLAN.md) for current priori
 - [x] Add barebones client app shell.
 - [x] Add barebones server API shell.
 
+### Phase 0 Hardening
+
+- [x] Reject `dev` and `disabled` authentication when the server environment is production.
+- [x] Reject missing or default JWT secrets for production local authentication.
+- [x] Validate authentication coverage for every non-public `/api/v1` route.
+- [x] Restrict shared `jobs_cache` writes to source extraction and provider-normalization paths.
+- [x] Keep user-submitted manual jobs and corrections in `user_edited_jobs`.
+- [x] Add cross-user tests proving private edits cannot mutate another user's cached job view.
+- [x] Add structured provider-call logging without user content or provider response bodies.
+- [x] Add configurable in-process per-user and per-IP provider limits.
+- [x] Map provider failures to safe, actionable retry or manual-fallback messages.
+- [x] Preserve uploaded resume documents and cleaned text when AI parsing fails.
+- [x] Add retry parsing and manual-profile fallback after a resume parse failure.
+- [ ] Add shared provider rate limiting before running multiple server instances.
+
 ## Phase 0.5: Resume-To-Job Match Prototype
 
 This is the first functional slice. It should happen before the full tracker, cover letter engine, interview prep, email integration, or job aggregation work.
@@ -162,7 +177,7 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Change bulk job-list import to save `raw_description_text` and metadata without immediate OpenAI parsing unless match-on-import is selected.
 - [x] Add backend helper that ensures `job_data` exists by lazily parsing `raw_description_text`, saving the result, and reusing cached parsed data later.
 - [x] Update resume-job matching to call the lazy parse helper before scoring when selected jobs have no `job_data`.
-- [ ] Add parse failure handling that shows a user-facing retry/manual-paste path.
+- [x] Add parse failure handling that shows a user-facing retry/manual-paste path.
 - [x] Add saved-job Analyze action that generates missing `job_data` on demand.
 
 ### Apify Indeed Job Search
@@ -175,7 +190,7 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Normalize Apify Indeed results into DaliJob job search result DTOs with title, company, location, source URL, raw description text, salary, employment type, posting date, and full description when available.
 - [x] Add `POST /api/v1/job-search/indeed` endpoint accepting keyword, location, and max results with a default cap of 5.
 - [x] Add server-side validation, timeouts, and clear errors for Apify token exhaustion, actor failure, empty results, or invalid input.
-- [ ] Add request rate limiting and cost controls before production use.
+- [x] Add initial request rate limiting and cost controls for the current single-server deployment.
 - [x] Add new client Job Search page where the user enters keyword and location.
 - [x] Display up to 5 Apify-sourced Indeed results in a reviewable list.
 - [x] Add result detail view so the user can inspect the full job description before importing.
@@ -191,12 +206,19 @@ The sections below are grouped by product area. The order above should guide imp
 
 - [x] Create application table and status enum.
 - [x] Add application CRUD.
-- [x] Add status transition endpoint.
+- [x] Use lifecycle statuses `interested`, `applied`, `interviewing`, `offer`, `accepted`, `rejected`, and `withdrawn`.
+- [x] Add optional interview stage independent of lifecycle status.
+- [x] Add server-enforced status transition endpoint and allowed-next-state response data.
+- [x] Keep archival in `archived_at` and add archive/restore flows.
+- [x] Prevent accidental duplicate active applications and require explicit confirmation for intentional duplicates.
+- [x] Add lifecycle status, stage, and archived-record filters.
+- [x] Add owner-isolation, transition, duplicate, dependency, event, migration, and database-readiness tests.
 - [x] Add application timeline events.
 - [x] Add notes.
 - [x] Add tasks and reminders.
 - [x] Build tracker UI.
 - [x] Build application detail UI.
+- [ ] Apply migration `20260714_0019` to each configured environment and verify `/api/v1/health/db` returns `database_ready: true`.
 
 ### Document Management
 
@@ -208,6 +230,18 @@ The sections below are grouped by product area. The order above should guide imp
 - [ ] Add signed download URL flow.
 - [ ] Add application document attachments.
 - [x] Add document list and preview UI.
+- [x] Add owner-scoped document soft deletion with dependency warnings and explicit confirmation.
+
+### Record Lifecycle And Match History
+
+- [x] Add saved-job archive and restore actions.
+- [x] Reject saved-job deletion while an application references it.
+- [x] Report blocked records during bulk saved-job deletion.
+- [x] Add resume-profile dependency warnings before deletion.
+- [x] Store immutable resume/job match snapshots and canonical hashes.
+- [x] Store match provider, model, prompt/schema version, timestamp, and provider execution reference when available.
+- [x] Show historical match runs and identify stale resume or job inputs.
+- [x] Document retention and asynchronous account/workspace export and deletion design.
 
 ### Basic Analytics
 

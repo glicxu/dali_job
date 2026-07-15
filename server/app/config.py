@@ -17,8 +17,17 @@ DEFAULT_LOG_LEVEL = "info"
 DEFAULT_ENV_NAME = "local"
 DEFAULT_CLIENT_ORIGIN = "http://localhost:3000"
 DEFAULT_CLIENT_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+DEFAULT_PROVIDER_USER_LIMIT_PER_MINUTE = 20
+DEFAULT_PROVIDER_IP_LIMIT_PER_MINUTE = 60
 CONFIG_ENV_VAR = "DALIJOB_CONFIG"
 SERVER_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
+PRODUCTION_ENV_NAMES = {"prod", "production"}
+SUPPORTED_AUTH_MODES = {"dev", "disabled", "local"}
+INVALID_JWT_SECRETS = {
+    "",
+    "change-me",
+    "change-me-dalijob-auth-local-development-only",
+}
 
 
 @dataclass(frozen=True)
@@ -33,6 +42,8 @@ class RuntimeConfig:
     openai_model: str
     auth_mode: str
     document_storage_dir: str
+    provider_user_limit_per_minute: int
+    provider_ip_limit_per_minute: int
 
 
 def _load_process_config(config_path: Optional[str]) -> Optional[str]:
@@ -79,6 +90,18 @@ def _split_csv(value: Optional[str], default: list[str]) -> list[str]:
         return default
     items = [item.strip() for item in value.split(",") if item.strip()]
     return items or default
+
+
+def _validate_runtime_config(runtime: RuntimeConfig) -> None:
+    if runtime.auth_mode not in SUPPORTED_AUTH_MODES:
+        raise RuntimeError(f"Unsupported DaliJob auth mode: {runtime.auth_mode}")
+    if runtime.env_name.lower() not in PRODUCTION_ENV_NAMES:
+        return
+    if runtime.auth_mode in {"dev", "disabled"}:
+        raise RuntimeError("Production DaliJob must use local authentication; dev and disabled auth are not allowed.")
+    jwt_secret = os.getenv("DALIJOB_JWT_SECRET", "").strip()
+    if jwt_secret.lower() in INVALID_JWT_SECRETS:
+        raise RuntimeError("Production DaliJob requires a non-default DALIJOB_JWT_SECRET.")
 
 
 def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
@@ -128,8 +151,26 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         or read_config_value("documents", "storage_dir", "")
         or str(Path(__file__).resolve().parents[1] / "storage" / "documents")
     )
+    provider_user_limit = _coerce_int(
+        os.getenv("DALIJOB_PROVIDER_USER_LIMIT_PER_MINUTE", "").strip()
+        or read_config_value(
+            "provider_limits",
+            "user_per_minute",
+            str(DEFAULT_PROVIDER_USER_LIMIT_PER_MINUTE),
+        ),
+        DEFAULT_PROVIDER_USER_LIMIT_PER_MINUTE,
+    )
+    provider_ip_limit = _coerce_int(
+        os.getenv("DALIJOB_PROVIDER_IP_LIMIT_PER_MINUTE", "").strip()
+        or read_config_value(
+            "provider_limits",
+            "ip_per_minute",
+            str(DEFAULT_PROVIDER_IP_LIMIT_PER_MINUTE),
+        ),
+        DEFAULT_PROVIDER_IP_LIMIT_PER_MINUTE,
+    )
 
-    return RuntimeConfig(
+    runtime = RuntimeConfig(
         config_path=loaded_path,
         env_name=env_name,
         host=host,
@@ -140,4 +181,8 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         openai_model=openai_model,
         auth_mode=auth_mode.lower(),
         document_storage_dir=str(Path(document_storage_dir).expanduser().resolve()),
+        provider_user_limit_per_minute=max(provider_user_limit, 1),
+        provider_ip_limit_per_minute=max(provider_ip_limit, 1),
     )
+    _validate_runtime_config(runtime)
+    return runtime

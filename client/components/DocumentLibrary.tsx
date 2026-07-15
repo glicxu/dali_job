@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import {
+  deleteDocument,
+  getDocumentDependencies,
   getAuthToken,
   getDocumentText,
   listDocuments,
@@ -91,6 +93,33 @@ export function DocumentLibrary() {
     }
   }
 
+  async function removeDocument(document: StoredDocument) {
+    setError(null);
+    setStatus(null);
+    try {
+      const dependencyReport = await getDocumentDependencies(document.id);
+      let force = false;
+      if (dependencyReport.dependencies.length) {
+        const warning = dependencyReport.dependencies.map((item) => item.message).join("\n");
+        force = window.confirm(
+          `${warning}\n\nThe stored file will be hidden, while historical match snapshots remain available. Delete it?`,
+        );
+        if (!force) return;
+      } else if (!window.confirm(`Delete "${document.title}"?`)) {
+        return;
+      }
+      await deleteDocument(document.id, force);
+      if (textPreviewTitle === document.title) {
+        setTextPreview(null);
+        setTextPreviewTitle(null);
+      }
+      setStatus("Document deleted.");
+      await loadDocuments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Document delete failed.");
+    }
+  }
+
   return (
     <div className="document-library">
       {error ? <div className="error-banner">{error}</div> : null}
@@ -144,6 +173,9 @@ export function DocumentLibrary() {
                 </button>
                 <button type="button" className="secondary-button" onClick={() => void downloadDocument(document)}>
                   Download
+                </button>
+                <button type="button" className="secondary-button" onClick={() => void removeDocument(document)}>
+                  Delete
                 </button>
               </div>
             </article>

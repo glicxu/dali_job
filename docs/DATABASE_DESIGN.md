@@ -75,21 +75,15 @@ Scripts must use `ProcessConfig` and `DbMan`; they should not hard-code local or
 
 ### application_status
 
-- `saved`
-- `planning`
-- `resume_tailored`
-- `cover_letter_ready`
+- `interested`
 - `applied`
-- `recruiter_contact`
-- `oa_scheduled`
-- `oa_completed`
-- `phone_screen`
-- `technical_interview`
-- `final_interview`
+- `interviewing`
 - `offer`
 - `accepted`
 - `rejected`
 - `withdrawn`
+
+Resume/document readiness and interview stage are separate from lifecycle status. Application stage is nullable and limited to `recruiter_contact`, `assessment`, `phone_screen`, `technical_interview`, and `final_interview`. Archival uses `archived_at`, not a status value.
 
 ### document_type
 
@@ -294,6 +288,7 @@ Stores the current user's saved-job relationship and notes. The Jobs page should
 | notes | text | Nullable user-specific notes |
 | created_at | timestamptz | Required |
 | updated_at | timestamptz | Required |
+| archived_at | timestamptz | Nullable; hides the saved job while preserving applications and match history |
 | deleted_at | timestamptz | Nullable soft delete |
 
 ### user_edited_jobs
@@ -330,7 +325,18 @@ Stores each saved resume-to-job comparison. This table is user-specific and lets
 | resume_source | text | `resume_profile`, `document`, `pasted_text`, or future source label |
 | match_score | integer | Required 0-10 |
 | match_data | jsonb | Structured match details, including matched/missing skills and recommendations when available |
+| resume_data_snapshot | jsonb | Immutable structured resume input used for this run |
+| job_data_snapshot | jsonb | Immutable effective job JSON used for this run |
+| resume_snapshot_hash | text | Canonical SHA-256 used to detect resume staleness |
+| job_snapshot_hash | text | Canonical SHA-256 used to detect job staleness |
+| provider | text | AI provider name |
+| model_name | text | Nullable provider model identifier |
+| prompt_version | text | Version of the matching instructions |
+| schema_version | text | Version of the structured output contract |
+| provider_execution_reference | text | Nullable provider request/completion identifier |
 | created_at | timestamptz | Required |
+
+Match records are append-only through product APIs. A rerun creates a new row, and current-vs-snapshot hash comparison determines whether a historical result is stale. See [DATA_LIFECYCLE.md](DATA_LIFECYCLE.md).
 
 ### applications
 
@@ -338,9 +344,11 @@ Stores each saved resume-to-job comparison. This table is user-specific and lets
 | --- | --- | --- |
 | id | integer | Primary key |
 | workspace_id | integer | FK |
+| user_id | integer | FK to owner |
 | user_job_id | integer | FK to user's saved editable job |
-| company_id | integer | Nullable FK |
 | status | application_status | Required |
+| stage | text | Nullable interview stage |
+| active_duplicate_guard | integer | Internal nullable uniqueness guard for accidental active duplicates |
 | priority | text | `low`, `normal`, `high` |
 | match_score | integer | Nullable 0-10 |
 | salary_notes | text | Nullable |
@@ -351,6 +359,8 @@ Stores each saved resume-to-job comparison. This table is user-specific and lets
 | created_at | timestamptz | Required |
 | updated_at | timestamptz | Required |
 | archived_at | timestamptz | Nullable |
+
+The server owns transitions: `interested -> applied/withdrawn`, `applied -> interviewing/rejected/withdrawn`, `interviewing -> offer/rejected/withdrawn`, and `offer -> accepted/rejected/withdrawn`. Terminal statuses have no forward transition. A unique constraint on `(workspace_id, user_id, user_job_id, active_duplicate_guard)` protects concurrent unconfirmed active creation; explicitly confirmed duplicates use a null guard.
 
 ### application_status_history
 

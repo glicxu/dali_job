@@ -23,6 +23,7 @@ class ResumeImportResponse(BaseModel):
     document_version_id: int
     extracted_text_preview: str
     suggestions: ResumeData
+    parse_warning: str | None = None
 
 
 class ResumeProfileParser(Protocol):
@@ -236,5 +237,5 @@ class OpenAIResumeProfileParser:
         except (json.JSONDecodeError, ValidationError) as exc:
             raise HTTPException(
                 status_code=502,
-                detail=f"OpenAI returned an invalid resume parse response: {exc}",
+                detail="The resume parser returned an invalid response. Retry or create the profile manually.",
             ) from exc

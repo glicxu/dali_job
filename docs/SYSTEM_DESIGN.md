@@ -359,8 +359,8 @@ Selected Resume Profile
   -> AI Resume Engine
   -> Validation Layer
   -> Resume Version
-  -> PDF/DOCX Generation
-  -> Application Attachment
+  -> Optional future PDF/DOCX Generation
+  -> Optional future Application Attachment
 ```
 
 Resume engine requirements:
@@ -392,6 +392,8 @@ Context Builder
 ```
 
 Each generated cover letter must be tied to a specific application and source resume version.
+
+The implemented application-material engine uses `generated_application_materials` and append-only `generated_application_material_versions` for both tailored resumes and cover letters. Generation takes an exact `document_versions.id`, snapshots its redacted extracted text and the application's effective saved-job data, and records prompt/schema/model provenance. A cover letter may additionally reference one exact completed tailored-resume material version. User edits create child versions; they never mutate generated history.
 
 ### 4.7 Application Tracking System
 
@@ -622,12 +624,11 @@ Managed operations currently cover:
 - Job description parsing and analysis.
 - Single and bulk resume-to-job matching.
 - Evidence-based interview preparation using immutable resume and job snapshots.
+- Evidence-backed tailored-resume and cover-letter generation using immutable application/document snapshots.
 
 The same boundary should later cover:
 
 - Resume parsing.
-- Resume tailoring.
-- Cover letter generation.
 - Job analysis.
 - PDF/DOCX rendering.
 - Email sync.

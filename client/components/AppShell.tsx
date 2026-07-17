@@ -78,16 +78,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           <a href="/match">Match</a>
           <a href="/jobs">Jobs</a>
           <a href="/applications">Applications</a>
+          <a href="/materials">Materials</a>
           <a href="/interviews">Interviews</a>
           <a href="/analytics">Analytics</a>
           <a href="/jobs/search">Job Search</a>
           <a href="/jobs/import">Bulk Import</a>
           <a href="/profile">Profile</a>
           <a href="/documents">Documents</a>
-          <a href="/operations">Operations</a>
           <a href="/auth">Account</a>
-          <a href="/health">Health</a>
-          <a href="/job-url-debug">URL Debug</a>
           <button type="button" className="sidebar-link" onClick={signOut}>
             Sign Out
           </button>
@@ -109,15 +107,13 @@ function PublicShell({ children }: { children: ReactNode }) {
           <a href="/match">Match</a>
           <a href="/jobs">Jobs</a>
           <a href="/applications">Applications</a>
+          <a href="/materials">Materials</a>
           <a href="/interviews">Interviews</a>
           <a href="/analytics">Analytics</a>
           <a href="/jobs/search">Job Search</a>
           <a href="/jobs/import">Bulk Import</a>
           <a href="/profile">Profile</a>
           <a href="/documents">Documents</a>
-          <a href="/operations">Operations</a>
-          <a href="/health">Health</a>
-          <a href="/job-url-debug">URL Debug</a>
           <a href="/auth">Login / Register</a>
         </nav>
       </aside>

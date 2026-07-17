@@ -1317,6 +1317,55 @@
             }
           }
         }
+      },
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "List Document Versions",
+        "operationId": "list_document_versions_api_v1_documents__document_id__versions_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentVersionResponse"
+                  },
+                  "title": "Response List Document Versions Api V1 Documents  Document Id  Versions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/documents/{document_id}/download-ticket": {
@@ -2647,6 +2696,165 @@
         }
       }
     },
+    "/api/v1/application-materials": {
+      "get": {
+        "tags": [
+          "application-materials"
+        ],
+        "summary": "List Application Materials",
+        "operationId": "list_application_materials_api_v1_application_materials_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "application_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Application Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/application-materials/{material_id}": {
+      "get": {
+        "tags": [
+          "application-materials"
+        ],
+        "summary": "Get Application Material",
+        "operationId": "get_application_material_api_v1_application_materials__material_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "material_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Material Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/application-materials/{material_id}/versions": {
+      "post": {
+        "tags": [
+          "application-materials"
+        ],
+        "summary": "Revise Application Material",
+        "operationId": "revise_application_material_api_v1_application_materials__material_id__versions_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "material_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Material Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaterialRevisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/operations/job-search": {
       "post": {
         "tags": [
@@ -3323,6 +3531,134 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/InterviewPrepRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedOperationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/operations/tailored-resume": {
+      "post": {
+        "tags": [
+          "operations"
+        ],
+        "summary": "Enqueue Tailored Resume",
+        "operationId": "enqueue_tailored_resume_api_v1_operations_tailored_resume_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TailoredResumeGenerationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedOperationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/operations/cover-letter": {
+      "post": {
+        "tags": [
+          "operations"
+        ],
+        "summary": "Enqueue Cover Letter",
+        "operationId": "enqueue_cover_letter_api_v1_operations_cover_letter_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CoverLetterGenerationRequest"
               }
             }
           }
@@ -5761,7 +6097,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File"
           }
         },
@@ -5775,7 +6111,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File"
           }
         },
@@ -5789,7 +6125,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File"
           },
           "title": {
@@ -5819,7 +6155,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File"
           }
         },
@@ -5960,6 +6296,50 @@
         },
         "type": "object",
         "title": "BulkSavedJobMatchResponse"
+      },
+      "CoverLetterGenerationRequest": {
+        "properties": {
+          "application_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Application Id"
+          },
+          "source_document_version_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Source Document Version Id"
+          },
+          "source_material_version_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Material Version Id"
+          },
+          "target_notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "application_id",
+          "source_document_version_id"
+        ],
+        "title": "CoverLetterGenerationRequest"
       },
       "CurrentUserResponse": {
         "properties": {
@@ -6411,6 +6791,13 @@
                 "type": "null"
               }
             ]
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentVersionResponse"
+            },
+            "type": "array",
+            "title": "Versions"
           }
         },
         "type": "object",
@@ -8781,6 +9168,256 @@
         "type": "object",
         "title": "ManagedOperationSummaryResponse"
       },
+      "MaterialListResponse": {
+        "properties": {
+          "materials": {
+            "items": {
+              "$ref": "#/components/schemas/MaterialResponse"
+            },
+            "type": "array",
+            "title": "Materials"
+          }
+        },
+        "type": "object",
+        "title": "MaterialListResponse"
+      },
+      "MaterialResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "application_id": {
+            "type": "integer",
+            "title": "Application Id"
+          },
+          "material_type": {
+            "type": "string",
+            "enum": [
+              "tailored_resume",
+              "cover_letter"
+            ],
+            "title": "Material Type"
+          },
+          "application_label": {
+            "type": "string",
+            "title": "Application Label"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/MaterialVersionResponse"
+            },
+            "type": "array",
+            "title": "Versions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "application_id",
+          "material_type",
+          "application_label",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "MaterialResponse"
+      },
+      "MaterialRevisionRequest": {
+        "properties": {
+          "parent_version_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Parent Version Id"
+          },
+          "content_data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Content Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "parent_version_id",
+          "content_data"
+        ],
+        "title": "MaterialRevisionRequest"
+      },
+      "MaterialVersionResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "material_id": {
+            "type": "integer",
+            "title": "Material Id"
+          },
+          "version_number": {
+            "type": "integer",
+            "title": "Version Number"
+          },
+          "parent_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Version Id"
+          },
+          "operation_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Id"
+          },
+          "source_document_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Document Version Id"
+          },
+          "source_material_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Material Version Id"
+          },
+          "source_document_title": {
+            "type": "string",
+            "title": "Source Document Title"
+          },
+          "source_document_file_name": {
+            "type": "string",
+            "title": "Source Document File Name"
+          },
+          "source_document_version_number": {
+            "type": "integer",
+            "title": "Source Document Version Number"
+          },
+          "source_document_sha256": {
+            "type": "string",
+            "title": "Source Document Sha256"
+          },
+          "content_data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Data"
+          },
+          "version_source": {
+            "type": "string",
+            "title": "Version Source"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "provider_execution_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Execution Reference"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "material_id",
+          "version_number",
+          "source_document_title",
+          "source_document_file_name",
+          "source_document_version_number",
+          "source_document_sha256",
+          "version_source",
+          "provider",
+          "prompt_version",
+          "schema_version",
+          "created_at"
+        ],
+        "title": "MaterialVersionResponse"
+      },
       "PendingMatchedJob": {
         "properties": {
           "title": {
@@ -9744,6 +10381,38 @@
         ],
         "title": "SupportedRequirement"
       },
+      "TailoredResumeGenerationRequest": {
+        "properties": {
+          "application_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Application Id"
+          },
+          "source_document_version_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Source Document Version Id"
+          },
+          "target_notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "application_id",
+          "source_document_version_id"
+        ],
+        "title": "TailoredResumeGenerationRequest"
+      },
       "UnsupportedRequirement": {
         "properties": {
           "requirement": {
@@ -9785,13 +10454,6 @@
           "type": {
             "type": "string",
             "title": "Error Type"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "ctx": {
-            "type": "object",
-            "title": "Context"
           }
         },
         "type": "object",

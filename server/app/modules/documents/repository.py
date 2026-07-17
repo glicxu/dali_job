@@ -50,6 +50,30 @@ def _document_response(document: Document, latest: DocumentVersion | None) -> di
     }
 
 
+def document_response_with_versions(db: Session, document: Document) -> dict:
+    versions = db.scalars(
+        select(DocumentVersion)
+        .where(DocumentVersion.document_id == document.id)
+        .order_by(desc(DocumentVersion.version_number))
+    ).all()
+    response = _document_response(document, versions[0] if versions else None)
+    response["versions"] = [
+        {
+            "id": version.id,
+            "document_id": version.document_id,
+            "version_number": version.version_number,
+            "file_name": version.file_name,
+            "content_type": version.content_type,
+            "size_bytes": version.size_bytes,
+            "sha256": version.sha256,
+            "extracted_text_available": bool(version.extracted_text),
+            "created_at": version.created_at,
+        }
+        for version in versions
+    ]
+    return response
+
+
 def list_documents(db: Session, identity: AuthenticatedIdentity) -> list[dict]:
     user, workspace = ensure_account_for_identity(db, identity)
     documents = db.scalars(
@@ -61,7 +85,7 @@ def list_documents(db: Session, identity: AuthenticatedIdentity) -> list[dict]:
         )
         .order_by(desc(Document.updated_at))
     ).all()
-    return [_document_response(document, _latest_version(db, document.id)) for document in documents]
+    return [document_response_with_versions(db, document) for document in documents]
 
 
 def get_document_for_identity(db: Session, identity: AuthenticatedIdentity, document_id: int) -> Document | None:

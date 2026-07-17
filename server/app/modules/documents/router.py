@@ -15,6 +15,7 @@ from app.modules.documents.schemas import (
     DocumentListResponse,
     DocumentResponse,
     DocumentTextResponse,
+    DocumentVersionResponse,
 )
 from app.modules.documents.storage import (
     extract_redacted_text,
@@ -139,8 +140,19 @@ def get_document(
     document = repository.get_document_for_identity(db, identity, document_id)
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
-    latest = repository.get_latest_version(db, document)
-    return DocumentResponse.model_validate(repository._document_response(document, latest))
+    return DocumentResponse.model_validate(repository.document_response_with_versions(db, document))
+
+
+@router.get("/{document_id}/versions", response_model=list[DocumentVersionResponse])
+def list_document_versions(
+    document_id: int,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> list[dict]:
+    document = repository.get_document_for_identity(db, identity, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+    return repository.document_response_with_versions(db, document)["versions"]
 
 
 @router.get("/{document_id}/text", response_model=DocumentTextResponse)

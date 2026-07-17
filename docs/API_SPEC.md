@@ -930,64 +930,33 @@ Creates a five-minute, one-time ticket for the latest version.
 
 Consumes a valid ticket and streams the pinned file version. The route does not accept a storage path, and a consumed or expired ticket returns `404`.
 
-## 8. Resume Engine
+## 8. Application Material Engine
 
-### `GET /resume-versions`
+### `POST /operations/tailored-resume`
 
-Lists resume versions.
+Queues evidence-backed tailored-resume generation using `application_id`, exact `source_document_version_id`, and optional `target_notes`.
 
-### `POST /resume-versions/parse`
+### `POST /operations/cover-letter`
 
-Queues parsing from an uploaded resume document into structured resume profile data.
+Queues cover-letter generation using `application_id`, exact `source_document_version_id`, optional exact `source_material_version_id` for a completed tailored resume, and optional `target_notes`.
 
-### `POST /applications/{applicationId}/resume/tailor`
+### `GET /application-materials`
 
-Queues tailored resume generation.
+Lists owner-scoped tailored-resume and cover-letter streams with immutable version history. Optional `application_id` filters the list.
 
-Body:
+### `GET /application-materials/{materialId}`
 
-```json
-{
-  "source_resume_profile_id": 1,
-  "length": "one_page",
-  "tone": "technical",
-  "emphasis": ["server", "cloud", "leadership"]
-}
-```
+Returns one material and all versions. Responses include exact source IDs, source file hash, content, evidence warnings, and provider provenance; raw private source snapshots are not returned.
 
-### `GET /resume-versions/{resumeVersionId}`
+### `POST /application-materials/{materialId}/versions`
 
-Returns a structured resume version.
+Creates a validated user revision from `parent_version_id` and `content_data`. The parent remains immutable.
 
-### `PATCH /resume-versions/{resumeVersionId}`
+### `GET /documents/{documentId}/versions`
 
-Creates an edited version from user changes. Existing versions remain immutable.
+Lists every immutable owned document version available for exact-version selection.
 
-### `POST /resume-versions/{resumeVersionId}/render`
-
-Queues PDF or DOCX rendering.
-
-## 9. Cover Letter Engine
-
-### `GET /applications/{applicationId}/cover-letters`
-
-Lists cover letter versions for an application.
-
-### `POST /applications/{applicationId}/cover-letters/generate`
-
-Queues cover letter generation.
-
-### `GET /cover-letter-versions/{coverLetterVersionId}`
-
-Returns cover letter content and metadata.
-
-### `PATCH /cover-letter-versions/{coverLetterVersionId}`
-
-Creates an edited version from user changes.
-
-### `POST /cover-letter-versions/{coverLetterVersionId}/render`
-
-Queues PDF or DOCX rendering.
+PDF/DOCX rendering and attaching rendered outputs to applications remain future endpoints.
 
 ## 10. Interviews
 

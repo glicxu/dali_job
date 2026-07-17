@@ -30,6 +30,7 @@ class DocumentResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     latest_version: DocumentVersionResponse | None = None
+    versions: list[DocumentVersionResponse] = Field(default_factory=list)
 
 
 class DocumentListResponse(BaseModel):

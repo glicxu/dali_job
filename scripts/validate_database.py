@@ -236,6 +236,16 @@ REQUIRED_TABLE_COLUMNS: dict[str, set[str]] = {
         "created_at",
         "completed_at",
     },
+    "generated_application_materials": {
+        "id", "workspace_id", "user_id", "application_id", "material_type", "created_at", "updated_at",
+    },
+    "generated_application_material_versions": {
+        "id", "material_id", "version_number", "parent_version_id", "operation_id",
+        "source_document_version_id", "source_material_version_id", "source_resume_snapshot",
+        "job_snapshot", "request_notes_snapshot", "content_data", "version_source", "warnings",
+        "provider", "model_name", "prompt_version", "schema_version", "provider_execution_reference",
+        "created_at", "completed_at",
+    },
 }
 
 

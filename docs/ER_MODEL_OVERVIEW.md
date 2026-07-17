@@ -14,6 +14,8 @@ Shared/cache data and user-specific saved data must stay separate.
 - `managed_operations` stores durable progress and normalized results for provider-backed work.
 - `interviews` and `interview_notes` store provider-independent scheduling, outcomes, and private journal entries.
 - `interview_prep_guides` stores append-only preparation inputs, outputs, warnings, and provenance.
+- `generated_application_materials` identifies one tailored-resume or cover-letter stream per application.
+- `generated_application_material_versions` stores immutable AI outputs and user revisions with exact source snapshots.
 
 This prevents user-specific notes and future application tracking from changing the shared cached job while still letting the app avoid repeated scraping and OpenAI parsing for the same URL.
 
@@ -34,6 +36,8 @@ Owns or relates to:
 - `interviews`
 - `interview_notes`
 - `interview_prep_guides`
+- `generated_application_materials`
+- `generated_application_material_versions`
 
 For the current MVP, a user effectively has one private workspace.
 
@@ -61,7 +65,6 @@ Relationship:
 users/workspaces 1 -> many resume_profiles
 resume_profiles optionally references documents/document_versions
 resume_profiles 1 -> many job_resume_matches
-resume_profiles 1 -> many resume_versions
 ```
 
 Important behavior:
@@ -93,9 +96,25 @@ Application materials use the exact version relationship:
 ```text
 applications 1 -> many application_documents
 document_versions 1 -> many application_documents
+document_versions 1 -> many generated_application_material_versions
 ```
 
 Detaching an application document timestamps the relationship instead of changing or deleting the underlying version. Download access uses short-lived, one-time `document_download_tickets` containing only a hash of the client-visible token.
+
+### generated_application_materials and generated_application_material_versions
+
+`generated_application_materials` is the stable owner record for one material type on one application. Its versions are append-only: regeneration creates another AI version and a user edit creates another user version instead of mutating prior content.
+
+```text
+applications 1 -> many generated_application_materials
+generated_application_materials 1 -> many generated_application_material_versions
+document_versions 1 -> many generated_application_material_versions
+generated_application_material_versions 1 -> many child revisions
+tailored resume material version 1 -> many cover letter material versions, optional
+managed_operations 1 -> 0 or 1 generated_application_material_versions
+```
+
+Each material version snapshots redacted extracted resume text and the effective saved-job data at generation time. The direct `source_document_version_id` remains useful for navigation, but the snapshot preserves historical meaning even if an owned document is later soft-deleted. A cover letter can also reference the exact tailored-resume version used as an input. API responses expose source identifiers and hashes, not the private raw snapshots.
 
 ### jobs_cache
 

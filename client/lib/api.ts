@@ -374,6 +374,43 @@ export type StoredDocument = {
   created_at: string;
   updated_at: string;
   latest_version: DocumentVersion | null;
+  versions: DocumentVersion[];
+};
+
+export type EvidenceBackedText = { text: string; source_evidence: string };
+
+export type TailoredResumeContent = {
+  headline: EvidenceBackedText | null;
+  summary: EvidenceBackedText[];
+  skills: EvidenceBackedText[];
+  experience: EvidenceBackedText[];
+  education: EvidenceBackedText[];
+  certifications: EvidenceBackedText[];
+  projects: EvidenceBackedText[];
+  unsupported_requirements: string[];
+  tailoring_notes: string[];
+};
+
+export type CoverLetterContent = {
+  salutation: string;
+  paragraphs: { text: string; resume_evidence: string[]; job_evidence: string[] }[];
+  closing: string;
+  warnings: string[];
+};
+
+export type ApplicationMaterialVersion = {
+  id: number; material_id: number; version_number: number; parent_version_id: number | null;
+  operation_id: number | null; source_document_version_id: number | null; source_material_version_id: number | null;
+  source_document_title: string; source_document_file_name: string; source_document_version_number: number;
+  source_document_sha256: string; content_data: TailoredResumeContent | CoverLetterContent | null;
+  version_source: "ai" | "user"; warnings: string[]; provider: string; model_name: string | null;
+  prompt_version: string; schema_version: string; provider_execution_reference: string | null;
+  created_at: string; completed_at: string | null;
+};
+
+export type ApplicationMaterial = {
+  id: number; application_id: number; material_type: "tailored_resume" | "cover_letter";
+  application_label: string; created_at: string; updated_at: string; versions: ApplicationMaterialVersion[];
 };
 
 export type DocumentListResponse = {
@@ -1130,6 +1167,34 @@ export function updateApplicationTask(
 
 export function listDocuments(): Promise<DocumentListResponse> {
   return requestJson<DocumentListResponse>("/documents");
+}
+
+export function listApplicationMaterials(applicationId?: number): Promise<{ materials: ApplicationMaterial[] }> {
+  const query = applicationId ? `?application_id=${applicationId}` : "";
+  return requestJson<{ materials: ApplicationMaterial[] }>(`/application-materials${query}`);
+}
+
+export function generateTailoredResume(payload: {
+  application_id: number; source_document_version_id: number; target_notes?: string;
+}): Promise<ApplicationMaterial> {
+  return runManagedOperation<ApplicationMaterial>("tailored_resume", "/operations/tailored-resume", payload);
+}
+
+export function generateCoverLetter(payload: {
+  application_id: number; source_document_version_id: number; source_material_version_id?: number; target_notes?: string;
+}): Promise<ApplicationMaterial> {
+  return runManagedOperation<ApplicationMaterial>("cover_letter", "/operations/cover-letter", payload);
+}
+
+export function reviseApplicationMaterial(
+  materialId: number,
+  parentVersionId: number,
+  contentData: Record<string, unknown>,
+): Promise<ApplicationMaterial> {
+  return requestJson<ApplicationMaterial>(`/application-materials/${materialId}/versions`, {
+    method: "POST",
+    body: JSON.stringify({ parent_version_id: parentVersionId, content_data: contentData }),
+  });
 }
 
 export async function uploadDocument(

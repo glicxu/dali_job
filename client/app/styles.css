@@ -87,8 +87,13 @@ a {
   max-width: none;
 }
 
+.materials-page {
+  max-width: none;
+}
+
 .profile-page > div:first-child,
 .applications-page > div:first-child,
+.materials-page > div:first-child,
 .profile-import-card {
   max-width: 1040px;
 }
@@ -1337,6 +1342,50 @@ li span {
   margin-top: 10px;
 }
 
+.account-page {
+  display: grid;
+  gap: 24px;
+}
+
+.account-tools {
+  border-top: 1px solid #d9e2ec;
+  display: grid;
+  gap: 16px;
+  padding-top: 24px;
+}
+
+.account-tools h2,
+.account-tools h3 {
+  margin: 0;
+}
+
+.account-tools-list {
+  display: grid;
+  gap: 10px;
+}
+
+.account-tools-list article {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #d9e2ec;
+  border-radius: 6px;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 16px;
+}
+
+.account-tools-list p {
+  color: #52606d;
+  margin: 6px 0 0;
+}
+
+.account-tools-list .button-link {
+  background: #eef2f7;
+  color: #1f2933;
+  white-space: nowrap;
+}
+
 .operations-manager {
   display: grid;
   gap: 16px;
@@ -1430,6 +1479,173 @@ li span {
   min-width: 90px;
 }
 
+.materials-manager {
+  display: grid;
+  gap: 18px;
+  margin-top: 24px;
+}
+
+.panel-card {
+  background: #fff;
+  border: 1px solid #d9e2ec;
+  border-radius: 6px;
+  padding: 20px;
+}
+
+.material-generator {
+  display: grid;
+  gap: 16px;
+  max-width: 1040px;
+}
+
+.material-form-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.material-notes {
+  min-height: 96px;
+}
+
+.materials-workspace {
+  align-items: start;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(300px, 0.72fr) minmax(520px, 1.28fr);
+}
+
+.materials-list-card {
+  max-height: 760px;
+  overflow: auto;
+}
+
+.materials-list {
+  display: grid;
+  gap: 8px;
+}
+
+.material-list-row {
+  background: #fff;
+  border: 1px solid #d9e2ec;
+  color: #1f2933;
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  text-align: left;
+}
+
+.material-list-row span,
+.material-list-row small {
+  color: #52606d;
+  font-weight: 400;
+}
+
+.material-list-row.selected,
+.material-history button.selected {
+  background: #eef2ff;
+  border-color: #818cf8;
+}
+
+.material-detail-pane {
+  min-height: 520px;
+  position: sticky;
+  top: 24px;
+}
+
+.material-empty {
+  color: #52606d;
+}
+
+.material-provenance {
+  border-bottom: 1px solid #e4e7eb;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+}
+
+.material-provenance span {
+  color: #52606d;
+  font-size: 13px;
+}
+
+.material-document {
+  display: grid;
+  gap: 18px;
+  line-height: 1.6;
+}
+
+.material-document h3 {
+  font-size: 16px;
+  margin: 0 0 8px;
+}
+
+.material-document section {
+  border-bottom: 1px solid #e4e7eb;
+  padding-bottom: 12px;
+}
+
+.material-document ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.material-evidence {
+  color: #52606d;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.material-evidence summary {
+  cursor: pointer;
+}
+
+.material-evidence p {
+  background: #f8fafc;
+  border-left: 3px solid #cbd2d9;
+  margin: 6px 0;
+  padding: 8px;
+}
+
+.cover-letter > div {
+  border-bottom: 1px solid #e4e7eb;
+  padding-bottom: 10px;
+}
+
+.material-history {
+  border-top: 1px solid #d9e2ec;
+  margin-top: 24px;
+  padding-top: 16px;
+}
+
+.material-history div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.material-history button {
+  background: #eef2f7;
+  border: 1px solid transparent;
+  color: #1f2933;
+  padding: 8px 10px;
+}
+
+.material-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.material-editor textarea {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 13px;
+  min-height: 520px;
+}
+
 @media (max-width: 1180px) {
   .analytics-filter,
   .analytics-overview-grid {
@@ -1448,6 +1664,10 @@ li span {
     grid-template-columns: 1fr;
   }
 
+  .materials-workspace {
+    grid-template-columns: 1fr;
+  }
+
   .saved-jobs-list-card,
   .resume-profiles-list-card,
   .applications-list-card,
@@ -1460,6 +1680,10 @@ li span {
   .applications-detail-pane,
   .interviews-detail-pane,
   .job-search-detail-pane {
+    position: static;
+  }
+
+  .material-detail-pane {
     position: static;
   }
 }
@@ -1497,6 +1721,19 @@ li span {
 
   .operation-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .material-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .account-tools-list article {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .account-tools-list .button-link {
+    text-align: center;
   }
 
   .operation-list li {

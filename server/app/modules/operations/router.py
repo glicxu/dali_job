@@ -24,6 +24,9 @@ from app.modules.job_search.apify_indeed import APIFY_INDEED_ACTOR_ID
 from app.modules.interviews import repository as interview_repository
 from app.modules.interviews.models import InterviewPrepGuide
 from app.modules.interviews.schemas import InterviewPrepRequest
+from app.modules.materials import repository as material_repository
+from app.modules.materials.models import GeneratedApplicationMaterialVersion
+from app.modules.materials.schemas import CoverLetterGenerationRequest, TailoredResumeGenerationRequest
 from app.modules.jobs.schemas import (
     IndeedJobSearchImportRequest,
     IndeedJobSearchRequest,
@@ -397,6 +400,73 @@ def enqueue_interview_prep(
         interview_repository.link_prep_operation(guide, response.id)
     db.commit()
     return response
+
+
+def _enqueue_application_material(
+    material_type: str,
+    payload: TailoredResumeGenerationRequest | CoverLetterGenerationRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    idempotency_key: str | None,
+    db: Session,
+    identity: AuthenticatedIdentity,
+) -> ManagedOperationResponse:
+    try:
+        version = material_repository.create_generation_version(db, identity, material_type, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    response = _enqueue(
+        operation_type="application_material_generation",
+        payload={"material_version_id": version.id},
+        request=request,
+        background_tasks=background_tasks,
+        db=db,
+        identity=identity,
+        idempotency_key=idempotency_key,
+        provider="openai",
+        model_or_actor=request.app.state.runtime.openai_model,
+        prompt_version="application-materials-v1",
+        progress_total=1,
+    )
+    existing = db.scalar(
+        select(GeneratedApplicationMaterialVersion).where(
+            GeneratedApplicationMaterialVersion.operation_id == response.id
+        )
+    )
+    if existing is not None and existing.id != version.id:
+        db.delete(version)
+    else:
+        material_repository.link_operation(version, response.id)
+    db.commit()
+    return response
+
+
+@router.post("/tailored-resume", response_model=ManagedOperationResponse, status_code=status.HTTP_202_ACCEPTED)
+def enqueue_tailored_resume(
+    payload: TailoredResumeGenerationRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> ManagedOperationResponse:
+    return _enqueue_application_material(
+        "tailored_resume", payload, request, background_tasks, idempotency_key, db, identity
+    )
+
+
+@router.post("/cover-letter", response_model=ManagedOperationResponse, status_code=status.HTTP_202_ACCEPTED)
+def enqueue_cover_letter(
+    payload: CoverLetterGenerationRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> ManagedOperationResponse:
+    return _enqueue_application_material(
+        "cover_letter", payload, request, background_tasks, idempotency_key, db, identity
+    )
 
 
 @router.get("", response_model=ManagedOperationListResponse)

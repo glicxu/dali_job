@@ -346,16 +346,26 @@ Acceptance criteria:
 
 ### Phase 7: Add Resume Tailoring And External Integrations Only After The Core Loop Is Stable
 
+Implementation status: item 3, resume tailoring and cover-letter generation, was completed in code on 2026-07-17. Migration `20260717_0024` must still be applied and verified in the configured database. Email, calendar, and additional job-source integrations remain deferred.
+
 User use cases: UC-06 through UC-09. Ops/admin support: OP-01, OP-02, OP-04, and OP-05.
 
 #### User track
 
 Candidate sequence:
 
-1. Email classification that proposes reviewable application events.
-2. Calendar sync for confirmed interviews and reminders.
-3. Resume tailoring and cover-letter generation tied to exact application/document versions.
-4. Additional job-source providers behind normalized interfaces.
+1. [ ] Email classification that proposes reviewable application events.
+2. [ ] Calendar sync for confirmed interviews and reminders.
+3. [x] Resume tailoring and cover-letter generation tied to exact application/document versions.
+   - [x] Select an exact application and immutable resume document version.
+   - [x] Snapshot redacted resume text and effective saved-job data before provider execution.
+   - [x] Generate evidence-backed structured tailored resumes and cover letters through managed operations.
+   - [x] Validate cited resume/job evidence server-side and remove unsupported output.
+   - [x] Preserve append-only AI and user-edited material versions with model, prompt, schema, and provider provenance.
+   - [x] Optionally tie a cover letter to an exact tailored-resume material version.
+   - [x] Add an owner-scoped client workspace for generation, review, evidence inspection, revision, and history.
+   - [ ] Render generated material versions to PDF/DOCX and attach rendered document versions to applications.
+4. [ ] Additional job-source providers behind normalized interfaces.
 
 #### Ops/admin track
 

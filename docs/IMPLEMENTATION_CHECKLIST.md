@@ -259,22 +259,22 @@ The sections below are grouped by product area. The order above should guide imp
 
 ### AI Infrastructure
 
-- [ ] Add AI provider abstraction.
-- [ ] Add prompt versioning.
-- [ ] Add AI generation job table.
-- [ ] Add worker queue for AI jobs.
-- [ ] Add schema validation for AI outputs.
-- [ ] Add AI usage logging.
+- [x] Add AI provider abstraction for current OpenAI-backed structured generators.
+- [x] Add prompt versioning.
+- [x] Use managed operations as the durable AI generation job boundary.
+- [x] Add single-server background execution for AI jobs.
+- [x] Add schema validation for AI outputs.
+- [x] Add AI usage logging.
 
 ### Resume Engine
 
-- [ ] Define structured resume schema.
-- [ ] Add resume version table.
+- [x] Define evidence-backed tailored resume schema.
+- [x] Add generic generated-material and immutable material-version tables for tailored resumes and cover letters.
 - [ ] Link resume versions back to source document versions when created from uploaded files.
 - [ ] Parse uploaded resumes into structured profile suggestions.
-- [ ] Build resume version viewer.
-- [ ] Implement resume tailoring.
-- [ ] Add validation for unsupported claims.
+- [x] Build generated resume version viewer.
+- [x] Implement resume tailoring tied to exact application/document versions.
+- [x] Add validation for unsupported claims.
 - [ ] Add resume diff UI.
 - [ ] Render PDF.
 - [ ] Render DOCX if required.
@@ -282,10 +282,10 @@ The sections below are grouped by product area. The order above should guide imp
 
 ### Cover Letter Engine
 
-- [ ] Add cover letter version table.
-- [ ] Implement cover letter generation.
-- [ ] Validate unsupported claims.
-- [ ] Add review and edit UI.
+- [x] Add generic material-version persistence for cover letters.
+- [x] Implement cover letter generation tied to exact application/document versions.
+- [x] Validate unsupported claims.
+- [x] Add review and append-only edit UI.
 - [ ] Render PDF/DOCX.
 - [ ] Attach cover letter to application.
 

@@ -35,6 +35,8 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "interviews",
         "interview_notes",
         "interview_prep_guides",
+        "generated_application_materials",
+        "generated_application_material_versions",
     }.issubset(Base.metadata.tables.keys())
     assert "skills" not in Base.metadata.tables
     assert "experiences" not in Base.metadata.tables
@@ -236,6 +238,8 @@ def test_foundation_metadata_can_create_tables() -> None:
     assert inspector.has_table("interviews")
     assert inspector.has_table("interview_notes")
     assert inspector.has_table("interview_prep_guides")
+    assert inspector.has_table("generated_application_materials")
+    assert inspector.has_table("generated_application_material_versions")
     assert not inspector.has_table("skills")
     assert not inspector.has_table("experiences")
     assert not inspector.has_table("profiles")
@@ -251,7 +255,7 @@ def test_alembic_has_initial_schema_revision() -> None:
     config.set_main_option("script_location", str(server_dir / "app" / "db" / "migrations"))
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == "20260715_0023"
+    assert script.get_current_head() == "20260717_0024"
 
 
 def test_phase3_migration_does_not_recreate_existing_document_version_constraint() -> None:

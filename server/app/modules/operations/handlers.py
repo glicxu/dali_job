@@ -12,6 +12,9 @@ from app.modules.job_search import router as job_search_router
 from app.modules.job_search.service import JobSearchProvider
 from app.modules.interviews import repository as interview_repository
 from app.modules.interviews.service import OpenAIInterviewPrepGenerator
+from app.modules.materials import repository as material_repository
+from app.modules.materials.models import GeneratedApplicationMaterial
+from app.modules.materials.service import OpenAIMaterialGenerator
 from app.modules.jobs import router as jobs_router
 from app.modules.jobs.schemas import (
     IndeedJobSearchImportRequest,
@@ -280,6 +283,49 @@ def build_operation_handlers(app: Any) -> dict[str, OperationHandler]:
         )
         return jsonable_encoder(response)
 
+    def application_material(db, identity: AuthenticatedIdentity, raw: dict, context: OperationContext):
+        version = material_repository.get_version_for_identity(db, identity, int(raw["material_version_id"]))
+        if version is None:
+            from fastapi import HTTPException, status
+
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application material request not found.")
+        material = db.get(GeneratedApplicationMaterial, version.material_id)
+        if material is None:
+            raise RuntimeError("Application material owner record is missing.")
+        source_material = None
+        if version.source_material_version_id is not None:
+            source_version = material_repository.get_version_for_identity(
+                db, identity, version.source_material_version_id
+            )
+            source_material = dict(source_version.content_data or {}) if source_version else None
+        context.update(0, total=1, message=f"Generating {material.material_type.replace('_', ' ')}")
+        generated = OpenAIMaterialGenerator(model=runtime.openai_model).generate(
+            material.material_type,
+            dict(version.source_resume_snapshot or {}),
+            dict(version.job_snapshot or {}),
+            version.request_notes_snapshot,
+            source_material,
+        )
+        content_data = generated.output.model_dump(mode="json")
+        material_repository.complete_generation(
+            version,
+            content_data,
+            list(dict.fromkeys([*(generated.warnings or []), *content_data.get("warnings", [])])),
+            model_name=generated.model_name,
+            provider_execution_reference=generated.provider_execution_reference,
+        )
+        db.flush()
+        context.update(
+            1,
+            total=1,
+            message="Application material ready",
+            usage={
+                "input_characters": len(str(version.source_resume_snapshot))
+                + len(str(version.job_snapshot))
+            },
+        )
+        return jsonable_encoder(material_repository.material_response(db, identity, material))
+
     return {
         "job_search": job_search,
         "provider_job_import": provider_import,
@@ -291,6 +337,7 @@ def build_operation_handlers(app: Any) -> dict[str, OperationHandler]:
         "resume_job_match": resume_job_match,
         "bulk_resume_job_match": bulk_match,
         "interview_prep": interview_prep,
+        "application_material_generation": application_material,
     }
 
 

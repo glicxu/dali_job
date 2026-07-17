@@ -478,39 +478,48 @@ Stores immutable file versions. The first implementation uses local server stora
 | extracted_text | text | Nullable redacted extracted text |
 | created_at | timestamptz | Required |
 
-### resume_versions
+### generated_application_materials
 
-Stores immutable structured resume snapshots. A resume version may come from an uploaded master resume, a user-edited profile snapshot, or an AI-tailored version. When the version came from a file upload, `source_document_version_id` links back to the exact uploaded file.
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| id | integer | Primary key |
-| workspace_id | integer | FK |
-| resume_profile_id | integer | Nullable FK to source resume profile |
-| application_id | integer | Nullable FK |
-| version_number | integer | Required |
-| label | text | Nullable |
-| structured_resume | jsonb | Required |
-| source_document_version_id | integer | Nullable FK |
-| ai_generation_job_id | integer | Nullable FK |
-| created_by | text | Required |
-| created_at | timestamptz | Required |
-
-### cover_letter_versions
+Stores one owner-scoped material stream per application and material type. Current material types are `tailored_resume` and `cover_letter`.
 
 | Field | Type | Notes |
 | --- | --- | --- |
 | id | integer | Primary key |
-| workspace_id | integer | FK |
-| application_id | integer | FK |
-| resume_version_id | integer | Nullable FK |
-| version_number | integer | Required |
-| title | text | Required |
-| content | text | Required |
-| ai_generation_job_id | integer | Nullable FK |
-| document_version_id | integer | Nullable FK |
-| created_by | text | Required |
+| workspace_id | integer | Owner workspace FK |
+| user_id | integer | Owner user FK |
+| application_id | integer | Required application FK |
+| material_type | text | `tailored_resume` or `cover_letter` |
 | created_at | timestamptz | Required |
+| updated_at | timestamptz | Required |
+
+The owner, application, and material type combination is unique.
+
+### generated_application_material_versions
+
+Stores immutable AI generations and user revisions. The source snapshots are server-only and preserve the exact redacted resume text and effective job data used at generation time.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | integer | Primary key |
+| material_id | integer | FK to generated material stream |
+| version_number | integer | Monotonic within material |
+| parent_version_id | integer | Nullable self-FK for user revisions |
+| operation_id | integer | Nullable unique managed-operation FK |
+| source_document_version_id | integer | Exact uploaded resume version FK |
+| source_material_version_id | integer | Nullable exact tailored-resume material version used by a cover letter |
+| source_resume_snapshot | json | Immutable redacted source and provenance |
+| job_snapshot | json | Immutable effective saved-job input |
+| request_notes_snapshot | text | Nullable targeting instructions |
+| content_data | json | Nullable while generation is pending; typed output when complete |
+| version_source | text | `ai` or `user` |
+| warnings | json | Evidence-validation and source warnings |
+| provider | text | Provider name |
+| model_name | text | Nullable model used |
+| prompt_version | text | Prompt contract version |
+| schema_version | text | Output schema version |
+| provider_execution_reference | text | Nullable provider request ID |
+| created_at | timestamptz | Required |
+| completed_at | timestamptz | Nullable until complete |
 
 ### application_documents
 
@@ -752,16 +761,16 @@ Future optional persistence for expensive or historical aggregate snapshots. Pha
 - `application_events.application_id, created_at`.
 - `document_versions.document_id, version_number` unique.
 - `resume_profiles.workspace_id, user_id, is_default, updated_at`.
-- `resume_versions.workspace_id, resume_profile_id, version_number`.
-- `cover_letter_versions.application_id, version_number`.
+- `generated_application_materials.workspace_id, user_id, application_id, material_type`.
+- `generated_application_material_versions.material_id, version_number`.
+- `generated_application_material_versions.source_document_version_id`.
 - `email_messages.integration_id, provider_message_id` unique.
 - `email_application_links.email_message_id, application_id` unique.
 - JSON indexes on `jobs_cache.job_data`, selected `resume_profiles.resume_data` paths, and analytics JSON fields if needed.
 
 ## 6. Versioning Rules
 
-- `resume_versions` are immutable.
-- `cover_letter_versions` are immutable.
+- `generated_application_material_versions` are immutable; edits create child versions.
 - `document_versions` are immutable.
 - Updating a resume profile does not mutate existing generated resumes.
 - Submitted application documents always point to exact version IDs.

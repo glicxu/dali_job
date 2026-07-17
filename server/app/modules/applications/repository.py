@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 from sqlalchemy import desc, select
 from sqlalchemy.exc import IntegrityError
@@ -8,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.applications.models import (
     Application,
+    ApplicationDocument,
     ApplicationEvent,
     ApplicationNote,
     ApplicationStatusHistory,
@@ -23,6 +25,8 @@ from app.modules.applications.schemas import (
     ApplicationUpdateRequest,
 )
 from app.modules.auth.dependencies import AuthenticatedIdentity
+from app.modules.documents import repository as document_repository
+from app.modules.documents.models import Document, DocumentVersion
 from app.modules.jobs import repository as job_repository
 from app.modules.profiles.repository import ensure_account_for_identity
 
@@ -52,11 +56,27 @@ class InvalidApplicationTransitionError(Exception):
         super().__init__(f"Cannot change application status from {current_status} to {requested_status}.")
 
 
+class ApplicationDocumentNotFoundError(Exception):
+    pass
+
+
+class DuplicateApplicationDocumentError(Exception):
+    pass
+
+
 def _clean_text(value: str | None) -> str | None:
     if value is None:
         return None
     cleaned = value.strip()
     return cleaned or None
+
+
+def _source_snapshot(job: dict) -> tuple[str | None, str]:
+    source_url = _clean_text(job.get("source_url"))
+    if source_url is None:
+        return None, "Manual entry"
+    host = (urlparse(source_url).hostname or "").lower().removeprefix("www.")
+    return source_url, host or "Unknown source"
 
 
 def _job_summary(db: Session, identity: AuthenticatedIdentity, user_job_id: int | None) -> dict | None:
@@ -142,6 +162,19 @@ def _application_response(
                         .order_by(ApplicationTask.completed_at.is_(None).desc(), ApplicationTask.due_at, desc(ApplicationTask.created_at))
                     )
                 ],
+                "documents": [
+                    _application_document_response(attachment, document, version)
+                    for attachment, document, version in db.execute(
+                        select(ApplicationDocument, Document, DocumentVersion)
+                        .join(DocumentVersion, DocumentVersion.id == ApplicationDocument.document_version_id)
+                        .join(Document, Document.id == DocumentVersion.document_id)
+                        .where(
+                            ApplicationDocument.application_id == application.id,
+                            ApplicationDocument.detached_at.is_(None),
+                        )
+                        .order_by(desc(ApplicationDocument.created_at))
+                    ).all()
+                ],
             }
         )
     return payload
@@ -180,13 +213,57 @@ def _note_response(note: ApplicationNote) -> dict:
 
 
 def _task_response(task: ApplicationTask) -> dict:
+    now = utc_now()
+    due_at = _as_utc(task.due_at)
+    reminder_at = _as_utc(task.reminder_at)
     return {
         "id": task.id,
         "application_id": task.application_id,
         "title": task.title,
+        "task_type": task.task_type,
         "due_at": task.due_at,
+        "reminder_at": task.reminder_at,
+        "reminder_dismissed_at": task.reminder_dismissed_at,
         "completed_at": task.completed_at,
+        "is_overdue": bool(task.completed_at is None and due_at is not None and due_at < now),
+        "reminder_due": bool(
+            task.completed_at is None
+            and task.reminder_dismissed_at is None
+            and reminder_at is not None
+            and reminder_at <= now
+        ),
         "created_at": task.created_at,
+        "updated_at": task.updated_at,
+    }
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _application_document_response(
+    attachment: ApplicationDocument,
+    document: Document,
+    version: DocumentVersion,
+) -> dict:
+    return {
+        "id": attachment.id,
+        "application_id": attachment.application_id,
+        "document_id": document.id,
+        "document_version_id": version.id,
+        "purpose": attachment.purpose,
+        "document_title": document.title,
+        "document_type": document.document_type,
+        "version_number": version.version_number,
+        "file_name": version.file_name,
+        "content_type": version.content_type,
+        "size_bytes": version.size_bytes,
+        "sha256": version.sha256,
+        "created_at": attachment.created_at,
     }
 
 
@@ -328,10 +405,14 @@ def create_application(
     if existing is not None and not payload.confirm_duplicate:
         raise ApplicationDuplicateError(existing.id)
     active_guard = 1 if payload.status in ACTIVE_STATUSES and not payload.confirm_duplicate else None
+    effective_job = job_repository.job_response_for_identity(db, identity, user_job)
+    source_url_snapshot, source_label_snapshot = _source_snapshot(effective_job)
     application = Application(
         workspace_id=workspace.id,
         user_id=user.id,
         user_job_id=user_job.id,
+        source_url_snapshot=source_url_snapshot,
+        source_label_snapshot=source_label_snapshot,
         status=payload.status,
         stage=payload.stage if payload.status not in TERMINAL_STATUSES else None,
         active_duplicate_guard=active_guard,
@@ -368,7 +449,11 @@ def create_application(
         db,
         application.id,
         "application_created",
-        {"user_job_id": user_job.id, "stage": application.stage},
+        {
+            "user_job_id": user_job.id,
+            "stage": application.stage,
+            "source_label_snapshot": application.source_label_snapshot,
+        },
         identity=identity,
         source="system",
     )
@@ -473,14 +558,25 @@ def add_task(
     application: Application,
     payload: ApplicationTaskCreateRequest,
 ) -> dict:
-    task = ApplicationTask(application_id=application.id, title=payload.title.strip(), due_at=payload.due_at)
+    task = ApplicationTask(
+        application_id=application.id,
+        title=payload.title.strip(),
+        task_type=payload.task_type,
+        due_at=payload.due_at,
+        reminder_at=payload.reminder_at,
+    )
     db.add(task)
     application.updated_at = utc_now()
     _add_event(
         db,
         application.id,
         "task_created",
-        {"title": task.title, "due_at": task.due_at.isoformat() if task.due_at else None},
+        {
+            "title": task.title,
+            "task_type": task.task_type,
+            "due_at": task.due_at.isoformat() if task.due_at else None,
+            "reminder_at": task.reminder_at.isoformat() if task.reminder_at else None,
+        },
         identity=identity,
     )
     db.flush()
@@ -497,6 +593,24 @@ def get_task_for_application(db: Session, application: Application, task_id: int
     )
 
 
+def list_tasks(
+    db: Session,
+    application: Application,
+    *,
+    task_type: str | None = None,
+    task_status: str | None = None,
+) -> list[dict]:
+    query = select(ApplicationTask).where(ApplicationTask.application_id == application.id)
+    if task_type:
+        query = query.where(ApplicationTask.task_type == task_type)
+    if task_status == "open":
+        query = query.where(ApplicationTask.completed_at.is_(None))
+    elif task_status == "completed":
+        query = query.where(ApplicationTask.completed_at.is_not(None))
+    tasks = db.scalars(query.order_by(ApplicationTask.completed_at.is_(None).desc(), ApplicationTask.due_at)).all()
+    return [_task_response(task) for task in tasks]
+
+
 def update_task(
     db: Session,
     identity: AuthenticatedIdentity,
@@ -506,10 +620,18 @@ def update_task(
 ) -> dict:
     if "title" in payload.model_fields_set and payload.title is not None:
         task.title = payload.title.strip()
+    if "task_type" in payload.model_fields_set and payload.task_type is not None:
+        task.task_type = payload.task_type
     if "due_at" in payload.model_fields_set:
         task.due_at = payload.due_at
+    if "reminder_at" in payload.model_fields_set:
+        task.reminder_at = payload.reminder_at
+        task.reminder_dismissed_at = None
+    if "dismiss_reminder" in payload.model_fields_set and payload.dismiss_reminder is not None:
+        task.reminder_dismissed_at = utc_now() if payload.dismiss_reminder else None
     if "completed" in payload.model_fields_set and payload.completed is not None:
         task.completed_at = utc_now() if payload.completed else None
+    task.updated_at = utc_now()
     application.updated_at = utc_now()
     _add_event(
         db,
@@ -518,13 +640,126 @@ def update_task(
         {
             "task_id": task.id,
             "title": task.title,
+            "task_type": task.task_type,
+            "due_at": task.due_at.isoformat() if task.due_at else None,
+            "reminder_at": task.reminder_at.isoformat() if task.reminder_at else None,
             "completed": task.completed_at is not None,
+            "reminder_dismissed": task.reminder_dismissed_at is not None,
         },
         identity=identity,
     )
     db.flush()
     db.refresh(task)
     return _task_response(task)
+
+
+def attach_document(
+    db: Session,
+    identity: AuthenticatedIdentity,
+    application: Application,
+    *,
+    document_version_id: int,
+    purpose: str,
+) -> dict:
+    version = document_repository.get_version_for_identity(db, identity, document_version_id)
+    if version is None:
+        raise ApplicationDocumentNotFoundError("Document version not found.")
+    existing = db.scalar(
+        select(ApplicationDocument).where(
+            ApplicationDocument.application_id == application.id,
+            ApplicationDocument.document_version_id == version.id,
+            ApplicationDocument.purpose == purpose,
+            ApplicationDocument.detached_at.is_(None),
+        )
+    )
+    if existing is not None:
+        raise DuplicateApplicationDocumentError("This exact document version is already attached for that purpose.")
+    attachment = ApplicationDocument(
+        application_id=application.id,
+        document_version_id=version.id,
+        purpose=purpose,
+    )
+    db.add(attachment)
+    application.updated_at = utc_now()
+    _add_event(
+        db,
+        application.id,
+        "document_attached",
+        {"document_version_id": version.id, "purpose": purpose},
+        identity=identity,
+    )
+    db.flush()
+    document = db.get(Document, version.document_id)
+    if document is None:
+        raise ApplicationDocumentNotFoundError("Document not found.")
+    return _application_document_response(attachment, document, version)
+
+
+def get_attachment_for_application(
+    db: Session,
+    application: Application,
+    attachment_id: int,
+) -> ApplicationDocument | None:
+    return db.scalar(
+        select(ApplicationDocument).where(
+            ApplicationDocument.id == attachment_id,
+            ApplicationDocument.application_id == application.id,
+            ApplicationDocument.detached_at.is_(None),
+        )
+    )
+
+
+def detach_document(
+    db: Session,
+    identity: AuthenticatedIdentity,
+    application: Application,
+    attachment: ApplicationDocument,
+) -> None:
+    attachment.detached_at = utc_now()
+    application.updated_at = utc_now()
+    _add_event(
+        db,
+        application.id,
+        "document_detached",
+        {"document_version_id": attachment.document_version_id, "purpose": attachment.purpose},
+        identity=identity,
+    )
+    db.flush()
+
+
+def create_attachment_download_ticket(
+    db: Session,
+    identity: AuthenticatedIdentity,
+    application: Application,
+    attachment: ApplicationDocument,
+):
+    version = document_repository.get_version_for_identity(
+        db,
+        identity,
+        attachment.document_version_id,
+        include_deleted_document=True,
+    )
+    if version is None:
+        raise ValueError("Document version not found.")
+    raw_token, ticket = document_repository.create_download_ticket(
+        db,
+        identity,
+        version,
+        application_id=application.id,
+    )
+    _add_event(
+        db,
+        application.id,
+        "document_download_authorized",
+        {
+            "application_document_id": attachment.id,
+            "document_version_id": version.id,
+            "download_ticket_id": ticket.id,
+        },
+        identity=identity,
+    )
+    db.flush()
+    return raw_token, ticket
 
 
 def archive_application(

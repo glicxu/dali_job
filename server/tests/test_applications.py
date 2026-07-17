@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi import Header
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -12,7 +14,7 @@ from app.main import create_app
 from app.modules.auth.dependencies import AuthenticatedIdentity, get_current_identity
 
 
-def create_test_client() -> TestClient:
+def create_test_client(tmp_path=None) -> TestClient:
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -34,6 +36,10 @@ def create_test_client() -> TestClient:
             session.close()
 
     app = create_app()
+    if tmp_path is not None:
+        app.state.runtime = app.state.runtime.__class__(
+            **{**app.state.runtime.__dict__, "document_storage_dir": str(tmp_path)}
+        )
     app.dependency_overrides[get_db_session] = override_db
     return TestClient(app)
 
@@ -344,3 +350,134 @@ def test_application_records_are_isolated_between_users() -> None:
         json={"notes": "Attempted cross-user update"},
         headers=user_b,
     ).status_code == 404
+
+
+def test_application_tasks_support_types_reminders_filters_and_rescheduling() -> None:
+    client = create_test_client()
+    user_job_id = create_saved_job(client)
+    application_id = client.post("/api/v1/applications", json={"user_job_id": user_job_id}).json()["id"]
+    past = datetime.now(timezone.utc) - timedelta(hours=2)
+    future = datetime.now(timezone.utc) + timedelta(days=2)
+
+    created = client.post(
+        f"/api/v1/applications/{application_id}/tasks",
+        json={
+            "title": "Follow up with recruiter",
+            "task_type": "follow_up",
+            "due_at": past.isoformat(),
+            "reminder_at": past.isoformat(),
+        },
+    )
+    assert created.status_code == 200
+    task = created.json()
+    assert task["is_overdue"] is True
+    assert task["reminder_due"] is True
+
+    filtered = client.get(
+        f"/api/v1/applications/{application_id}/tasks?task_type=follow_up&status=open"
+    )
+    assert [item["id"] for item in filtered.json()] == [task["id"]]
+
+    rescheduled = client.patch(
+        f"/api/v1/applications/{application_id}/tasks/{task['id']}",
+        json={"task_type": "interview_prep", "due_at": future.isoformat(), "reminder_at": past.isoformat()},
+    )
+    assert rescheduled.status_code == 200
+    assert rescheduled.json()["task_type"] == "interview_prep"
+    assert rescheduled.json()["is_overdue"] is False
+
+    dismissed = client.patch(
+        f"/api/v1/applications/{application_id}/tasks/{task['id']}",
+        json={"dismiss_reminder": True},
+    )
+    assert dismissed.status_code == 200
+    assert dismissed.json()["reminder_due"] is False
+    assert dismissed.json()["reminder_dismissed_at"] is not None
+
+    completed = client.patch(
+        f"/api/v1/applications/{application_id}/tasks/{task['id']}",
+        json={"completed": True},
+    )
+    assert completed.status_code == 200
+    assert client.get(f"/api/v1/applications/{application_id}/tasks?status=open").json() == []
+    assert len(client.get(f"/api/v1/applications/{application_id}/tasks?status=completed").json()) == 1
+
+
+def test_application_attachment_stays_on_exact_version_and_uses_one_time_download(tmp_path) -> None:
+    client = create_test_client(tmp_path)
+    user_job_id = create_saved_job(client)
+    application_id = client.post("/api/v1/applications", json={"user_job_id": user_job_id}).json()["id"]
+    uploaded = client.post(
+        "/api/v1/documents",
+        data={"title": "Submitted Resume", "document_type": "resume"},
+        files={"file": ("resume-v1.txt", b"Submitted version one.", "text/plain")},
+    ).json()
+    version_one_id = uploaded["latest_version"]["id"]
+
+    attached = client.post(
+        f"/api/v1/applications/{application_id}/documents",
+        json={"document_version_id": version_one_id, "purpose": "resume"},
+    )
+    assert attached.status_code == 200
+    attachment = attached.json()
+    assert attachment["version_number"] == 1
+
+    replacement = client.post(
+        f"/api/v1/documents/{uploaded['id']}/versions",
+        files={"file": ("resume-v2.txt", b"Replacement version two.", "text/plain")},
+    )
+    assert replacement.status_code == 200
+    assert replacement.json()["latest_version"]["version_number"] == 2
+
+    detail = client.get(f"/api/v1/applications/{application_id}").json()
+    assert detail["documents"][0]["document_version_id"] == version_one_id
+    assert detail["documents"][0]["version_number"] == 1
+
+    dependencies = client.get(f"/api/v1/documents/{uploaded['id']}/dependencies").json()
+    assert any(item["dependency_type"] == "application_document" for item in dependencies["dependencies"])
+    assert client.delete(f"/api/v1/documents/{uploaded['id']}?force=true").status_code == 204
+
+    ticket = client.post(
+        f"/api/v1/applications/{application_id}/documents/{attachment['id']}/download-ticket"
+    )
+    assert ticket.status_code == 200
+    download_path = ticket.json()["download_path"]
+    assert client.get(f"/api/v1{download_path}").content == b"Submitted version one."
+    assert client.get(f"/api/v1{download_path}").status_code == 404
+
+    detached = client.delete(
+        f"/api/v1/applications/{application_id}/documents/{attachment['id']}"
+    )
+    assert detached.status_code == 204
+    detail = client.get(f"/api/v1/applications/{application_id}").json()
+    assert detail["documents"] == []
+    event_types = {event["event_type"] for event in detail["events"]}
+    assert {"document_attached", "document_download_authorized", "document_detached"}.issubset(event_types)
+
+
+def test_application_cannot_attach_another_users_document_version() -> None:
+    client = create_multi_user_test_client()
+    user_a = {"X-Test-User": "attachment-owner"}
+    user_b = {"X-Test-User": "other-user"}
+    uploaded = client.post(
+        "/api/v1/documents",
+        data={"title": "Private Resume", "document_type": "resume"},
+        files={"file": ("private.txt", b"Private resume.", "text/plain")},
+        headers=user_a,
+    )
+    assert uploaded.status_code == 200
+    private_version_id = uploaded.json()["latest_version"]["id"]
+    user_b_job_id = create_saved_job(client, user_b)
+    user_b_application = client.post(
+        "/api/v1/applications",
+        json={"user_job_id": user_b_job_id},
+        headers=user_b,
+    )
+    assert user_b_application.status_code == 200
+
+    response = client.post(
+        f"/api/v1/applications/{user_b_application.json()['id']}/documents",
+        json={"document_version_id": private_version_id, "purpose": "resume"},
+        headers=user_b,
+    )
+    assert response.status_code == 404

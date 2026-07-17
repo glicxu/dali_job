@@ -18,9 +18,9 @@ DaliJob should not be implemented as one broad "career management" feature. Spli
 | UC-02 | Build a reusable resume foundation | Import, review, create, edit, and select resume profiles | Implemented |
 | UC-03 | Build a candidate job pipeline | Manually add, paste, import, search, analyze, and save jobs | Implemented; failure handling remains |
 | UC-04 | Decide where to apply | Compare a resume with jobs and review evidence and gaps | Implemented; result versioning remains |
-| UC-05 | Track an application | Convert a saved job into an application and maintain its status/history | Implemented; migration `20260714_0019` must be applied per environment |
-| UC-06 | Manage application materials | Attach exact resume and document versions to an application | Partially implemented at document-library level |
-| UC-07 | Manage next actions | Record tasks, deadlines, follow-ups, and reminders | Basic application tasks and due dates implemented; reminder behavior remains |
+| UC-05 | Track an application | Convert a saved job into an application and maintain its status/history | Implemented; current migration head must be applied per environment |
+| UC-06 | Manage application materials | Attach exact resume and document versions to an application | Implemented |
+| UC-07 | Manage next actions | Record tasks, deadlines, follow-ups, and reminders | Implemented for in-app reminders |
 | UC-08 | Prepare for interviews | Create interview records and generate reviewable preparation material | Not implemented |
 | UC-09 | Learn from outcomes | Review funnel, response, interview, offer, and source metrics | Not implemented |
 
@@ -94,7 +94,7 @@ Flexibility rules:
    - [ ] Run server tests, migration checks, OpenAPI checks, client lint/tests, and client build as separate visible jobs.
    - [x] Document the current dependency provenance and make clear that it is replaceable.
 
-2. [ ] **DB-01: Enforce migration readiness** - The readiness endpoint is implemented for head `20260714_0019`; deployment enforcement remains deferred.
+2. [ ] **DB-01: Enforce migration readiness** - The readiness endpoint is implemented for head `20260715_0021`; deployment enforcement remains deferred.
    - [ ] Verify that the configured database is at the current Alembic head during deployment.
    - [x] Report the current and expected migration revisions through `/api/v1/health/db`.
    - [ ] Test both a fresh database upgrade and an upgrade from the previous supported revision.
@@ -180,7 +180,7 @@ Current implementation:
 
 - Application tables, owner-scoped APIs, tracker/detail UI, notes, timeline events, status history, tasks, and task due dates are implemented.
 - Migration `20260714_0019` adds the final lifecycle vocabulary, interview stage, and concurrency-safe active-duplicate guard.
-- `GET /api/v1/health/db` reports `503 not_ready` until the configured database is at migration `20260714_0019`.
+- `GET /api/v1/health/db` reports `503 not_ready` until the configured database is at the current migration head.
 
 #### User track
 
@@ -219,10 +219,12 @@ Acceptance criteria:
 - [x] A saved job referenced by an application cannot be deleted.
 - [x] User A cannot list, read, change, or infer User B's application records.
 - [x] The tracker and detail page work without AI or provider access.
-- [ ] Apply migration `20260714_0019` and verify `/api/v1/health/db` reports the configured database at the Alembic head.
+- [x] Local configured database is at `20260715_0022`; `/api/v1/health/db` reports `database_ready: true`.
 - [ ] API contract, repository, migration, client, and browser-level end-to-end tests cover the complete slice. Server/API tests and the production client build pass; browser-level end-to-end coverage remains.
 
 ### Phase 3: Add Application Materials And Next Actions
+
+Implementation status: completed in code on 2026-07-15. The local configured database was verified at head `20260715_0022`.
 
 Use cases: UC-06 and UC-07.
 
@@ -230,31 +232,34 @@ Goal: make each application operationally complete without introducing external 
 
 #### User track
 
-1. **DOC-01: Immutable application attachments**
-   - Add attach, detach, list, and download flows for submitted resumes, cover letters, and supporting material.
-   - Show the exact version attached to the application.
+1. [x] **DOC-01: Immutable application attachments**
+   - [x] Add attach, detach, list, and download flows for submitted resumes, cover letters, and supporting material.
+   - [x] Show the exact version attached to the application.
 
-2. **TASK-01: Tasks and reminders**
-   - Preserve the implemented application task title, due time, and completion flow.
-   - Add task type, optional reminder time, task filtering, and rescheduling behavior.
-   - Surface overdue and upcoming actions on the dashboard and application detail page.
-   - Start with in-app reminders; external notifications are a later integration.
+2. [x] **TASK-01: Tasks and reminders**
+   - [x] Preserve application task title, due time, and completion behavior.
+   - [x] Add task type, optional reminder time, task filtering, reminder dismissal, and rescheduling.
+   - [x] Surface overdue and upcoming actions on the dashboard and application detail page.
+   - [x] Keep reminders in-app; external notifications remain a later integration.
 
 #### Ops/admin track
 
-- Add `application_documents` linking an application to an exact `document_version_id` and attachment purpose.
-- Enforce owner checks and record document-access audit events.
-- Move storage behind signed URLs or an equivalent short-lived authorization boundary before broad public use.
-- Extend the implemented task persistence and due-time indexes with reminder state and support diagnostics without introducing external notification infrastructure.
+- [x] Add `application_documents` linking an application to an exact `document_version_id` and attachment purpose.
+- [x] Enforce owner checks and record attachment and one-time download-ticket audit data.
+- [x] Put downloads behind five-minute, one-time opaque tickets; storage paths are never returned to the client.
+- [x] Extend task persistence and indexes with task type, reminder, dismissal, and update state without external notification infrastructure.
 
 Acceptance criteria:
 
-- The application shows exactly which immutable document version was submitted.
-- Replacing a document creates a new version and does not alter historical attachments.
-- Users can create, complete, reschedule, and filter application tasks.
-- Dashboard next-step logic includes overdue and upcoming application actions.
+- [x] The application shows exactly which immutable document version was submitted.
+- [x] Replacing a document creates a new version and does not alter historical attachments.
+- [x] Users can create, complete, reschedule, and filter application tasks.
+- [x] Dashboard next-step logic includes overdue and upcoming application actions.
+- [x] Local configured database is at `20260715_0022`; `/api/v1/health/db` reports `database_ready: true`.
 
 ### Phase 4: Move Costly Work Behind A Managed Execution Boundary
+
+Implementation status: completed in code on 2026-07-15. The local configured database was verified at head `20260715_0022`.
 
 User use cases: UC-03, UC-04, and future UC-08. Ops/admin use cases: OP-02 and OP-05.
 
@@ -262,27 +267,30 @@ Goal: prevent provider latency and failures from controlling API request lifecyc
 
 #### User track
 
-- Show durable progress for searches, imports, parsing, matching, and later interview preparation.
-- Allow the user to leave and return without losing operation state.
-- Show a useful failure reason and safe retry action.
+- [x] Show durable progress for current searches, imports, parsing, and matching; keep the same contract available for later interview preparation.
+- [x] Allow the user to leave and return without losing operation state.
+- [x] Show a useful failure reason and safe retry action.
 
 #### Ops/admin track
 
-- Define a provider-neutral AI interface and normalized job-search provider interface.
-- Add background execution for bulk import, provider search, parsing, bulk matching, and later interview preparation.
-- Store queued/running/succeeded/failed/cancelled state, progress, attempts, errors, model/actor, prompt version, and usage.
-- Add idempotency keys and bounded retries for safe operations.
-- Add polling first; introduce push updates only if polling becomes inadequate.
-- Add operations views or queries for failed work and provider health without exposing full secrets.
+- [x] Define a provider-neutral AI interface and normalized job-search provider interface.
+- [x] Add background execution for bulk import, provider search, parsing, and bulk matching, with a reusable handler boundary for later interview preparation.
+- [x] Store queued/running/succeeded/failed/cancelled state, progress, attempts, errors, model/actor, prompt version, and usage.
+- [x] Add idempotency keys and bounded retries for safe operations.
+- [x] Add polling first; introduce push updates only if polling becomes inadequate.
+- [x] Add operations views or queries for failed work and provider health without exposing full secrets.
 
 Acceptance criteria:
 
-- Expensive endpoints return a durable operation ID promptly.
-- Refreshing the UI does not lose progress or create duplicate provider work.
-- Failed work can be retried safely and shows a useful user-facing reason.
-- Provider-specific data stays behind normalized server contracts.
+- [x] Expensive UI workflows enqueue through `/api/v1/operations/*` and return a durable operation ID promptly.
+- [x] Refreshing the UI does not lose progress or create duplicate provider work.
+- [x] Failed work can be retried safely and shows a useful user-facing reason.
+- [x] Provider-specific data stays behind normalized server contracts.
+- [x] Local configured database is at `20260715_0022`; `/api/v1/health/db` reports `database_ready: true`.
 
 ### Phase 5: Add Interview Preparation
+
+Implementation status: completed in code on 2026-07-15. The local configured database was verified at head `20260715_0022`.
 
 User use case: UC-08. Ops/admin support: OP-02 and OP-05.
 
@@ -290,24 +298,27 @@ Goal: help a user prepare from application-owned context after the tracker and a
 
 #### User track
 
-- Interview records with application, type, schedule, stage, outcome, and private notes.
-- Prep request using an exact resume version/snapshot, job version/snapshot, and optional company notes.
-- Reviewable outputs: study priorities, likely questions, evidence-backed talking points, and skill gaps.
+- [x] Interview records with application, type, schedule, stage, outcome, and private notes.
+- [x] Prep request using an exact resume profile snapshot, effective saved-job snapshot, and optional company notes.
+- [x] Reviewable outputs: study priorities, likely questions, evidence-backed talking points, and skill gaps.
 
 #### Ops/admin track
 
-- Prompt/model/version provenance and explicit warnings when source evidence is absent.
-- Provider usage, failure, and latency records for preparation jobs.
-- Support-safe retry diagnostics that exclude resume and interview content from routine logs.
+- [x] Prompt/model/version provenance and explicit warnings when source evidence is absent.
+- [x] Provider usage, failure, and latency records for preparation jobs.
+- [x] Support-safe retry diagnostics that exclude resume and interview content from routine logs.
 
 Acceptance criteria:
 
-- Interview records work without AI.
-- Generated preparation is linked to exact inputs and can be regenerated without overwriting earlier output.
-- Output never silently adds unsupported resume claims.
-- Provider failure does not block interview scheduling or notes.
+- [x] Interview records work without AI.
+- [x] Generated preparation is linked to exact inputs and can be regenerated without overwriting earlier output.
+- [x] Output never silently adds unsupported resume claims; exact resume evidence is verified server-side.
+- [x] Provider failure does not block interview scheduling or notes.
+- [x] Local configured database is at `20260715_0022`; `/api/v1/health/db` reports `database_ready: true`.
 
 ### Phase 6: Add Outcome Analytics
+
+Implementation status: completed in code on 2026-07-15. The local configured database was verified at head `20260715_0023`.
 
 User use case: UC-09. Ops/admin support: OP-04 and OP-05.
 
@@ -315,22 +326,23 @@ Goal: show descriptive metrics only after application and outcome data exists.
 
 #### User track
 
-- Applications by status and date range.
-- Response, interview, offer, rejection, and withdrawal rates.
-- Time from applied to first response and interview.
-- Source and resume-version performance with sample size shown.
+- [x] Applications by status and date range.
+- [x] Response, interview, offer, rejection, and withdrawal rates.
+- [x] Time from applied to first response and interview.
+- [x] Source and exact attached resume-version performance with sample size shown.
 
 #### Ops/admin track
 
-- Define and version metric formulas, denominators, time zones, and event-source rules.
-- Add reproducible aggregation tests and support diagnostics for stale or incomplete analytics.
-- Keep candidate analytics isolated from global service-usage and provider-cost reporting.
+- [x] Define and version metric formulas, denominators, time zones, and event-source rules.
+- [x] Add reproducible aggregation tests and support diagnostics for stale or incomplete analytics.
+- [x] Keep candidate analytics isolated from global service-usage and provider-cost reporting.
 
 Acceptance criteria:
 
-- Metrics are derived from application events and exact historical versions.
-- Definitions and denominators are visible and tested.
-- Small samples are labeled; the product does not present weak correlations as recommendations.
+- [x] Metrics are derived from application events, application-time source snapshots, and exact historical document versions.
+- [x] Definitions and denominators are visible and tested.
+- [x] Small samples are labeled; the product does not present weak correlations as recommendations.
+- [x] Local configured database is at `20260715_0023`; `/api/v1/health/db` reports `database_ready: true`.
 
 ### Phase 7: Add Resume Tailoring And External Integrations Only After The Core Loop Is Stable
 

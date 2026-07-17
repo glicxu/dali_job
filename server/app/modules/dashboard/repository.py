@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.modules.applications.models import Application, ApplicationTask
 from app.modules.auth.dependencies import AuthenticatedIdentity
 from app.modules.dashboard.schemas import (
     DashboardAlert,
+    DashboardApplicationAction,
     DashboardBestMatch,
     DashboardNextStep,
     DashboardRecentJob,
@@ -15,6 +18,7 @@ from app.modules.dashboard.schemas import (
 )
 from app.modules.jobs import repository as jobs_repository
 from app.modules.profiles import repository as profiles_repository
+from app.modules.profiles.repository import ensure_account_for_identity
 
 
 def _job_href(user_saved_job_id: int) -> str:
@@ -98,7 +102,24 @@ def _build_alerts(resume_count: int, jobs: list[dict[str, Any]]) -> list[Dashboa
     return alerts
 
 
-def _build_next_step(resume_count: int, jobs: list[dict[str, Any]], best_matches: list[DashboardBestMatch]) -> DashboardNextStep:
+def _build_next_step(
+    resume_count: int,
+    jobs: list[dict[str, Any]],
+    best_matches: list[DashboardBestMatch],
+    application_actions: list[DashboardApplicationAction],
+) -> DashboardNextStep:
+    if application_actions:
+        action = application_actions[0]
+        return DashboardNextStep(
+            kind="application_action",
+            label=action.title,
+            href=action.href,
+            reason=(
+                "This application task is overdue."
+                if action.is_overdue
+                else "This application task is your next scheduled action."
+            ),
+        )
     if resume_count == 0:
         return DashboardNextStep(
             kind="create_resume_profile",
@@ -142,10 +163,71 @@ def _build_next_step(resume_count: int, jobs: list[dict[str, Any]], best_matches
     )
 
 
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _application_actions(
+    db: Session,
+    identity: AuthenticatedIdentity,
+    jobs_by_id: dict[int, dict[str, Any]],
+) -> list[DashboardApplicationAction]:
+    user, workspace = ensure_account_for_identity(db, identity)
+    rows = db.execute(
+        select(ApplicationTask, Application)
+        .join(Application, Application.id == ApplicationTask.application_id)
+        .where(
+            Application.workspace_id == workspace.id,
+            Application.user_id == user.id,
+            Application.archived_at.is_(None),
+            ApplicationTask.completed_at.is_(None),
+        )
+    ).all()
+    now = datetime.now(timezone.utc)
+    actions: list[tuple[datetime, DashboardApplicationAction]] = []
+    for task, application in rows:
+        due_at = _as_utc(task.due_at)
+        reminder_at = _as_utc(task.reminder_at)
+        active_reminder_at = reminder_at if task.reminder_dismissed_at is None else None
+        if due_at is None and active_reminder_at is None:
+            continue
+        action_at = min(value for value in (due_at, active_reminder_at) if value is not None)
+        job = jobs_by_id.get(application.user_job_id or -1, {})
+        actions.append(
+            (
+                action_at,
+                DashboardApplicationAction(
+                    task_id=task.id,
+                    application_id=application.id,
+                    title=task.title,
+                    task_type=task.task_type,
+                    due_at=task.due_at,
+                    reminder_at=task.reminder_at,
+                    is_overdue=bool(due_at is not None and due_at < now),
+                    reminder_due=bool(
+                        reminder_at is not None
+                        and reminder_at <= now
+                        and task.reminder_dismissed_at is None
+                    ),
+                    job_title=job.get("title") or f"Application #{application.id}",
+                    company=job.get("company") or "",
+                    href=f"/applications?application_id={application.id}",
+                ),
+            )
+        )
+    actions.sort(key=lambda item: item[0])
+    return [item[1] for item in actions[:8]]
+
+
 def get_dashboard(db: Session, identity: AuthenticatedIdentity) -> DashboardResponse:
     resume_profiles = profiles_repository.list_resume_profiles(db, identity)
     resume_titles = {profile.id: profile.title for profile in resume_profiles}
     jobs = jobs_repository.list_jobs(db, identity)
+    jobs_by_id = {job["id"]: job for job in jobs}
 
     matched_jobs = [job for job in jobs if isinstance(job.get("match_score"), int)]
     matched_jobs.sort(key=lambda job: (job["match_score"], _created_at(job)), reverse=True)
@@ -178,10 +260,17 @@ def get_dashboard(db: Session, identity: AuthenticatedIdentity) -> DashboardResp
         )
         for job in recent_jobs_source
     ]
+    application_actions = _application_actions(db, identity, jobs_by_id)
 
     return DashboardResponse(
         setup_alerts=_build_alerts(len(resume_profiles), jobs),
-        recommended_next_step=_build_next_step(len(resume_profiles), jobs, best_matches),
+        recommended_next_step=_build_next_step(
+            len(resume_profiles),
+            jobs,
+            best_matches,
+            application_actions,
+        ),
         best_matches=best_matches,
         recently_saved_jobs=recently_saved_jobs,
+        application_actions=application_actions,
     )

@@ -9,7 +9,7 @@ Use the [DaliJob Implementation Plan](IMPLEMENTATION_PLAN.md) for current priori
 - [x] Configure client/server API boundary through `/api/v1`.
 - [x] Add OpenAPI generation or documented contract workflow.
 - [x] Add MySQL-compatible SQL database and object storage to local Docker Compose.
-- [x] Add Redis only when background jobs are introduced.
+- [x] Add database-backed managed operations without requiring Redis for the single-server deployment; reserve Redis for a future external worker cluster.
 - [x] Configure Alembic migrations.
 - [x] Add root `requirements.txt` with `-e ../DaliCommonLib`.
 - [x] Add typed server settings backed by `DaliCommonLib.dali_config.ProcessConfig`.
@@ -216,9 +216,11 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Add application timeline events.
 - [x] Add notes.
 - [x] Add tasks and reminders.
+- [x] Add application task types, optional reminder times, reminder dismissal, filtering, and rescheduling.
+- [x] Surface overdue and upcoming application actions on the dashboard.
 - [x] Build tracker UI.
 - [x] Build application detail UI.
-- [ ] Apply migration `20260714_0019` to each configured environment and verify `/api/v1/health/db` returns `database_ready: true`.
+- [x] Apply migrations through `20260715_0022` to the local configured database and verify `/api/v1/health/db` returns `database_ready: true`.
 
 ### Document Management
 
@@ -227,8 +229,9 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Add owner-protected local document download endpoint.
 - [x] Store redacted extracted text for supported uploaded documents.
 - [ ] Add signed upload URL flow.
-- [ ] Add signed download URL flow.
-- [ ] Add application document attachments.
+- [x] Add short-lived one-time download-ticket flow as the signed-download equivalent for local storage.
+- [x] Add document replacement uploads that create immutable versions.
+- [x] Add application document attach, list, exact-version download, and detach flows.
 - [x] Add document list and preview UI.
 - [x] Add owner-scoped document soft deletion with dependency warnings and explicit confirmation.
 
@@ -245,10 +248,12 @@ The sections below are grouped by product area. The order above should guide imp
 
 ### Basic Analytics
 
-- [ ] Add application count metrics.
-- [ ] Add status funnel metrics.
-- [ ] Add response-rate calculations.
-- [ ] Build analytics summary UI.
+- [x] Add application count metrics.
+- [x] Add status and outcome metrics.
+- [x] Add response-rate calculations.
+- [x] Add response/interview timing metrics.
+- [x] Add source and exact resume-version performance with sample sizes.
+- [x] Build analytics summary UI with visible definitions and data-quality warnings.
 
 ## Phase 2: AI Documents And Job Analysis
 
@@ -296,18 +301,18 @@ The sections below are grouped by product area. The order above should guide imp
 
 ## Phase 3: Interview Preparation
 
-- [ ] Add interviews table.
-- [ ] Add interview scheduling fields.
-- [ ] Add interview journal notes.
-- [ ] Add interview prep guide table.
+- [x] Add interviews table.
+- [x] Add interview scheduling fields.
+- [x] Add interview journal notes.
+- [x] Add interview prep guide table.
 - [ ] Generate company overview.
 - [ ] Generate industry overview.
 - [ ] Generate product, customer, competitor, and technology notes.
-- [ ] Generate question bank.
-- [ ] Generate study guide.
+- [x] Generate question bank.
+- [x] Generate study guide.
 - [ ] Generate preparation roadmap.
 - [ ] Add suggested resources.
-- [ ] Build interview prep UI.
+- [x] Build interview prep UI.
 - [ ] Add mock interview data model.
 - [ ] Build first mock interview prototype.
 

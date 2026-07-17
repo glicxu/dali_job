@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  DashboardApplicationAction,
   DashboardBestMatch,
   DashboardRecentJob,
   DashboardResponse,
@@ -118,6 +119,19 @@ export function DashboardHome() {
       </section>
 
       <section className="profile-card">
+        <h2>Application Actions</h2>
+        {dashboard.application_actions.length ? (
+          <div className="dashboard-card-list">
+            {dashboard.application_actions.map((action) => (
+              <ApplicationActionCard action={action} key={action.task_id} />
+            ))}
+          </div>
+        ) : (
+          <p className="empty">No upcoming application actions.</p>
+        )}
+      </section>
+
+      <section className="profile-card">
         <h2>Best Matches</h2>
         {dashboard.best_matches.length ? (
           <div className="dashboard-card-list">
@@ -143,6 +157,24 @@ export function DashboardHome() {
         )}
       </section>
     </section>
+  );
+}
+
+function ApplicationActionCard({ action }: { action: DashboardApplicationAction }) {
+  const actionTime = action.due_at || action.reminder_at;
+  return (
+    <a className="dashboard-job-card" href={action.href}>
+      <span className={`status-pill${action.is_overdue ? " status-rejected" : ""}`}>
+        {action.is_overdue ? "Overdue" : action.reminder_due ? "Reminder" : "Upcoming"}
+      </span>
+      <div>
+        <h3>{action.title}</h3>
+        <p className="metadata">
+          {action.job_title}{action.company ? ` | ${action.company}` : ""}
+        </p>
+        {actionTime ? <p className="metadata">{new Date(actionTime).toLocaleString()}</p> : null}
+      </div>
+    </a>
   );
 }
 

@@ -10,6 +10,7 @@ import {
   StoredDocument,
   downloadDocumentFile,
   uploadDocument,
+  uploadDocumentVersion,
 } from "../lib/api";
 
 function formatBytes(value: number): string {
@@ -93,6 +94,22 @@ export function DocumentLibrary() {
     }
   }
 
+  async function replaceDocumentVersion(document: StoredDocument, file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    setStatus(null);
+    setIsUploading(true);
+    try {
+      await uploadDocumentVersion(document.id, file);
+      setStatus(`Version ${document.latest_version ? document.latest_version.version_number + 1 : 1} uploaded.`);
+      await loadDocuments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Document version upload failed.");
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
   async function removeDocument(document: StoredDocument) {
     setError(null);
     setStatus(null);
@@ -163,6 +180,18 @@ export function DocumentLibrary() {
                 </p>
               </div>
               <div className="button-row">
+                <label className="secondary-button document-version-button">
+                  New Version
+                  <input
+                    type="file"
+                    accept="application/pdf,text/plain"
+                    disabled={isUploading}
+                    onChange={(event) => {
+                      void replaceDocumentVersion(document, event.target.files?.[0]);
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
                 <button
                   type="button"
                   className="secondary-button"

@@ -291,7 +291,8 @@ export function JobsManager() {
     setError(null);
     setIsLoading(true);
     try {
-      setJobs(await listJobs(showArchived));
+      const loadedJobs = await listJobs(showArchived);
+      setJobs(showArchived ? loadedJobs.filter((job) => job.archived_at !== null) : loadedJobs);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load jobs.");
     } finally {

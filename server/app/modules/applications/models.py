@@ -52,6 +52,8 @@ class Application(Base):
         nullable=True,
         index=True,
     )
+    source_url_snapshot: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    source_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="interested", index=True)
     stage: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     active_duplicate_guard: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -119,8 +121,41 @@ class ApplicationNote(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
+class ApplicationDocument(Base):
+    __tablename__ = "application_documents"
+    __table_args__ = (
+        CheckConstraint(
+            "purpose IN ('resume', 'cover_letter', 'supporting')",
+            name="ck_application_documents_purpose",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    application_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("applications.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    document_version_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("document_versions.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    purpose: Mapped[str] = mapped_column(String(40), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    detached_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class ApplicationTask(Base):
     __tablename__ = "application_tasks"
+    __table_args__ = (
+        CheckConstraint(
+            "task_type IN ('follow_up', 'interview_prep', 'document', 'deadline', 'other')",
+            name="ck_application_tasks_type",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     application_id: Mapped[int] = mapped_column(
@@ -130,6 +165,15 @@ class ApplicationTask(Base):
         index=True,
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    task_type: Mapped[str] = mapped_column(String(40), nullable=False, default="other", index=True)
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    reminder_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    reminder_dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )

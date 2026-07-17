@@ -29,6 +29,12 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "application_events",
         "application_notes",
         "application_tasks",
+        "application_documents",
+        "document_download_tickets",
+        "managed_operations",
+        "interviews",
+        "interview_notes",
+        "interview_prep_guides",
     }.issubset(Base.metadata.tables.keys())
     assert "skills" not in Base.metadata.tables
     assert "experiences" not in Base.metadata.tables
@@ -43,6 +49,8 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
     user_saved_job_columns = set(Base.metadata.tables["user_saved_jobs"].columns.keys())
     job_resume_match_columns = set(Base.metadata.tables["job_resume_matches"].columns.keys())
     application_columns = set(Base.metadata.tables["applications"].columns.keys())
+    application_task_columns = set(Base.metadata.tables["application_tasks"].columns.keys())
+    application_document_columns = set(Base.metadata.tables["application_documents"].columns.keys())
 
     assert {
         "id",
@@ -161,6 +169,8 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "workspace_id",
         "user_id",
         "user_job_id",
+        "source_url_snapshot",
+        "source_label_snapshot",
         "status",
         "stage",
         "active_duplicate_guard",
@@ -179,6 +189,26 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         constraint.name for constraint in Base.metadata.tables["applications"].constraints
     }
     assert "uq_applications_active_saved_job_guard" in application_constraints
+    assert {
+        "id",
+        "application_id",
+        "title",
+        "task_type",
+        "due_at",
+        "reminder_at",
+        "reminder_dismissed_at",
+        "completed_at",
+        "created_at",
+        "updated_at",
+    }.issubset(application_task_columns)
+    assert {
+        "id",
+        "application_id",
+        "document_version_id",
+        "purpose",
+        "created_at",
+        "detached_at",
+    }.issubset(application_document_columns)
 
 
 def test_foundation_metadata_can_create_tables() -> None:
@@ -200,6 +230,12 @@ def test_foundation_metadata_can_create_tables() -> None:
     assert inspector.has_table("application_events")
     assert inspector.has_table("application_notes")
     assert inspector.has_table("application_tasks")
+    assert inspector.has_table("application_documents")
+    assert inspector.has_table("document_download_tickets")
+    assert inspector.has_table("managed_operations")
+    assert inspector.has_table("interviews")
+    assert inspector.has_table("interview_notes")
+    assert inspector.has_table("interview_prep_guides")
     assert not inspector.has_table("skills")
     assert not inspector.has_table("experiences")
     assert not inspector.has_table("profiles")
@@ -215,7 +251,22 @@ def test_alembic_has_initial_schema_revision() -> None:
     config.set_main_option("script_location", str(server_dir / "app" / "db" / "migrations"))
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == "20260714_0019"
+    assert script.get_current_head() == "20260715_0023"
+
+
+def test_phase3_migration_does_not_recreate_existing_document_version_constraint() -> None:
+    migration_path = (
+        Path(__file__).resolve().parents[1]
+        / "app"
+        / "db"
+        / "migrations"
+        / "versions"
+        / "20260715_0020_application_materials_and_reminders.py"
+    )
+    migration_text = migration_path.read_text(encoding="utf-8")
+
+    assert "create_unique_constraint(\n        \"uq_document_versions_document_version\"" not in migration_text
+    assert "drop_constraint(\"uq_document_versions_document_version\"" not in migration_text
 
 
 def test_jobs_cache_source_url_hash_is_unique_in_metadata() -> None:

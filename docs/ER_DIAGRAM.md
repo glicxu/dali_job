@@ -15,9 +15,12 @@ erDiagram
     workspaces ||--o{ analytics_snapshots : owns
     workspaces ||--o{ ai_generation_jobs : owns
     workspaces ||--o{ job_resume_matches : owns
+    workspaces ||--o{ managed_operations : runs
+    workspaces ||--o{ interviews : owns
 
     resume_profiles ||--o{ resume_versions : produces
     resume_profiles ||--o{ job_resume_matches : compared_with
+    resume_profiles ||--o{ interview_prep_guides : snapshotted_for
 
     companies ||--o{ jobs_cache : posts
     companies ||--o{ recruiters : has
@@ -32,7 +35,6 @@ erDiagram
     applications ||--o{ application_documents : attaches
     applications ||--o{ cover_letter_versions : has
     applications ||--o{ interviews : has
-    applications ||--o{ interview_prep_guides : has
     applications ||--o{ tasks : has
     applications ||--o{ offers : may_have
     applications ||--o{ email_application_links : linked_by
@@ -44,11 +46,11 @@ erDiagram
     document_versions ||--o{ application_documents : exact_version
 
     resume_versions ||--o{ cover_letter_versions : supports
-    resume_versions ||--o{ interview_prep_guides : used_for
     resume_versions ||--o{ job_resume_matches : compared_with
 
     interviews ||--o{ interview_questions : contains
     interviews ||--o{ interview_notes : records
+    interviews ||--o{ interview_prep_guides : prepares
     interviews ||--o{ calendar_events : scheduled_as
 
     integrations ||--o{ email_messages : syncs
@@ -59,7 +61,7 @@ erDiagram
     ai_generation_jobs ||--o{ resume_versions : generated
     ai_generation_jobs ||--o{ cover_letter_versions : generated
     ai_generation_jobs ||--o{ document_versions : generated
-    ai_generation_jobs ||--o{ interview_prep_guides : generated
+    managed_operations ||--o| interview_prep_guides : executes
     ai_generation_jobs ||--o{ job_resume_matches : generated
 ```
 
@@ -71,6 +73,8 @@ erDiagram
 - `resume_versions`, `cover_letter_versions`, and `document_versions` are immutable.
 - `applications` connect jobs, companies, submitted documents, interviews, notes, tasks, offers, email messages, and calendar events.
 - `job_resume_matches` stores 0-10 resume-to-job comparison results for the initial prototype and later recommendation workflows.
+- `managed_operations` stores durable owner-scoped progress, retries, safe errors, provider metadata, and normalized results for costly work.
+- `interview_prep_guides` snapshots the exact resume, effective job data, and optional company notes for one interview; regeneration appends a new guide.
 - `application_status_history` stores status transitions; `application_events` stores the broader timeline.
 - `integrations` represent email, calendar, and job-source connections. Provider-specific details stay in encrypted credentials and adapter-specific metadata.
 - `ai_generation_jobs` records traceability for all AI-generated artifacts.

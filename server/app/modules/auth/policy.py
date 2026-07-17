@@ -13,6 +13,7 @@ PUBLIC_API_ROUTES = {
     ("POST", "/auth/login"),
     ("GET", "/health"),
     ("GET", "/health/db"),
+    ("GET", "/documents/downloads/{token}"),
 }
 
 

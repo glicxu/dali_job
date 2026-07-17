@@ -70,16 +70,27 @@ def test_document_upload_list_text_and_download(tmp_path) -> None:
     assert "jane@example.com" not in extracted_text
     assert "Backend engineer with Python." in extracted_text
 
-    download_response = client.get(f"/api/v1/documents/{uploaded['id']}/download")
-    assert download_response.status_code == 200
-    assert download_response.content.startswith(b"Jane Example")
+    replacement_response = client.post(
+        f"/api/v1/documents/{uploaded['id']}/versions",
+        files={"file": ("resume-v2.txt", b"Version two resume content.", "text/plain")},
+    )
+    assert replacement_response.status_code == 200
+    assert replacement_response.json()["latest_version"]["version_number"] == 2
+
+    ticket_response = client.post(f"/api/v1/documents/{uploaded['id']}/download-ticket")
+    assert ticket_response.status_code == 200
+    ticket_path = ticket_response.json()["download_path"]
+    ticket_download = client.get(f"/api/v1{ticket_path}")
+    assert ticket_download.status_code == 200
+    assert ticket_download.content == b"Version two resume content."
+    assert client.get(f"/api/v1{ticket_path}").status_code == 404
 
     with session_factory() as session:
         document = session.execute(select(Document)).scalar_one()
-        version = session.execute(select(DocumentVersion)).scalar_one()
+        versions = session.execute(select(DocumentVersion).order_by(DocumentVersion.version_number)).scalars().all()
         assert document.title == "Master Resume"
-        assert version.sha256
-        assert version.storage_path
+        assert [version.version_number for version in versions] == [1, 2]
+        assert all(version.sha256 and version.storage_path for version in versions)
 
     profile_response = client.post(
         "/api/v1/resume-profiles",

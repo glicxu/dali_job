@@ -23,6 +23,9 @@ ApplicationStage = Literal[
     "final_interview",
 ]
 ApplicationPriority = Literal["low", "normal", "high"]
+ApplicationTaskType = Literal["follow_up", "interview_prep", "document", "deadline", "other"]
+ApplicationTaskStatus = Literal["open", "completed"]
+ApplicationDocumentPurpose = Literal["resume", "cover_letter", "supporting"]
 
 
 class ApplicationCreateRequest(BaseModel):
@@ -65,12 +68,17 @@ class ApplicationNoteCreateRequest(BaseModel):
 
 class ApplicationTaskCreateRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
+    task_type: ApplicationTaskType = "other"
     due_at: datetime | None = None
+    reminder_at: datetime | None = None
 
 
 class ApplicationTaskUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
+    task_type: ApplicationTaskType | None = None
     due_at: datetime | None = None
+    reminder_at: datetime | None = None
+    dismiss_reminder: bool | None = None
     completed: bool | None = None
 
     @model_validator(mode="after")
@@ -141,8 +149,35 @@ class ApplicationTaskResponse(BaseModel):
     id: int
     application_id: int
     title: str
+    task_type: str
     due_at: datetime | None = None
+    reminder_at: datetime | None = None
+    reminder_dismissed_at: datetime | None = None
     completed_at: datetime | None = None
+    is_overdue: bool = False
+    reminder_due: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
+class ApplicationDocumentAttachRequest(BaseModel):
+    document_version_id: int
+    purpose: ApplicationDocumentPurpose
+
+
+class ApplicationDocumentResponse(BaseModel):
+    id: int
+    application_id: int
+    document_id: int
+    document_version_id: int
+    purpose: str
+    document_title: str
+    document_type: str
+    version_number: int
+    file_name: str
+    content_type: str
+    size_bytes: int
+    sha256: str
     created_at: datetime
 
 
@@ -151,3 +186,4 @@ class ApplicationDetailResponse(ApplicationResponse):
     events: list[ApplicationEventResponse] = Field(default_factory=list)
     notes_list: list[ApplicationNoteResponse] = Field(default_factory=list)
     tasks: list[ApplicationTaskResponse] = Field(default_factory=list)
+    documents: list[ApplicationDocumentResponse] = Field(default_factory=list)

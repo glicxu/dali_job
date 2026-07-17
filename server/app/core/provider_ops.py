@@ -88,7 +88,8 @@ def run_provider_call(
     operation: Callable[[], T],
     usage_units: Callable[[T], int | None] | None = None,
 ) -> T:
-    enforce_provider_rate_limit(request, identity, feature=feature)
+    if not bool(getattr(request.state, "provider_limit_already_enforced", False)):
+        enforce_provider_rate_limit(request, identity, feature=feature)
     started = time.monotonic()
     try:
         result = operation()

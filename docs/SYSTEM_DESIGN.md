@@ -522,6 +522,10 @@ Metrics:
 - Source performance.
 - Resume version performance.
 
+The implemented `outcome-analytics-v1` contract is descriptive and owner scoped. Rate cohorts use `applications.applied_at`; qualifying outcomes come from status/application events at or after that timestamp. Source grouping uses the immutable source snapshot captured when an application is created. Resume grouping uses the latest exact resume document version attached at or before `applied_at`, with an explicit warning when only a later attachment exists.
+
+Every response includes formula definitions, denominators, timezone boundaries, sample sizes, and incomplete-data diagnostics. Groups with fewer than five submitted applications are labeled as small samples. Candidate analytics do not read or combine global provider usage, operational costs, or other users' records.
+
 ### 4.12 Career Intelligence Engine
 
 Continuously analyzes:
@@ -606,7 +610,20 @@ Database reads and writes should use `DaliCommonLib.dali_db_man.DbMan` rather th
 
 ### Worker System
 
-Celery or equivalent workers for:
+The implemented single-server boundary uses durable SQL `managed_operations` records plus FastAPI post-response background tasks. UI workflows enqueue an operation, poll its owner-scoped status, and can safely retry a failed or interrupted attempt. The operation handler registry depends on provider-neutral parser, matcher, and job-search protocols; normalized results cross the API boundary.
+
+This implementation intentionally does not require Redis for the current single-server deployment. Before running multiple API instances or requiring guaranteed execution after a process crash, move the same operation handler contract to Celery, Dramatiq, or an equivalent external worker and use a shared broker. The SQL operation row remains the source of user-visible progress and result state.
+
+Managed operations currently cover:
+
+- Provider-backed job search and selected-result import.
+- Job-list discovery and bulk import.
+- Resume parsing.
+- Job description parsing and analysis.
+- Single and bulk resume-to-job matching.
+- Evidence-based interview preparation using immutable resume and job snapshots.
+
+The same boundary should later cover:
 
 - Resume parsing.
 - Resume tailoring.

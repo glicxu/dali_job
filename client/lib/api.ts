@@ -112,6 +112,40 @@ export type StoredJob = {
   archived_at: string | null;
 };
 
+export type ManagedOperationStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+
+export type ManagedOperation = {
+  id: number;
+  operation_type: string;
+  status: ManagedOperationStatus;
+  progress_current: number;
+  progress_total: number | null;
+  progress_message: string | null;
+  attempt_count: number;
+  max_attempts: number;
+  result_payload: Record<string, unknown> | unknown[] | null;
+  error_code: string | null;
+  error_message: string | null;
+  provider: string | null;
+  model_or_actor: string | null;
+  prompt_version: string | null;
+  usage: Record<string, unknown>;
+  cancel_requested_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ManagedOperationSummary = {
+  queued: number;
+  running: number;
+  succeeded: number;
+  failed: number;
+  cancelled: number;
+  provider_failures: Record<string, number>;
+};
+
 export type JobDraftResponse = {
   source_url: string | null;
   raw_description_text: string;
@@ -388,11 +422,26 @@ export type DashboardRecentJob = {
   href: string;
 };
 
+export type DashboardApplicationAction = {
+  task_id: number;
+  application_id: number;
+  title: string;
+  task_type: ApplicationTaskType;
+  due_at: string | null;
+  reminder_at: string | null;
+  is_overdue: boolean;
+  reminder_due: boolean;
+  job_title: string;
+  company: string;
+  href: string;
+};
+
 export type DashboardResponse = {
   setup_alerts: DashboardAlert[];
   recommended_next_step: DashboardNextStep;
   best_matches: DashboardBestMatch[];
   recently_saved_jobs: DashboardRecentJob[];
+  application_actions: DashboardApplicationAction[];
 };
 
 export type ApplicationStatus =
@@ -412,6 +461,8 @@ export type ApplicationStage =
   | "final_interview";
 
 export type ApplicationPriority = "low" | "normal" | "high";
+export type ApplicationTaskType = "follow_up" | "interview_prep" | "document" | "deadline" | "other";
+export type ApplicationDocumentPurpose = "resume" | "cover_letter" | "supporting";
 
 export type ApplicationJobSummary = {
   id: number | null;
@@ -474,8 +525,30 @@ export type ApplicationTask = {
   id: number;
   application_id: number;
   title: string;
+  task_type: ApplicationTaskType;
   due_at: string | null;
+  reminder_at: string | null;
+  reminder_dismissed_at: string | null;
   completed_at: string | null;
+  is_overdue: boolean;
+  reminder_due: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ApplicationDocument = {
+  id: number;
+  application_id: number;
+  document_id: number;
+  document_version_id: number;
+  purpose: ApplicationDocumentPurpose;
+  document_title: string;
+  document_type: string;
+  version_number: number;
+  file_name: string;
+  content_type: string;
+  size_bytes: number;
+  sha256: string;
   created_at: string;
 };
 
@@ -484,6 +557,142 @@ export type ApplicationDetail = TrackedApplication & {
   events: ApplicationEvent[];
   notes_list: ApplicationNote[];
   tasks: ApplicationTask[];
+  documents: ApplicationDocument[];
+};
+
+export type InterviewType =
+  | "recruiter_screen"
+  | "phone"
+  | "technical"
+  | "behavioral"
+  | "hiring_manager"
+  | "panel"
+  | "final"
+  | "other";
+export type InterviewStatus = "scheduled" | "completed" | "cancelled";
+export type InterviewStage = ApplicationStage | "other";
+export type InterviewOutcome = "advanced" | "rejected" | "offer" | "withdrawn" | "no_decision";
+
+export type InterviewNote = {
+  id: number;
+  interview_id: number;
+  body: string;
+  created_at: string;
+};
+
+export type InterviewPrepOutput = {
+  overview: string;
+  study_priorities: { topic: string; reason: string; source_evidence: string[] }[];
+  likely_questions: { question: string; rationale: string; preparation_points: string[] }[];
+  talking_points: { topic: string; supported_claim: string; resume_evidence: string }[];
+  skill_gaps: { skill: string; gap_evidence: string; study_action: string }[];
+  questions_to_research: string[];
+  warnings: string[];
+};
+
+export type InterviewPrepGuide = {
+  id: number;
+  interview_id: number;
+  operation_id: number | null;
+  resume_profile_id: number | null;
+  source_warnings: string[];
+  output_data: InterviewPrepOutput | null;
+  provider: string;
+  model_name: string | null;
+  prompt_version: string;
+  schema_version: string;
+  provider_execution_reference: string | null;
+  created_at: string;
+  completed_at: string | null;
+};
+
+export type Interview = {
+  id: number;
+  workspace_id: number;
+  user_id: number;
+  application_id: number;
+  interview_type: InterviewType;
+  status: InterviewStatus;
+  stage: InterviewStage;
+  scheduled_at: string | null;
+  timezone: string;
+  duration_minutes: number | null;
+  location_or_url: string | null;
+  outcome: InterviewOutcome | null;
+  private_notes: string | null;
+  job: ApplicationJobSummary | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type InterviewDetail = Interview & {
+  notes: InterviewNote[];
+  prep_guides: InterviewPrepGuide[];
+};
+
+export type AnalyticsRate = {
+  outcome: string;
+  numerator: number;
+  denominator: number;
+  percentage: number | null;
+};
+
+export type AnalyticsPerformanceGroup = {
+  key: string;
+  label: string;
+  sample_size: number;
+  response_rate: number | null;
+  interview_rate: number | null;
+  offer_rate: number | null;
+  rejection_rate: number | null;
+  withdrawal_rate: number | null;
+  small_sample: boolean;
+};
+
+export type AnalyticsSummary = {
+  metric_version: string;
+  timezone: string;
+  range_start: string | null;
+  range_end_exclusive: string | null;
+  generated_at: string;
+  application_count: number;
+  submitted_application_count: number;
+  status_counts: { status: string; count: number }[];
+  application_trend: { period: string; count: number }[];
+  rates: AnalyticsRate[];
+  durations: {
+    metric: string;
+    sample_size: number;
+    average_hours: number | null;
+    median_hours: number | null;
+  }[];
+  source_performance: AnalyticsPerformanceGroup[];
+  resume_version_performance: AnalyticsPerformanceGroup[];
+  definitions: { metric: string; definition: string; denominator: string }[];
+  data_quality: {
+    missing_applied_at: number;
+    missing_source_snapshot: number;
+    missing_resume_version: number;
+    resume_attached_after_applied: number;
+    events_before_applied: number;
+    warnings: string[];
+  };
+};
+
+export type InterviewCreatePayload = {
+  application_id: number;
+  interview_type?: InterviewType;
+  stage?: InterviewStage;
+  scheduled_at?: string | null;
+  timezone?: string | null;
+  duration_minutes?: number | null;
+  location_or_url?: string | null;
+  private_notes?: string | null;
+};
+
+export type InterviewUpdatePayload = Partial<Omit<InterviewCreatePayload, "application_id">> & {
+  status?: InterviewStatus;
+  outcome?: InterviewOutcome | null;
 };
 
 export type ApplicationCreatePayload = {
@@ -704,18 +913,214 @@ export function addApplicationNote(applicationId: number, body: string): Promise
 export function addApplicationTask(
   applicationId: number,
   title: string,
-  dueAt?: string | null,
+  options?: { taskType?: ApplicationTaskType; dueAt?: string | null; reminderAt?: string | null },
 ): Promise<ApplicationTask> {
   return requestJson<ApplicationTask>(`/applications/${applicationId}/tasks`, {
     method: "POST",
-    body: JSON.stringify({ title, due_at: dueAt || null }),
+    body: JSON.stringify({
+      title,
+      task_type: options?.taskType ?? "other",
+      due_at: options?.dueAt || null,
+      reminder_at: options?.reminderAt || null,
+    }),
   });
+}
+
+export function listInterviews(applicationId?: number): Promise<Interview[]> {
+  const query = applicationId ? `?application_id=${applicationId}` : "";
+  return requestJson<Interview[]>(`/interviews${query}`);
+}
+
+export function getAnalyticsSummary(options: {
+  startDate?: string;
+  endDate?: string;
+} = {}): Promise<AnalyticsSummary> {
+  const params = new URLSearchParams();
+  if (options.startDate) params.set("start_date", options.startDate);
+  if (options.endDate) params.set("end_date", options.endDate);
+  const query = params.size ? `?${params.toString()}` : "";
+  return requestJson<AnalyticsSummary>(`/analytics/summary${query}`);
+}
+
+export function createInterview(payload: InterviewCreatePayload): Promise<InterviewDetail> {
+  return requestJson<InterviewDetail>("/interviews", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getInterview(interviewId: number): Promise<InterviewDetail> {
+  return requestJson<InterviewDetail>(`/interviews/${interviewId}`);
+}
+
+export function updateInterview(
+  interviewId: number,
+  payload: InterviewUpdatePayload,
+): Promise<InterviewDetail> {
+  return requestJson<InterviewDetail>(`/interviews/${interviewId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function addInterviewNote(interviewId: number, body: string): Promise<InterviewNote> {
+  return requestJson<InterviewNote>(`/interviews/${interviewId}/notes`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+}
+
+export function generateInterviewPrep(payload: {
+  interview_id: number;
+  resume_profile_id: number;
+  company_notes?: string;
+}): Promise<InterviewPrepGuide> {
+  return runManagedOperation<InterviewPrepGuide>(
+    "interview_prep",
+    "/operations/interview-prep",
+    payload,
+  );
+}
+
+const operationPollIntervalMs = 750;
+const operationPollTimeoutMs = 15 * 60 * 1000;
+
+function operationIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function activeOperationKey(operationType: string): string {
+  return `dalijob_active_operation_${operationType}`;
+}
+
+function rememberActiveOperation(operationType: string, operationId: number, fingerprint: string): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(activeOperationKey(operationType), JSON.stringify({ operationId, fingerprint }));
+}
+
+function forgetActiveOperation(operationType: string, operationId: number): void {
+  if (typeof window === "undefined") return;
+  const key = activeOperationKey(operationType);
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(key) || "null");
+    if (saved?.operationId === operationId) window.localStorage.removeItem(key);
+  } catch {
+    window.localStorage.removeItem(key);
+  }
+}
+
+function recalledOperationId(operationType: string, fingerprint: string): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(activeOperationKey(operationType)) || "null");
+    return saved?.fingerprint === fingerprint && Number.isInteger(saved?.operationId) ? saved.operationId : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getManagedOperation(operationId: number): Promise<ManagedOperation> {
+  return requestJson<ManagedOperation>(`/operations/${operationId}`);
+}
+
+export function listManagedOperations(options?: {
+  status?: ManagedOperationStatus;
+  operationType?: string;
+  limit?: number;
+}): Promise<{ operations: ManagedOperation[] }> {
+  const params = new URLSearchParams();
+  if (options?.status) params.set("status", options.status);
+  if (options?.operationType) params.set("operation_type", options.operationType);
+  params.set("limit", String(options?.limit ?? 50));
+  return requestJson<{ operations: ManagedOperation[] }>(`/operations?${params.toString()}`);
+}
+
+export function getManagedOperationSummary(): Promise<ManagedOperationSummary> {
+  return requestJson<ManagedOperationSummary>("/operations/summary");
+}
+
+export function retryManagedOperation(operationId: number): Promise<ManagedOperation> {
+  return requestJson<ManagedOperation>(`/operations/${operationId}/retry`, { method: "POST" });
+}
+
+export function cancelManagedOperation(operationId: number): Promise<ManagedOperation> {
+  return requestJson<ManagedOperation>(`/operations/${operationId}/cancel`, { method: "POST" });
+}
+
+async function waitForManagedOperation<T>(operation: ManagedOperation): Promise<T> {
+  const started = Date.now();
+  let current = operation;
+  while (current.status === "queued" || current.status === "running") {
+    if (Date.now() - started > operationPollTimeoutMs) {
+      throw new Error("This operation is still running. Its progress is available on the Operations page.");
+    }
+    await new Promise((resolve) => setTimeout(resolve, operationPollIntervalMs));
+    current = await getManagedOperation(operation.id);
+  }
+  forgetActiveOperation(operation.operation_type, operation.id);
+  if (current.status !== "succeeded") {
+    throw new Error(current.error_message || "The operation did not complete successfully.");
+  }
+  if (current.result_payload === null) {
+    throw new Error("The operation completed without a result.");
+  }
+  return current.result_payload as T;
+}
+
+async function runManagedOperation<T>(
+  operationType: string,
+  path: string,
+  payload: object,
+): Promise<T> {
+  const fingerprint = JSON.stringify(payload);
+  const recalledId = recalledOperationId(operationType, fingerprint);
+  if (recalledId !== null) {
+    let recalled: ManagedOperation | null = null;
+    try {
+      recalled = await getManagedOperation(recalledId);
+    } catch (err) {
+      if (!(err instanceof ApiRequestError && err.status === 404)) throw err;
+      forgetActiveOperation(operationType, recalledId);
+    }
+    if (recalled) {
+      return waitForManagedOperation<T>(recalled);
+    }
+  }
+
+  const operation = await requestJson<ManagedOperation>(path, {
+    method: "POST",
+    headers: { "Idempotency-Key": operationIdempotencyKey() },
+    body: JSON.stringify(payload),
+  });
+  rememberActiveOperation(operationType, operation.id, fingerprint);
+  return waitForManagedOperation<T>(operation);
+}
+
+export function listApplicationTasks(
+  applicationId: number,
+  options: { taskType?: ApplicationTaskType; status?: "open" | "completed" } = {},
+): Promise<ApplicationTask[]> {
+  const params = new URLSearchParams();
+  if (options.taskType) params.set("task_type", options.taskType);
+  if (options.status) params.set("status", options.status);
+  const query = params.size ? `?${params.toString()}` : "";
+  return requestJson<ApplicationTask[]>(`/applications/${applicationId}/tasks${query}`);
 }
 
 export function updateApplicationTask(
   applicationId: number,
   taskId: number,
-  payload: { title?: string; due_at?: string | null; completed?: boolean },
+  payload: {
+    title?: string;
+    task_type?: ApplicationTaskType;
+    due_at?: string | null;
+    reminder_at?: string | null;
+    dismiss_reminder?: boolean;
+    completed?: boolean;
+  },
 ): Promise<ApplicationTask> {
   return requestJson<ApplicationTask>(`/applications/${applicationId}/tasks/${taskId}`, {
     method: "PATCH",
@@ -761,6 +1166,27 @@ export async function uploadDocument(
   return response.json();
 }
 
+export async function uploadDocumentVersion(documentId: number, file: File): Promise<StoredDocument> {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`${getApiBaseUrl()}/documents/${documentId}/versions`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: form,
+  });
+  if (!response.ok) {
+    let message = `Document version upload failed with status ${response.status}`;
+    try {
+      const payload = await response.json();
+      if (typeof payload.detail === "string") message = payload.detail;
+    } catch {
+      // Keep the status-based message when the server does not return JSON.
+    }
+    throw new Error(message);
+  }
+  return response.json();
+}
+
 export function getDocumentText(documentId: number): Promise<DocumentTextResponse> {
   return requestJson<DocumentTextResponse>(`/documents/${documentId}/text`);
 }
@@ -779,22 +1205,25 @@ export function restoreApplication(
   });
 }
 
-export function getDocumentDependencies(documentId: number): Promise<RecordDependencyResponse> {
-  return requestJson<RecordDependencyResponse>(`/documents/${documentId}/dependencies`);
-}
-
-export function deleteDocument(documentId: number, force = false): Promise<void> {
-  return requestJson<void>(`/documents/${documentId}?force=${force}`, { method: "DELETE" });
-}
-
-export function getDocumentDownloadUrl(documentId: number): string {
-  return `${getApiBaseUrl()}/documents/${documentId}/download`;
-}
-
-export async function downloadDocumentFile(documentId: number, fileName: string): Promise<void> {
-  const response = await fetch(getDocumentDownloadUrl(documentId), {
-    headers: authHeaders(),
+export function attachApplicationDocument(
+  applicationId: number,
+  documentVersionId: number,
+  purpose: ApplicationDocumentPurpose,
+): Promise<ApplicationDocument> {
+  return requestJson<ApplicationDocument>(`/applications/${applicationId}/documents`, {
+    method: "POST",
+    body: JSON.stringify({ document_version_id: documentVersionId, purpose }),
   });
+}
+
+export function detachApplicationDocument(applicationId: number, attachmentId: number): Promise<void> {
+  return requestJson<void>(`/applications/${applicationId}/documents/${attachmentId}`, { method: "DELETE" });
+}
+
+type DocumentDownloadTicket = { download_path: string; expires_at: string };
+
+async function downloadTicketFile(ticket: DocumentDownloadTicket, fileName: string): Promise<void> {
+  const response = await fetch(`${getApiBaseUrl()}${ticket.download_path}`);
   if (!response.ok) {
     throw new Error(`Document download failed with status ${response.status}`);
   }
@@ -809,20 +1238,45 @@ export async function downloadDocumentFile(documentId: number, fileName: string)
   window.URL.revokeObjectURL(url);
 }
 
-export async function compareResumeToJob(payload: ResumeJobMatchRequest): Promise<ResumeJobMatchResponse> {
-  return requestJson<ResumeJobMatchResponse>("/resume-job-matches", {
+export async function downloadApplicationDocument(
+  applicationId: number,
+  attachmentId: number,
+  fileName: string,
+): Promise<void> {
+  const ticket = await requestJson<DocumentDownloadTicket>(
+    `/applications/${applicationId}/documents/${attachmentId}/download-ticket`,
+    { method: "POST" },
+  );
+  await downloadTicketFile(ticket, fileName);
+}
+
+export function getDocumentDependencies(documentId: number): Promise<RecordDependencyResponse> {
+  return requestJson<RecordDependencyResponse>(`/documents/${documentId}/dependencies`);
+}
+
+export function deleteDocument(documentId: number, force = false): Promise<void> {
+  return requestJson<void>(`/documents/${documentId}?force=${force}`, { method: "DELETE" });
+}
+
+export async function downloadDocumentFile(documentId: number, fileName: string): Promise<void> {
+  const ticket = await requestJson<DocumentDownloadTicket>(`/documents/${documentId}/download-ticket`, {
     method: "POST",
-    body: JSON.stringify(payload),
   });
+  await downloadTicketFile(ticket, fileName);
+}
+
+export async function compareResumeToJob(payload: ResumeJobMatchRequest): Promise<ResumeJobMatchResponse> {
+  return runManagedOperation<ResumeJobMatchResponse>("resume_job_match", "/operations/resume-job-match", payload);
 }
 
 export async function compareResumeToSavedJobs(
   payload: BulkSavedJobMatchRequest,
 ): Promise<BulkSavedJobMatchResponse> {
-  return requestJson<BulkSavedJobMatchResponse>("/resume-job-matches/saved-jobs", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  return runManagedOperation<BulkSavedJobMatchResponse>(
+    "bulk_resume_job_match",
+    "/operations/bulk-resume-job-match",
+    payload,
+  );
 }
 
 export function extractJobUrl(jobUrl: string): Promise<JobUrlExtractResponse> {
@@ -844,23 +1298,19 @@ export function listJobs(includeArchived = false): Promise<StoredJob[]> {
 }
 
 export function draftJobFromUrl(jobUrl: string): Promise<JobDraftResponse> {
-  return requestJson<JobDraftResponse>("/jobs/draft", {
-    method: "POST",
-    body: JSON.stringify({ job_url: jobUrl }),
-  });
+  return runManagedOperation<JobDraftResponse>("job_draft", "/operations/job-draft", { job_url: jobUrl });
 }
 
 export function draftJobFromText(jobDescriptionText: string): Promise<JobDraftResponse> {
-  return requestJson<JobDraftResponse>("/jobs/draft", {
-    method: "POST",
-    body: JSON.stringify({ job_description_text: jobDescriptionText }),
+  return runManagedOperation<JobDraftResponse>("job_draft", "/operations/job-draft", {
+    job_description_text: jobDescriptionText,
   });
 }
 
 export function discoverJobList(listUrl: string, maxResults = 25): Promise<JobListDiscoverResponse> {
-  return requestJson<JobListDiscoverResponse>("/jobs/import-list/discover", {
-    method: "POST",
-    body: JSON.stringify({ list_url: listUrl, max_results: maxResults }),
+  return runManagedOperation<JobListDiscoverResponse>("job_list_discover", "/operations/job-list-discover", {
+    list_url: listUrl,
+    max_results: maxResults,
   });
 }
 
@@ -868,14 +1318,11 @@ export function importJobList(
   selectedUrls: string[],
   options?: { listUrl?: string; resumeProfileId?: number; runMatching?: boolean },
 ): Promise<JobListImportResponse> {
-  return requestJson<JobListImportResponse>("/jobs/import-list", {
-    method: "POST",
-    body: JSON.stringify({
+  return runManagedOperation<JobListImportResponse>("job_list_import", "/operations/job-list-import", {
       list_url: options?.listUrl || undefined,
       selected_urls: selectedUrls,
       resume_profile_id: options?.resumeProfileId || undefined,
       run_matching: Boolean(options?.runMatching),
-    }),
   });
 }
 
@@ -884,13 +1331,10 @@ export function searchIndeedJobs(
   location: string,
   maxResults = 5,
 ): Promise<IndeedJobSearchResponse> {
-  return requestJson<IndeedJobSearchResponse>("/job-search/indeed", {
-    method: "POST",
-    body: JSON.stringify({
+  return runManagedOperation<IndeedJobSearchResponse>("job_search", "/operations/job-search", {
       keyword,
       location,
       max_results: maxResults,
-    }),
   });
 }
 
@@ -898,13 +1342,10 @@ export function importIndeedSearchResults(
   selectedResults: IndeedJobSearchResult[],
   options?: { resumeProfileId?: number; runMatching?: boolean },
 ): Promise<JobListImportResponse> {
-  return requestJson<JobListImportResponse>("/job-search/indeed/import", {
-    method: "POST",
-    body: JSON.stringify({
+  return runManagedOperation<JobListImportResponse>("provider_job_import", "/operations/provider-job-import", {
       selected_results: selectedResults,
       resume_profile_id: options?.resumeProfileId || undefined,
       run_matching: Boolean(options?.runMatching),
-    }),
   });
 }
 
@@ -916,9 +1357,7 @@ export function createJob(payload: JobSavePayload): Promise<StoredJob> {
 }
 
 export function analyzeJob(jobId: number): Promise<StoredJob> {
-  return requestJson<StoredJob>(`/jobs/${jobId}/analyze`, {
-    method: "POST",
-  });
+  return runManagedOperation<StoredJob>("job_analyze", "/operations/job-analyze", { job_id: jobId });
 }
 
 export function updateJob(jobId: number, payload: JobUpdatePayload): Promise<StoredJob> {
@@ -995,19 +1434,30 @@ export function getResumeProfileDependencies(resumeProfileId: number): Promise<R
 }
 
 export async function importResumePdf(file: File): Promise<ResumeImportResponse> {
+  const fingerprint = `${file.name}:${file.size}:${file.lastModified}`;
+  const recalledId = recalledOperationId("resume_parse", fingerprint);
+  if (recalledId !== null) {
+    try {
+      const recalled = await getManagedOperation(recalledId);
+      return waitForManagedOperation<ResumeImportResponse>(recalled);
+    } catch (err) {
+      if (!(err instanceof ApiRequestError && err.status === 404)) throw err;
+      forgetActiveOperation("resume_parse", recalledId);
+    }
+  }
   const form = new FormData();
   form.append("file", file);
 
-  const response = await fetch(`${getApiBaseUrl()}/profile/resume-imports`, {
+  const operation = await fetch(`${getApiBaseUrl()}/operations/resume-parse`, {
     method: "POST",
-    headers: authHeaders(),
+    headers: { ...authHeaders(), "Idempotency-Key": operationIdempotencyKey() },
     body: form,
   });
 
-  if (!response.ok) {
-    let message = `Resume import failed with status ${response.status}`;
+  if (!operation.ok) {
+    let message = `Resume import failed with status ${operation.status}`;
     try {
-      const payload = await response.json();
+      const payload = await operation.json();
       if (typeof payload.detail === "string") {
         message = payload.detail;
       }
@@ -1016,13 +1466,14 @@ export async function importResumePdf(file: File): Promise<ResumeImportResponse>
     }
     throw new Error(message);
   }
-
-  return response.json();
+  const queued = (await operation.json()) as ManagedOperation;
+  rememberActiveOperation("resume_parse", queued.id, fingerprint);
+  return waitForManagedOperation<ResumeImportResponse>(queued);
 }
 
 export function retryResumeImport(documentId: number): Promise<ResumeImportResponse> {
-  return requestJson<ResumeImportResponse>(`/profile/resume-imports/${documentId}/retry`, {
-    method: "POST",
+  return runManagedOperation<ResumeImportResponse>("resume_parse", "/operations/resume-parse/retry", {
+    document_id: documentId,
   });
 }
 

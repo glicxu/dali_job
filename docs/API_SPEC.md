@@ -853,11 +853,44 @@ Adds an application note.
 
 ### `POST /applications/{applicationId}/tasks`
 
-Creates a task or reminder for the application.
+Creates a typed task with optional `due_at` and `reminder_at` timestamps.
+
+### `GET /applications/{applicationId}/tasks`
+
+Lists tasks. Optional filters are `task_type` and `status=open|completed`.
+
+### `PATCH /applications/{applicationId}/tasks/{taskId}`
+
+Updates title, task type, due time, reminder time, completion, or reminder dismissal. Changing `due_at` or `reminder_at` reschedules the task without replacing it.
+
+### `GET /applications/{applicationId}/documents`
+
+Lists active application attachments with exact document version metadata.
+
+### `POST /applications/{applicationId}/documents`
+
+Attaches an owner-controlled immutable document version.
+
+```json
+{
+  "document_version_id": 41,
+  "purpose": "resume"
+}
+```
+
+Purpose is `resume`, `cover_letter`, or `supporting`.
+
+### `DELETE /applications/{applicationId}/documents/{attachmentId}`
+
+Soft-detaches the version and appends an application event.
+
+### `POST /applications/{applicationId}/documents/{attachmentId}/download-ticket`
+
+Creates a five-minute, one-time download ticket for the exact attached version. Ticket creation records owner, workspace, application, version, expiration, and later consumption time.
 
 ## 7. Documents
 
-The first implemented document slice uses owner-protected API uploads/downloads and local server storage. Production object storage and signed URLs remain future hardening work.
+Document uploads use owner-protected API requests and local server storage. Downloads use short-lived, one-time opaque tickets so storage paths and long-lived authorization are not exposed to the client.
 
 ### `POST /documents`
 
@@ -881,31 +914,21 @@ Returns document metadata and latest version metadata.
 
 Returns redacted extracted text for the latest version when available. This is intended to support future resume/job matching from stored documents without re-uploading the same file.
 
-### `GET /documents/{documentId}/download`
+### `POST /documents/{documentId}/versions`
 
-Downloads the original latest file version. This endpoint is bearer-token protected in the current MVP.
+Uploads a replacement PDF or text file as the next immutable version. Existing versions and application attachments are unchanged.
 
 ### `POST /documents/upload-url`
 
 Future production endpoint that creates a signed upload URL.
 
-### `GET /documents/{documentId}/download-url`
+### `POST /documents/{documentId}/download-ticket`
 
-Future production endpoint that creates a signed download URL.
+Creates a five-minute, one-time ticket for the latest version.
 
-### `POST /applications/{applicationId}/documents`
+### `GET /documents/downloads/{token}`
 
-Attaches a document version to an application.
-
-Body:
-
-```json
-{
-  "document_id": 1,
-  "document_version_id": 1,
-  "purpose": "submitted"
-}
-```
+Consumes a valid ticket and streams the pinned file version. The route does not accept a storage path, and a consumed or expired ticket returns `404`.
 
 ## 8. Resume Engine
 
@@ -968,43 +991,53 @@ Queues PDF or DOCX rendering.
 
 ## 10. Interviews
 
-### `GET /applications/{applicationId}/interviews`
+### `GET /interviews`
 
-Lists interviews.
+Lists owner-scoped interviews. Optional `application_id` filters the list.
 
-### `POST /applications/{applicationId}/interviews`
+### `POST /interviews`
 
-Creates an interview.
+Creates an interview linked to `application_id`. Type, stage, schedule, timezone, duration, location or meeting URL, and private notes are optional.
+
+### `GET /interviews/{interviewId}`
+
+Returns the interview, application job summary, journal notes, and append-only preparation history.
 
 ### `PATCH /interviews/{interviewId}`
 
-Updates schedule, type, outcome, or location.
+Updates type, status, stage, schedule, duration, location, outcome, or private notes. This route does not require an AI provider.
 
 ### `POST /interviews/{interviewId}/notes`
 
 Adds interview journal notes.
 
-### `POST /applications/{applicationId}/interview-prep`
+### `POST /operations/interview-prep`
 
-Queues interview preparation generation.
+Queues preparation using `interview_id`, `resume_profile_id`, and optional `company_notes`. The server snapshots the selected resume and effective application job before execution and returns a durable managed operation.
 
-### `GET /interview-prep/{guideId}`
+### `GET /operations/{operationId}`
 
-Returns a generated prep guide.
+Returns progress and the completed structured guide. The guide is also included in `GET /interviews/{interviewId}`. Regeneration appends a new guide instead of replacing older output.
 
-### `POST /applications/{applicationId}/mock-interviews`
+Talking points must cite an exact string from the selected resume snapshot. The server removes unsupported talking points and adds an evidence warning.
 
-Starts or schedules a mock interview session.
+### Future: mock interviews
+
+Mock interview sessions are not part of the current API.
 
 ## 11. Analytics And Career Intelligence
 
 ### `GET /analytics/summary`
 
-Returns application counts and funnel metrics.
+Returns owner-scoped descriptive outcome analytics. Optional `start_date` and `end_date` are inclusive local calendar dates interpreted in the account timezone.
+
+The response includes metric contract version and UTC range boundaries; current status counts and monthly trend; response, interview, offer, rejection, and withdrawal rates; response/interview timing; source and exact resume-version performance; formula definitions; and data-quality diagnostics.
+
+Rate denominators contain applications with `applied_at` in range. Outcomes require qualifying status/application events at or after `applied_at`. Groups with fewer than five applications are marked as small samples and are not presented as recommendations.
 
 ### `GET /analytics/funnel`
 
-Returns stage conversion data.
+Deferred. The current summary endpoint exposes lifecycle status counts and versioned outcome formulas without claiming a sequential funnel from incomplete history.
 
 ### `GET /analytics/skills`
 
@@ -1098,17 +1131,42 @@ Creates an event.
 
 Creates calendar event from interview details.
 
-## 16. AI Jobs
+## 16. Managed Operations
 
-### `GET /ai/jobs`
+Provider-backed client workflows enqueue through operation-specific endpoints and receive HTTP `202` with a durable operation object. Existing synchronous provider routes remain compatibility endpoints, but the DaliJob client does not use them for costly work.
 
-Lists generation jobs.
+Enqueue endpoints:
 
-### `GET /ai/jobs/{jobId}`
+- `POST /operations/job-search`
+- `POST /operations/provider-job-import`
+- `POST /operations/job-list-discover`
+- `POST /operations/job-list-import`
+- `POST /operations/resume-parse` (multipart upload)
+- `POST /operations/resume-parse/retry`
+- `POST /operations/job-draft`
+- `POST /operations/job-analyze`
+- `POST /operations/resume-job-match`
+- `POST /operations/bulk-resume-job-match`
 
-Returns status, validation result, and output references.
+Clients may send `Idempotency-Key`. The server stores only its SHA-256 digest and returns the existing owner-scoped operation for duplicate keys.
 
-### `POST /ai/jobs/{jobId}/cancel`
+### `GET /operations`
 
-Cancels queued or running job.
+Lists the current user's recent operations. Optional filters are `status`, `operation_type`, and `limit`.
+
+### `GET /operations/summary`
+
+Returns owner-scoped status counts and provider failure counts without request payloads, secrets, or raw provider responses.
+
+### `GET /operations/{operationId}`
+
+Returns status, progress, safe errors, provider/model metadata, usage, and the normalized result. It never returns `request_payload`.
+
+### `POST /operations/{operationId}/retry`
+
+Requeues a failed or cancelled operation when it has attempts remaining. The same durable operation ID is retained.
+
+### `POST /operations/{operationId}/cancel`
+
+Cancels queued work immediately or records a cancellation request for running work.
 

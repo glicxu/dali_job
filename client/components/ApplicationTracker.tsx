@@ -1,22 +1,30 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   addApplicationNote,
   addApplicationTask,
   ApiRequestError,
   archiveApplication,
   ApplicationDetail,
+  ApplicationDocumentPurpose,
   ApplicationPriority,
   ApplicationStage,
   ApplicationStatus,
+  ApplicationTask,
+  ApplicationTaskType,
+  attachApplicationDocument,
   changeApplicationStatus,
   createApplication,
+  detachApplicationDocument,
+  downloadApplicationDocument,
   getApplication,
   getAuthToken,
   listApplications,
+  listDocuments,
   listJobs,
   restoreApplication,
+  StoredDocument,
   StoredJob,
   TrackedApplication,
   updateApplication,
@@ -42,6 +50,14 @@ const stageOptions: ApplicationStage[] = [
 ];
 
 const priorityOptions: ApplicationPriority[] = ["low", "normal", "high"];
+const taskTypeOptions: ApplicationTaskType[] = ["follow_up", "interview_prep", "document", "deadline", "other"];
+const attachmentPurposeOptions: ApplicationDocumentPurpose[] = ["resume", "cover_letter", "supporting"];
+
+type TaskDraft = {
+  taskType: ApplicationTaskType;
+  dueAt: string;
+  reminderAt: string;
+};
 
 function labelize(value: string): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -85,6 +101,7 @@ export function ApplicationTracker() {
 
   const [applications, setApplications] = useState<TrackedApplication[]>([]);
   const [savedJobs, setSavedJobs] = useState<StoredJob[]>([]);
+  const [documents, setDocuments] = useState<StoredDocument[]>([]);
   const [selectedApplication, setSelectedApplication] = useState<ApplicationDetail | null>(null);
   const [selectedJobId, setSelectedJobId] = useState("");
   const [status, setStatus] = useState<ApplicationStatus>("interested");
@@ -98,6 +115,13 @@ export function ApplicationTracker() {
   const [newNote, setNewNote] = useState("");
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDueAt, setNewTaskDueAt] = useState("");
+  const [newTaskReminderAt, setNewTaskReminderAt] = useState("");
+  const [newTaskType, setNewTaskType] = useState<ApplicationTaskType>("other");
+  const [taskStatusFilter, setTaskStatusFilter] = useState<"" | "open" | "completed">("");
+  const [taskTypeFilter, setTaskTypeFilter] = useState<"" | ApplicationTaskType>("");
+  const [taskDrafts, setTaskDrafts] = useState<Record<number, TaskDraft>>({});
+  const [attachmentVersionId, setAttachmentVersionId] = useState("");
+  const [attachmentPurpose, setAttachmentPurpose] = useState<ApplicationDocumentPurpose>("resume");
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -105,8 +129,18 @@ export function ApplicationTracker() {
   const [statusFilter, setStatusFilter] = useState<ApplicationStatus | "">("");
   const [stageFilter, setStageFilter] = useState<ApplicationStage | "">("");
   const [showArchived, setShowArchived] = useState(false);
+  const openedQueryApplication = useRef(false);
 
   const visibleSavedJobs = useMemo(() => savedJobs, [savedJobs]);
+  const visibleTasks = useMemo(
+    () => selectedApplication?.tasks.filter((task) => {
+      if (taskStatusFilter === "open" && task.completed_at) return false;
+      if (taskStatusFilter === "completed" && !task.completed_at) return false;
+      if (taskTypeFilter && task.task_type !== taskTypeFilter) return false;
+      return true;
+    }) ?? [],
+    [selectedApplication, taskStatusFilter, taskTypeFilter],
+  );
 
   function applicationListOptions() {
     return {
@@ -120,12 +154,14 @@ export function ApplicationTracker() {
     setError(null);
     setIsLoading(true);
     try {
-      const [applicationPayload, jobPayload] = await Promise.all([
+      const [applicationPayload, jobPayload, documentPayload] = await Promise.all([
         listApplications(applicationListOptions()),
         listJobs(),
+        listDocuments(),
       ]);
       setApplications(applicationPayload);
       setSavedJobs(jobPayload);
+      setDocuments(documentPayload.documents);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load applications.");
     } finally {
@@ -137,6 +173,13 @@ export function ApplicationTracker() {
     void loadApplications();
   }, [statusFilter, stageFilter, showArchived]);
 
+  useEffect(() => {
+    if (isLoading || openedQueryApplication.current || typeof window === "undefined") return;
+    openedQueryApplication.current = true;
+    const applicationId = Number(new URLSearchParams(window.location.search).get("application_id"));
+    if (Number.isInteger(applicationId) && applicationId > 0) void openApplication(applicationId);
+  }, [isLoading]);
+
   function syncEditor(application: ApplicationDetail) {
     setSelectedApplication(application);
     setStatus(application.status);
@@ -147,6 +190,14 @@ export function ApplicationTracker() {
     setAppliedAt(dateInputValue(application.applied_at));
     setNotes(application.notes ?? "");
     setStatusReason("");
+    setTaskDrafts(Object.fromEntries(application.tasks.map((task) => [
+      task.id,
+      {
+        taskType: task.task_type,
+        dueAt: dateTimeInputValue(task.due_at),
+        reminderAt: dateTimeInputValue(task.reminder_at),
+      },
+    ])));
   }
 
   async function openApplication(applicationId: number) {
@@ -244,9 +295,15 @@ export function ApplicationTracker() {
     if (!selectedApplication || !newTaskTitle.trim()) return;
     setError(null);
     try {
-      await addApplicationTask(selectedApplication.id, newTaskTitle.trim(), toIsoFromDateTime(newTaskDueAt));
+      await addApplicationTask(selectedApplication.id, newTaskTitle.trim(), {
+        taskType: newTaskType,
+        dueAt: toIsoFromDateTime(newTaskDueAt),
+        reminderAt: toIsoFromDateTime(newTaskReminderAt),
+      });
       setNewTaskTitle("");
       setNewTaskDueAt("");
+      setNewTaskReminderAt("");
+      setNewTaskType("other");
       syncEditor(await getApplication(selectedApplication.id));
       setApplications(await listApplications(applicationListOptions()));
     } catch (err) {
@@ -263,6 +320,70 @@ export function ApplicationTracker() {
       setApplications(await listApplications(applicationListOptions()));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Task update failed.");
+    }
+  }
+
+  async function saveTaskSchedule(task: ApplicationTask) {
+    if (!selectedApplication) return;
+    const draft = taskDrafts[task.id];
+    if (!draft) return;
+    setError(null);
+    try {
+      await updateApplicationTask(selectedApplication.id, task.id, {
+        task_type: draft.taskType,
+        due_at: toIsoFromDateTime(draft.dueAt),
+        reminder_at: toIsoFromDateTime(draft.reminderAt),
+      });
+      syncEditor(await getApplication(selectedApplication.id));
+      setStatusMessage("Task schedule updated.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Task reschedule failed.");
+    }
+  }
+
+  async function dismissTaskReminder(taskId: number) {
+    if (!selectedApplication) return;
+    setError(null);
+    try {
+      await updateApplicationTask(selectedApplication.id, taskId, { dismiss_reminder: true });
+      syncEditor(await getApplication(selectedApplication.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Reminder dismissal failed.");
+    }
+  }
+
+  async function attachDocument(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedApplication || !attachmentVersionId) return;
+    setError(null);
+    try {
+      await attachApplicationDocument(selectedApplication.id, Number(attachmentVersionId), attachmentPurpose);
+      setAttachmentVersionId("");
+      syncEditor(await getApplication(selectedApplication.id));
+      setStatusMessage("Document version attached.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Document attachment failed.");
+    }
+  }
+
+  async function detachDocument(attachmentId: number) {
+    if (!selectedApplication || !window.confirm("Detach this document version from the application?")) return;
+    setError(null);
+    try {
+      await detachApplicationDocument(selectedApplication.id, attachmentId);
+      syncEditor(await getApplication(selectedApplication.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Document detachment failed.");
+    }
+  }
+
+  async function downloadAttachment(attachmentId: number, fileName: string) {
+    if (!selectedApplication) return;
+    setError(null);
+    try {
+      await downloadApplicationDocument(selectedApplication.id, attachmentId, fileName);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Document download failed.");
     }
   }
 
@@ -527,6 +648,81 @@ export function ApplicationTracker() {
                 </button>
               </form>
 
+              <section className="result-list application-materials">
+                <div className="profile-card-header">
+                  <div>
+                    <h2>Application Materials</h2>
+                    <p className="metadata">Attachments stay pinned to the exact file version shown.</p>
+                  </div>
+                </div>
+                <form className="inline-form" onSubmit={attachDocument}>
+                  <label>
+                    Document Version
+                    <select
+                      value={attachmentVersionId}
+                      disabled={Boolean(selectedApplication.archived_at)}
+                      onChange={(event) => setAttachmentVersionId(event.target.value)}
+                      required
+                    >
+                      <option value="">Select a document</option>
+                      {documents.filter((document) => document.latest_version).map((document) => (
+                        <option value={document.latest_version?.id} key={document.id}>
+                          {document.title} - v{document.latest_version?.version_number}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Purpose
+                    <select
+                      value={attachmentPurpose}
+                      disabled={Boolean(selectedApplication.archived_at)}
+                      onChange={(event) => setAttachmentPurpose(event.target.value as ApplicationDocumentPurpose)}
+                    >
+                      {attachmentPurposeOptions.map((option) => (
+                        <option value={option} key={option}>{labelize(option)}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button type="submit" disabled={Boolean(selectedApplication.archived_at) || !attachmentVersionId}>
+                    Attach
+                  </button>
+                </form>
+                {selectedApplication.documents.length ? (
+                  <div className="application-document-list">
+                    {selectedApplication.documents.map((attachment) => (
+                      <article className="application-document-row" key={attachment.id}>
+                        <div>
+                          <strong>{attachment.document_title}</strong>
+                          <span className="metadata">
+                            {labelize(attachment.purpose)} | Version {attachment.version_number} | {attachment.file_name}
+                          </span>
+                        </div>
+                        <div className="button-row">
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => void downloadAttachment(attachment.id, attachment.file_name)}
+                          >
+                            Download
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            disabled={Boolean(selectedApplication.archived_at)}
+                            onClick={() => void detachDocument(attachment.id)}
+                          >
+                            Detach
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="empty">No submitted documents attached.</p>
+                )}
+              </section>
+
               <div className="detail-grid">
                 <section className="result-list">
                   <h2>Tasks And Reminders</h2>
@@ -537,18 +733,58 @@ export function ApplicationTracker() {
                       onChange={(event) => setNewTaskTitle(event.target.value)}
                       placeholder="Task title"
                     />
-                    <input
-                      type="datetime-local"
-                      value={newTaskDueAt}
+                    <select
+                      value={newTaskType}
                       disabled={Boolean(selectedApplication.archived_at)}
-                      onChange={(event) => setNewTaskDueAt(event.target.value)}
-                    />
+                      onChange={(event) => setNewTaskType(event.target.value as ApplicationTaskType)}
+                    >
+                      {taskTypeOptions.map((option) => (
+                        <option value={option} key={option}>{labelize(option)}</option>
+                      ))}
+                    </select>
+                    <label>
+                      Due
+                      <input
+                        type="datetime-local"
+                        value={newTaskDueAt}
+                        disabled={Boolean(selectedApplication.archived_at)}
+                        onChange={(event) => setNewTaskDueAt(event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Remind At
+                      <input
+                        type="datetime-local"
+                        value={newTaskReminderAt}
+                        disabled={Boolean(selectedApplication.archived_at)}
+                        onChange={(event) => setNewTaskReminderAt(event.target.value)}
+                      />
+                    </label>
                     <button type="submit" disabled={Boolean(selectedApplication.archived_at)}>Add Task</button>
                   </form>
-                  {selectedApplication.tasks.length ? (
+                  <div className="inline-form application-task-filters">
+                    <label>
+                      State
+                      <select value={taskStatusFilter} onChange={(event) => setTaskStatusFilter(event.target.value as "" | "open" | "completed")}>
+                        <option value="">All</option>
+                        <option value="open">Open</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                    </label>
+                    <label>
+                      Type
+                      <select value={taskTypeFilter} onChange={(event) => setTaskTypeFilter(event.target.value as "" | ApplicationTaskType)}>
+                        <option value="">All types</option>
+                        {taskTypeOptions.map((option) => (
+                          <option value={option} key={option}>{labelize(option)}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  {visibleTasks.length ? (
                     <ul>
-                      {selectedApplication.tasks.map((task) => (
-                        <li key={task.id}>
+                      {visibleTasks.map((task) => (
+                        <li className={task.is_overdue ? "application-task-overdue" : ""} key={task.id}>
                           <label className="checkbox-row">
                             <input
                               type="checkbox"
@@ -558,14 +794,80 @@ export function ApplicationTracker() {
                             />
                             <span>
                               <strong>{task.title}</strong>
-                              {task.due_at ? <span>{new Date(task.due_at).toLocaleString()}</span> : null}
+                              <span>{labelize(task.task_type)}{task.is_overdue ? " | Overdue" : ""}</span>
                             </span>
                           </label>
+                          <div className="application-task-schedule">
+                            <label>
+                              Due
+                              <input
+                                type="datetime-local"
+                                value={taskDrafts[task.id]?.dueAt ?? ""}
+                                disabled={Boolean(selectedApplication.archived_at)}
+                                onChange={(event) => setTaskDrafts((current) => ({
+                                  ...current,
+                                  [task.id]: {
+                                    ...(current[task.id] ?? { taskType: task.task_type, dueAt: "", reminderAt: "" }),
+                                    dueAt: event.target.value,
+                                  },
+                                }))}
+                              />
+                            </label>
+                            <label>
+                              Reminder
+                              <input
+                                type="datetime-local"
+                                value={taskDrafts[task.id]?.reminderAt ?? ""}
+                                disabled={Boolean(selectedApplication.archived_at)}
+                                onChange={(event) => setTaskDrafts((current) => ({
+                                  ...current,
+                                  [task.id]: {
+                                    ...(current[task.id] ?? { taskType: task.task_type, dueAt: "", reminderAt: "" }),
+                                    reminderAt: event.target.value,
+                                  },
+                                }))}
+                              />
+                            </label>
+                            <select
+                              aria-label="Task type"
+                              value={taskDrafts[task.id]?.taskType ?? task.task_type}
+                              disabled={Boolean(selectedApplication.archived_at)}
+                              onChange={(event) => setTaskDrafts((current) => ({
+                                ...current,
+                                [task.id]: {
+                                  ...(current[task.id] ?? { taskType: task.task_type, dueAt: "", reminderAt: "" }),
+                                  taskType: event.target.value as ApplicationTaskType,
+                                },
+                              }))}
+                            >
+                              {taskTypeOptions.map((option) => (
+                                <option value={option} key={option}>{labelize(option)}</option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              disabled={Boolean(selectedApplication.archived_at)}
+                              onClick={() => void saveTaskSchedule(task)}
+                            >
+                              Update
+                            </button>
+                            {task.reminder_due ? (
+                              <button
+                                type="button"
+                                className="secondary-button"
+                                disabled={Boolean(selectedApplication.archived_at)}
+                                onClick={() => void dismissTaskReminder(task.id)}
+                              >
+                                Dismiss Reminder
+                              </button>
+                            ) : null}
+                          </div>
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="empty">No tasks yet.</p>
+                    <p className="empty">No tasks match these filters.</p>
                   )}
                 </section>
 

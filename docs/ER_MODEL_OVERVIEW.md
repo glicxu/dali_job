@@ -11,6 +11,9 @@ Shared/cache data and user-specific saved data must stay separate.
 - `user_edited_jobs` stores manual job details and user-specific corrections.
 - `job_resume_matches` stores match results for one user's saved job and resume.
 - `resume_profiles` stores each user-owned structured resume, with one default resume used for ordering.
+- `managed_operations` stores durable progress and normalized results for provider-backed work.
+- `interviews` and `interview_notes` store provider-independent scheduling, outcomes, and private journal entries.
+- `interview_prep_guides` stores append-only preparation inputs, outputs, warnings, and provenance.
 
 This prevents user-specific notes and future application tracking from changing the shared cached job while still letting the app avoid repeated scraping and OpenAI parsing for the same URL.
 
@@ -27,6 +30,10 @@ Owns or relates to:
 - `documents`
 - `user_saved_jobs`
 - `job_resume_matches`
+- `managed_operations`
+- `interviews`
+- `interview_notes`
+- `interview_prep_guides`
 
 For the current MVP, a user effectively has one private workspace.
 
@@ -40,6 +47,7 @@ Owns or groups:
 - `documents`
 - `user_saved_jobs`
 - `job_resume_matches`
+- `managed_operations`
 
 Workspace sharing is intentionally deferred. Keeping `workspaces` still gives the app a future boundary for collaboration, exports, or multiple career-search spaces.
 
@@ -79,6 +87,15 @@ documents 1 -> many document_versions
 Stores exact uploaded file versions and extracted text.
 
 This lets one logical resume document have multiple uploaded versions later.
+
+Application materials use the exact version relationship:
+
+```text
+applications 1 -> many application_documents
+document_versions 1 -> many application_documents
+```
+
+Detaching an application document timestamps the relationship instead of changing or deleting the underlying version. Download access uses short-lived, one-time `document_download_tickets` containing only a hash of the client-visible token.
 
 ### jobs_cache
 
@@ -182,6 +199,37 @@ job_resume_matches optionally references documents
 
 This table should hold scores instead of putting scores on jobs because the same job can have different scores for different users, resumes, or edited job copies.
 
+### managed_operations
+
+Stores owner-scoped execution state for searches, imports, parsing, and matching. Each operation has a durable status, progress, bounded attempt count, safe error, provider/model metadata, usage counts, and a normalized result. Request payloads remain server-only and are not returned by operation status APIs.
+
+Relationship:
+
+```text
+users/workspaces 1 -> many managed_operations
+```
+
+The table is workflow history, not a replacement for domain records. A completed import still creates `jobs_cache` and `user_saved_jobs`; a completed match still creates `job_resume_matches`.
+
+### interviews and interview_notes
+
+Each `interviews` row belongs to one application and its private user/workspace owner. Scheduling, type, stage, status, outcome, private summary notes, and append-only journal entries work without any AI provider.
+
+```text
+applications 1 -> many interviews
+interviews 1 -> many interview_notes
+```
+
+### interview_prep_guides
+
+Each generation snapshots one selected `resume_profiles.resume_data`, the application's effective saved-job data, and optional company notes before enqueueing a managed operation. Completed structured output and prompt/model/schema provenance stay on that guide. Regeneration creates another guide rather than overwriting history.
+
+```text
+interviews 1 -> many interview_prep_guides
+managed_operations 1 -> 0 or 1 interview_prep_guides
+resume_profiles 1 -> many interview_prep_guides (nullable source reference)
+```
+
 ## Simplified Relationship View
 
 ```text
@@ -192,6 +240,7 @@ users
        -> document_versions
   -> user_saved_jobs
        -> job_resume_matches
+  -> managed_operations
 
 jobs_cache
   -> user_saved_jobs
@@ -277,7 +326,9 @@ Example application fields:
 - `created_at`
 - `updated_at`
 
-One saved job can have multiple application attempts. Lifecycle status, optional interview stage, and archival are separate concepts. Status history, events, notes, and tasks are child entities of an application. A nullable uniqueness guard prevents concurrent accidental active duplicates while allowing explicitly confirmed duplicates and later attempts after terminal or archived outcomes.
+One saved job can have multiple application attempts. Lifecycle status, optional interview stage, and archival are separate concepts. Status history, events, notes, typed tasks, reminders, and immutable document attachments are child entities of an application. A nullable uniqueness guard prevents concurrent accidental active duplicates while allowing explicitly confirmed duplicates and later attempts after terminal or archived outcomes.
+
+Each new application also snapshots its source URL and normalized source label. Outcome analytics use this immutable source label rather than a potentially edited current job record. Legacy applications without a snapshot remain grouped as unknown and produce a data-quality warning.
 
 ## Rules To Preserve
 

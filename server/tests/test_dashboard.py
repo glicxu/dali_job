@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -106,3 +108,35 @@ def test_dashboard_returns_best_matches_and_recent_jobs() -> None:
     assert payload["best_matches"][0]["resume_label"] == "Backend Resume"
     assert payload["best_matches"][0]["href"] == f"/jobs?job_id={saved_job['id']}&view=match"
     assert payload["recently_saved_jobs"][0]["status"] == "matched"
+
+
+def test_dashboard_surfaces_overdue_application_actions() -> None:
+    client, session_factory = create_test_client()
+    identity = get_dev_identity()
+    with session_factory() as session:
+        saved_job = job_repository.create_job_from_description(
+            session,
+            identity,
+            source_url="https://example.com/jobs/action-role",
+            raw_description_text="Action role description.",
+            job_data=JobDescriptionData(title="Action Role", company="Example Co"),
+        )
+        session.commit()
+
+    application = client.post("/api/v1/applications", json={"user_job_id": saved_job["id"]})
+    assert application.status_code == 200
+    task = client.post(
+        f"/api/v1/applications/{application.json()['id']}/tasks",
+        json={
+            "title": "Send follow-up",
+            "task_type": "follow_up",
+            "due_at": (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(),
+        },
+    )
+    assert task.status_code == 200
+
+    payload = client.get("/api/v1/dashboard").json()
+    assert payload["application_actions"][0]["title"] == "Send follow-up"
+    assert payload["application_actions"][0]["is_overdue"] is True
+    assert payload["application_actions"][0]["job_title"] == "Action Role"
+    assert payload["recommended_next_step"]["kind"] == "application_action"

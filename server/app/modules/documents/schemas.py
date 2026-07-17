@@ -42,6 +42,11 @@ class DocumentTextResponse(BaseModel):
     extracted_text: str
 
 
+class DocumentDownloadTicketResponse(BaseModel):
+    download_path: str
+    expires_at: datetime
+
+
 class DocumentDependency(BaseModel):
     dependency_type: str
     dependency_count: int

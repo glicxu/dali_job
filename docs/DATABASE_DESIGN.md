@@ -272,7 +272,40 @@ DaliJob should use lazy job parsing for bulk imports and Apify-backed imports. T
 
 Future application tracking may add or derive columns such as `remote_policy`, `closing_date`, `compensation_min`, and `compensation_max` when those fields need filtering/sorting. The cache JSON remains the reusable parsed job description from the original source URL after parsing has occurred. When a URL has already been parsed, matching and detail flows should reuse `jobs_cache.job_data` and `raw_description_text` instead of spending another OpenAI job parsing call. If a user corrects missing or inaccurate fields, DaliJob stores the correction in `user_edited_jobs` and leaves `jobs_cache` unchanged.
 
-Bulk job-list import does not require a separate core job table for the MVP. A listing URL discovery step should extract individual posting URLs, then each selected posting URL should flow through the same `jobs_cache` lookup and `user_saved_jobs` relationship pipeline. Apify-backed Indeed search should follow the same storage model: returned results are temporary review data until the user imports them, then selected results create or reuse `jobs_cache` rows and create `user_saved_jobs` rows. Bulk and Apify imports should not call OpenAI just to save jobs. A future `job_import_runs` or `job_search_runs` table can be added if DaliJob needs persistent import/search history, retry state, Apify dataset IDs, cost tracking, or background progress tracking across many pages.
+Bulk job-list import does not require a separate core job table for the MVP. A listing URL discovery step extracts individual posting URLs, then each selected posting URL flows through the same `jobs_cache` lookup and `user_saved_jobs` relationship pipeline. Provider-backed search follows the same storage model: returned results are temporary review data until the user imports them, then selected results create or reuse `jobs_cache` rows and create `user_saved_jobs` rows. Bulk imports do not call OpenAI just to save jobs. Search, discovery, import, parsing, and matching execution history lives in `managed_operations` rather than provider-specific run tables.
+
+### managed_operations
+
+Stores owner-scoped execution state for provider-backed work. The request payload is server-only and is not returned by operation read/list endpoints. Results use DaliJob-normalized schemas; provider credentials and raw provider responses are never stored here.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | integer | Primary key and durable operation identifier |
+| workspace_id | integer | FK to workspaces |
+| user_id | integer | FK to users |
+| operation_type | text | Normalized workflow name |
+| idempotency_key | text | SHA-256 key, unique per owner and operation type |
+| status | text | `queued`, `running`, `succeeded`, `failed`, or `cancelled` |
+| progress_current | integer | Completed work units |
+| progress_total | integer | Nullable total work units |
+| progress_message | text | Safe user-facing progress text |
+| attempt_count | integer | Number of execution attempts |
+| max_attempts | integer | Bounded retry limit, default 3 |
+| request_payload | jsonb | Private validated workflow input |
+| result_payload | jsonb | Nullable normalized result |
+| error_code | text | Nullable safe error category |
+| error_message | text | Nullable user-facing failure reason |
+| provider | text | Nullable provider category |
+| model_or_actor | text | Nullable model or actor identifier |
+| prompt_version | text | Nullable prompt contract version |
+| usage | jsonb | Counts available from the workflow |
+| cancel_requested_at | timestamptz | Nullable cancellation request time |
+| started_at | timestamptz | Nullable latest-attempt start time |
+| completed_at | timestamptz | Nullable terminal-state time |
+| created_at | timestamptz | Required |
+| updated_at | timestamptz | Required |
+
+Abandoned queued or running records are converted to retryable `execution_interrupted` failures when operation state is queried. This prevents an interrupted server process from leaving permanent false progress. Successful operations erase `request_payload` immediately. Failed or cancelled operations retain it only for retry and lazily erase it after seven days, at which point the user must start a new operation.
 
 ### user_saved_jobs
 
@@ -346,6 +379,8 @@ Match records are append-only through product APIs. A rerun creates a new row, a
 | workspace_id | integer | FK |
 | user_id | integer | FK to owner |
 | user_job_id | integer | FK to user's saved editable job |
+| source_url_snapshot | text | Nullable immutable source URL captured at application creation |
+| source_label_snapshot | text | Nullable normalized source label captured at application creation |
 | status | application_status | Required |
 | stage | text | Nullable interview stage |
 | active_duplicate_guard | integer | Internal nullable uniqueness guard for accidental active duplicates |
@@ -483,10 +518,25 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 | --- | --- | --- |
 | id | integer | Primary key |
 | application_id | integer | FK |
-| document_id | integer | FK |
 | document_version_id | integer | FK |
-| purpose | text | `draft`, `submitted`, `interview_reference`, `other` |
-| submitted_at | timestamptz | Nullable |
+| purpose | text | `resume`, `cover_letter`, `supporting` |
+| created_at | timestamptz | Required |
+| detached_at | timestamptz | Nullable soft detachment |
+
+The exact `document_version_id` is immutable. Uploading a replacement file creates a new `document_versions` row and never changes an existing application attachment.
+
+### document_download_tickets
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | integer | Primary key and audit reference |
+| workspace_id | integer | FK |
+| user_id | integer | FK to authorizing owner |
+| document_version_id | integer | Exact downloadable version |
+| application_id | integer | Nullable application context |
+| token_hash | text | Unique SHA-256 hash; raw token is never stored |
+| expires_at | timestamptz | Five-minute expiration |
+| consumed_at | timestamptz | Nullable; enforces one-time use |
 | created_at | timestamptz | Required |
 
 ### interviews
@@ -494,12 +544,18 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 | Field | Type | Notes |
 | --- | --- | --- |
 | id | integer | Primary key |
-| application_id | integer | FK |
-| interview_type | text | Recruiter, phone, technical, final, mock |
+| workspace_id | integer | Owner workspace FK |
+| user_id | integer | Owner user FK |
+| application_id | integer | Required application FK |
+| interview_type | text | Recruiter screen, phone, technical, behavioral, hiring manager, panel, final, or other |
+| status | text | `scheduled`, `completed`, or `cancelled` |
+| stage | text | Application-independent interview stage |
 | scheduled_at | timestamptz | Nullable |
+| timezone | text | Required IANA timezone label |
 | duration_minutes | integer | Nullable |
-| location_or_link | text | Nullable |
-| outcome | text | Nullable |
+| location_or_url | text | Nullable |
+| outcome | text | Nullable advanced, rejected, offer, withdrawn, or no decision |
+| private_notes | text | Nullable private summary notes |
 | created_at | timestamptz | Required |
 | updated_at | timestamptz | Required |
 
@@ -522,9 +578,7 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 | --- | --- | --- |
 | id | integer | Primary key |
 | interview_id | integer | FK |
-| notes | text | Required |
-| lessons_learned | text | Nullable |
-| follow_up_actions | jsonb | Array |
+| body | text | Required journal entry |
 | created_at | timestamptz | Required |
 
 ### interview_prep_guides
@@ -532,39 +586,42 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 | Field | Type | Notes |
 | --- | --- | --- |
 | id | integer | Primary key |
-| application_id | integer | FK |
-| resume_version_id | integer | Nullable FK |
-| company_research | jsonb | Required |
-| role_analysis | jsonb | Required |
-| study_guide | jsonb | Required |
-| question_bank | jsonb | Required |
-| ai_generation_job_id | integer | Nullable FK |
+| workspace_id | integer | Owner workspace FK |
+| user_id | integer | Owner user FK |
+| interview_id | integer | Required interview FK |
+| operation_id | integer | Nullable unique managed-operation FK |
+| resume_profile_id | integer | Nullable source profile FK; snapshot remains authoritative |
+| resume_data_snapshot | json | Exact structured resume input |
+| job_data_snapshot | json | Exact effective saved-job input, including raw text when available |
+| company_notes_snapshot | text | Nullable user-supplied company context |
+| source_warnings | json | Warnings captured before provider execution |
+| output_data | json | Nullable structured priorities, questions, talking points, and gaps |
+| provider | text | Provider name |
+| model_name | text | Nullable model used |
+| prompt_version | text | Prompt contract version |
+| schema_version | text | Output contract version |
+| provider_execution_reference | text | Nullable provider trace reference |
 | created_at | timestamptz | Required |
-| updated_at | timestamptz | Required |
+| completed_at | timestamptz | Nullable completion time |
 
-### tasks
+Prep-guide rows are append-only through product APIs. Regeneration creates a new row and preserves each run's exact resume, job, and company-note inputs.
+
+### application_tasks
 
 | Field | Type | Notes |
 | --- | --- | --- |
 | id | integer | Primary key |
-| workspace_id | integer | FK |
-| application_id | integer | Nullable FK |
+| application_id | integer | FK |
 | title | text | Required |
-| description | text | Nullable |
+| task_type | text | `follow_up`, `interview_prep`, `document`, `deadline`, `other` |
 | due_at | timestamptz | Nullable |
+| reminder_at | timestamptz | Nullable in-app reminder time |
+| reminder_dismissed_at | timestamptz | Nullable |
 | completed_at | timestamptz | Nullable |
 | created_at | timestamptz | Required |
+| updated_at | timestamptz | Required for support diagnostics |
 
-### reminders
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| id | integer | Primary key |
-| task_id | integer | Nullable FK |
-| application_id | integer | Nullable FK |
-| remind_at | timestamptz | Required |
-| channel | text | In-app, email, calendar |
-| sent_at | timestamptz | Nullable |
+Reminder state remains on `application_tasks` for the in-app implementation. A separate delivery table is unnecessary until external notification channels are introduced.
 
 ### offers
 
@@ -583,6 +640,8 @@ Stores immutable structured resume snapshots. A resume version may come from an 
 | notes | text | Nullable |
 
 ### analytics_snapshots
+
+Future optional persistence for expensive or historical aggregate snapshots. Phase 6 does not create this table: `GET /analytics/summary` calculates owner-scoped `outcome-analytics-v1` results from applications, status/application events, application-time source snapshots, and exact attached document versions on request.
 
 | Field | Type | Notes |
 | --- | --- | --- |

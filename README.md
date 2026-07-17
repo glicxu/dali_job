@@ -147,6 +147,8 @@ ip_per_minute = 60
 
 The environment variables `DALIJOB_PROVIDER_USER_LIMIT_PER_MINUTE` and `DALIJOB_PROVIDER_IP_LIMIT_PER_MINUTE` override these values. Provider calls emit structured logs containing provider, feature, user identifier, duration, outcome, and available usage units without logging resume text, job text, credentials, or provider response bodies. These in-process limits are appropriate for the current single-server deployment; a shared limiter is required before running multiple server instances.
 
+Searches, imports, resume/job parsing, matching, and interview preparation run as durable managed operations. The client polls `/api/v1/operations/{id}`, and the Operations page shows progress, safe failures, cancellation, and bounded retries. The current executor uses FastAPI post-response tasks and SQL state, so Redis is not required for a single server. Move the handler contract to an external worker and shared broker before deploying multiple API instances.
+
 ## Document Storage
 
 The current document-management slice stores uploaded files on the server filesystem and records metadata in SQL. Configure the storage folder in your private config:

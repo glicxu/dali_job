@@ -47,7 +47,9 @@ Initial production defaults should be configurable and documented in the privacy
 | Redacted extracted text | Same as its document version | Removed with the document cleanup job within 30 days |
 | Resume and private edited-job JSON | Until user deletes the record or account | Soft deleted immediately; hard deleted within 30 days unless a legal hold applies |
 | Match snapshots and AI output | Until the saved job/account is deleted | Hard deleted during account cleanup; individual source deletion may retain the snapshot after explicit warning |
-| Provider request payloads | Do not persist separately in DaliJob by default | Not applicable |
+| Interview records, journal notes, and prep snapshots | Until the application/account is deleted | Cascade with the owned application/account; operation payload follows the shorter operational retention window |
+| Application source snapshot and derived analytics | Source snapshot follows the application; analytics are calculated on request and are not separately persisted | Removed with the application/account; no analytics artifact remains |
+| Managed-operation request payloads | Retained only while queued/running or for a bounded failed/cancelled retry window | Erased immediately after success; failed/cancelled retry payloads are erased after seven days |
 | Provider execution references and operational logs | 90 days by default | Expire on schedule; security audit records may use a separately disclosed period |
 | Shared job cache | While useful and source-compliant | Server retention policy; never contains user notes or resume data |
 

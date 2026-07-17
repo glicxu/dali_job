@@ -20,6 +20,7 @@ Key documents:
 - [GitHub Issues](docs/GITHUB_ISSUES.md)
 - [Testing Strategy](docs/TESTING_STRATEGY.md)
 - [Deployment Guide](docs/DEPLOYMENT_GUIDE.md)
+- [Production Readiness Tracker](docs/PRODUCTION_READINESS.md)
 
 ## Architecture Direction
 

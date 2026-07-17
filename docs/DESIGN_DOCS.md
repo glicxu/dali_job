@@ -20,6 +20,7 @@ DaliJob is designed as a long-term career operating system, not a job board and 
 - [TESTING_STRATEGY.md](TESTING_STRATEGY.md) - unit, integration, end-to-end, AI evaluation, and security testing.
 - [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) - local, staging, production, CI/CD, observability, and operations guidance.
 - [US3_PROD_DEPLOYMENT_PLAN.md](US3_PROD_DEPLOYMENT_PLAN.md) - concrete plan for deploying DaliJob on us3 at `https://jobmatch.dalifin.com`.
+- [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) - current launch decision, readiness gates, prioritized production gaps, acceptance criteria, and release verification log.
 
 ## Product Phases
 

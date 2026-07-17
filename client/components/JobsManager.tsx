@@ -261,17 +261,18 @@ function notePreviewLines(notes: string | null): string[] {
   return preview;
 }
 
-export function JobsManager() {
+export function JobsManager({ creationMode = null }: { creationMode?: ImportMode | null } = {}) {
   if (!getAuthToken()) {
-    return <JobsManagerPreview />;
+    return creationMode ? <JobCreationPreview mode={creationMode} /> : <JobsManagerPreview />;
   }
 
   const [jobs, setJobs] = useState<StoredJob[]>([]);
   const [resumeProfiles, setResumeProfiles] = useState<ResumeProfile[]>([]);
   const [documents, setDocuments] = useState<StoredDocument[]>([]);
-  const [mode, setMode] = useState<ImportMode>("url");
   const [jobUrl, setJobUrl] = useState("");
-  const [editor, setEditor] = useState<JobEditorState | null>(null);
+  const [editor, setEditor] = useState<JobEditorState | null>(
+    creationMode === "manual" ? emptyEditorState() : null,
+  );
   const [matchDataJob, setMatchDataJob] = useState<StoredJob | null>(null);
   const [matchHistory, setMatchHistory] = useState<JobResumeMatchHistory[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -328,13 +329,6 @@ export function JobsManager() {
       }
     }
   }, [jobs]);
-
-  function startManualJob() {
-    setError(null);
-    setStatus(null);
-    setMatchDataJob(null);
-    setEditor(emptyEditorState());
-  }
 
   function toggleBulkJob(jobId: number) {
     setSelectedBulkJobIds((current) =>
@@ -471,6 +465,10 @@ export function JobsManager() {
       const saved = editor.id
         ? await updateJob(editor.id, editor.hasUserEdits ? payload : { notes: editor.notes.trim() || null })
         : await createJob(payload);
+      if (!editor.id && creationMode) {
+        window.location.href = "/jobs";
+        return;
+      }
       setEditor(null);
       setStatus(editor.id ? "Job updated." : "Job saved.");
       await loadJobs();
@@ -547,67 +545,72 @@ export function JobsManager() {
     }
   }
 
+  if (creationMode) {
+    return (
+      <div className="jobs-manager job-creation-manager">
+        {error ? <div className="error-banner">{error}</div> : null}
+        {status ? <div className="status-banner">{status}</div> : null}
+
+        {creationMode === "url" && !editor ? (
+          <section className="profile-card job-creation-card">
+            <div>
+              <h2>Import from a job URL</h2>
+              <p className="metadata">Paste one job posting URL to extract a reviewable job profile.</p>
+            </div>
+            <form className="stack-form" onSubmit={parseDraft}>
+              <label>
+                Job URL
+                <input
+                  type="url"
+                  value={jobUrl}
+                  onChange={(event) => setJobUrl(event.target.value)}
+                  placeholder="https://company.com/careers/job-id"
+                  required
+                />
+              </label>
+              <button type="submit" disabled={isParsing}>
+                {isParsing ? "Parsing..." : "Create Job Profile"}
+              </button>
+            </form>
+          </section>
+        ) : null}
+
+        {editor && !editor.id ? (
+          <JobEditor
+            editor={editor}
+            isSaving={isSaving}
+            onSave={saveJob}
+            onChange={setEditor}
+            onJobDataChange={setJobDataField}
+            onClose={() => {
+              if (creationMode === "manual") window.location.href = "/jobs";
+              else setEditor(null);
+            }}
+            onArchive={archiveSavedJob}
+            onRestore={restoreSavedJob}
+            onDelete={permanentlyRemoveSavedJob}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="jobs-manager">
       {error ? <div className="error-banner">{error}</div> : null}
       {status ? <div className="status-banner">{status}</div> : null}
 
-      <section className="profile-card">
-        <div className="profile-card-header">
-          <div>
-            <h2>Import Job</h2>
-            <p className="metadata">Create a draft from a URL or start with manual entry.</p>
-          </div>
+      <section className="profile-card job-add-card">
+        <div>
+          <h2>Add a Job</h2>
+          <p className="metadata">Import one job description, multiple jobs from a search list, or add one manually.</p>
         </div>
-
-        <div className="segmented-control">
-          <button type="button" className={mode === "url" ? "active" : ""} onClick={() => setMode("url")}>
-            URL
-          </button>
-          <button type="button" className={mode === "manual" ? "active" : ""} onClick={() => setMode("manual")}>
-            Manual
-          </button>
+        <div className="job-create-actions" aria-label="Create a saved job">
+          <a className="button-link" href="/jobs/import-url">Import Job</a>
+          <a className="button-link secondary-button" href="/jobs/import">Import Job List</a>
+          <a className="button-link secondary-button" href="/jobs/manual">Create Manual Job</a>
         </div>
-
-        {mode === "manual" ? (
-          <div className="warning-banner">
-            Manual entry opens a blank editable job form. Add the description and fields, then save.
-            <button type="button" onClick={startManualJob}>
-              Start Manual Job
-            </button>
-          </div>
-        ) : (
-          <form className="stack-form" onSubmit={parseDraft}>
-            <label>
-              Job URL
-              <input
-                type="url"
-                value={jobUrl}
-                onChange={(event) => setJobUrl(event.target.value)}
-                placeholder="https://company.com/careers/job-id"
-                required
-              />
-            </label>
-            <button type="submit" disabled={isParsing}>
-              {isParsing ? "Parsing..." : "Create Draft"}
-            </button>
-          </form>
-        )}
       </section>
-
-      {editor && !editor.id ? (
-        <JobEditor
-          editor={editor}
-          isSaving={isSaving}
-          onSave={saveJob}
-          onChange={setEditor}
-          onJobDataChange={setJobDataField}
-          onClose={() => setEditor(null)}
-          onArchive={archiveSavedJob}
-          onRestore={restoreSavedJob}
-          onDelete={permanentlyRemoveSavedJob}
-        />
-      ) : null}
 
       <section className="saved-jobs-workspace">
         <section className="profile-card saved-jobs-list-card">
@@ -808,30 +811,16 @@ function JobsManagerPreview() {
       <div className="warning-banner">
         Login is required to save jobs, import postings, write notes, analyze jobs, and run matching.
       </div>
-      <section className="profile-card">
-        <div className="profile-card-header">
-          <div>
-            <h2>Import Job</h2>
-            <p className="metadata">Create a draft from a URL or start with manual entry after login.</p>
-          </div>
+      <section className="profile-card job-add-card">
+        <div>
+          <h2>Add a Job</h2>
+          <p className="metadata">Import one job description, multiple jobs from a search list, or add one manually.</p>
         </div>
-        <div className="segmented-control">
-          <button type="button" className="active" disabled>
-            URL
-          </button>
-          <button type="button" disabled>
-            Manual
-          </button>
+        <div className="job-create-actions" aria-label="Preview job creation options">
+          <a className="button-link" href="/jobs/import-url">Import Job</a>
+          <a className="button-link secondary-button" href="/jobs/import">Import Job List</a>
+          <a className="button-link secondary-button" href="/jobs/manual">Create Manual Job</a>
         </div>
-        <form className="stack-form">
-          <label>
-            Job URL
-            <input placeholder="https://company.com/careers/job-id" disabled />
-          </label>
-          <button type="button" disabled>
-            Create Draft
-          </button>
-        </form>
       </section>
 
       <section className="saved-jobs-workspace">
@@ -885,6 +874,23 @@ function JobsManagerPreview() {
             Login / Register
           </a>
         </section>
+      </section>
+    </div>
+  );
+}
+
+function JobCreationPreview({ mode }: { mode: ImportMode }) {
+  return (
+    <div className="jobs-manager job-creation-manager">
+      <div className="warning-banner">Login is required to create and save a job profile.</div>
+      <section className="profile-card job-creation-card">
+        <h2>{mode === "url" ? "Import from a job URL" : "Create a manual job"}</h2>
+        <p className="metadata">
+          {mode === "url"
+            ? "After login, paste a job URL and review the extracted profile before saving."
+            : "After login, enter the job description and structured details manually."}
+        </p>
+        <a className="button-link" href="/auth">Login / Register</a>
       </section>
     </div>
   );

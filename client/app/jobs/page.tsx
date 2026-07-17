@@ -4,10 +4,10 @@ export default function JobsPage() {
   return (
     <section className="panel jobs-panel">
       <div>
-        <p className="eyebrow">Job Import</p>
+        <p className="eyebrow">Saved Jobs</p>
         <h1>Jobs</h1>
         <p className="lede">
-          Import, review, edit, and save job descriptions before they become applications.
+          Review saved opportunities, notes, analysis, and resume match history.
         </p>
       </div>
       <JobsManager />

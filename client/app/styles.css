@@ -746,6 +746,139 @@ li span {
   top: 32px;
 }
 
+.application-detail-page {
+  width: 100%;
+}
+
+.application-detail-page .applications-detail-pane {
+  position: static;
+}
+
+.application-readonly-preview {
+  display: grid;
+  gap: 18px;
+}
+
+.application-summary-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.application-summary-grid > div {
+  background: #f8fafc;
+  border: 1px solid #e4e7eb;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.application-summary-grid dt {
+  color: #627d98;
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.application-summary-grid dd {
+  font-weight: 700;
+  margin: 0;
+}
+
+.application-preview-section {
+  display: grid;
+  gap: 10px;
+}
+
+.application-preview-section h3,
+.application-preview-section p {
+  margin: 0;
+}
+
+.application-document-open {
+  background: #fff;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
+.application-document-open:hover,
+.application-document-open:focus-visible {
+  border-color: #4f46e5;
+}
+
+.application-document-open > span:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.document-open-label {
+  color: #334e68;
+  font-weight: 700;
+}
+
+.document-preview-link {
+  background: transparent;
+  color: #334e68;
+  font-weight: 700;
+  padding: 0;
+  text-align: left;
+}
+
+.document-preview-link:hover,
+.document-preview-link:focus-visible {
+  text-decoration: underline;
+}
+
+.application-editor-sections {
+  display: grid;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.application-editor-collapsible {
+  padding: 0;
+}
+
+.application-editor-toggle {
+  align-items: center;
+  background: #f8fafc;
+  color: #1f2933;
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 16px;
+  text-align: left;
+  width: 100%;
+}
+
+.application-editor-toggle > span:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.application-editor-toggle > span:last-child {
+  color: #334e68;
+  font-weight: 700;
+}
+
+.application-editor-toggle:hover,
+.application-editor-toggle:focus-visible {
+  background: #eef2f7;
+}
+
+.application-editor-collapsible.expanded .application-editor-toggle {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.application-editor-collapsible-content {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
 .job-search-workspace {
   align-items: flex-start;
   display: grid;

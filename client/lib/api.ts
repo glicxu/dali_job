@@ -1315,6 +1315,40 @@ export async function downloadApplicationDocument(
   await downloadTicketFile(ticket, fileName);
 }
 
+export async function openApplicationDocument(
+  applicationId: number,
+  attachmentId: number,
+): Promise<void> {
+  const previewWindow = window.open("about:blank", "_blank");
+  try {
+    const ticket = await requestJson<DocumentDownloadTicket>(
+      `/applications/${applicationId}/documents/${attachmentId}/download-ticket`,
+      { method: "POST" },
+    );
+    const response = await fetch(`${getApiBaseUrl()}${ticket.download_path}`);
+    if (!response.ok) {
+      throw new Error(`Document preview failed with status ${response.status}`);
+    }
+    const blobUrl = window.URL.createObjectURL(await response.blob());
+    if (previewWindow) {
+      previewWindow.location.href = blobUrl;
+      previewWindow.opener = null;
+    } else {
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+    window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
+  } catch (error) {
+    previewWindow?.close();
+    throw error;
+  }
+}
+
 export function getDocumentDependencies(documentId: number): Promise<RecordDependencyResponse> {
   return requestJson<RecordDependencyResponse>(`/documents/${documentId}/dependencies`);
 }

@@ -119,7 +119,7 @@ function PublicShell({ children }: { children: ReactNode }) {
 function ApplicationNavGroup() {
   const pathname = usePathname();
   const isApplicationSection =
-    pathname === "/applications" || pathname === "/materials" || pathname === "/interviews";
+    pathname.startsWith("/applications") || pathname === "/materials" || pathname === "/interviews";
   const [expanded, setExpanded] = useState(pathname === "/materials" || pathname === "/interviews");
 
   useEffect(() => {

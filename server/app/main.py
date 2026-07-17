@@ -82,7 +82,7 @@ def create_app(config_path: Optional[str] = None) -> FastAPI:
         allow_origin_regex=runtime.client_origin_regex,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "Authorization"],
+        allow_headers=["Content-Type", "Authorization", "Idempotency-Key"],
     )
 
     app.include_router(auth_base_router, prefix="/api/v1")

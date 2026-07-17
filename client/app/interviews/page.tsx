@@ -6,7 +6,7 @@ export default function InterviewsPage() {
       <div>
         <p className="eyebrow">Interview Preparation</p>
         <h1>Interviews</h1>
-        <p className="lede">Schedule interviews, keep private notes, and build evidence-based preparation guides.</p>
+        <p className="lede">Add scheduled interviews, keep private notes, and build evidence-based preparation guides.</p>
       </div>
       <InterviewManager />
     </section>

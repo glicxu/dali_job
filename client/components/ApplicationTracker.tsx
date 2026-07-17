@@ -23,6 +23,7 @@ import {
   listApplications,
   listDocuments,
   listJobs,
+  openApplicationDocument,
   restoreApplication,
   StoredDocument,
   StoredJob,
@@ -94,7 +95,11 @@ function applicationCompany(application: TrackedApplication | ApplicationDetail)
   return application.job?.company || "Unknown company";
 }
 
-export function ApplicationTracker() {
+type ApplicationTrackerProps = {
+  applicationId?: number;
+};
+
+export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = {}) {
   if (!getAuthToken()) {
     return <ApplicationTrackerPreview />;
   }
@@ -130,6 +135,7 @@ export function ApplicationTracker() {
   const [stageFilter, setStageFilter] = useState<ApplicationStage | "">("");
   const [showArchived, setShowArchived] = useState(false);
   const openedQueryApplication = useRef(false);
+  const isDetailPage = applicationId !== undefined;
 
   const visibleSavedJobs = useMemo(() => savedJobs, [savedJobs]);
   const visibleTasks = useMemo(
@@ -162,6 +168,9 @@ export function ApplicationTracker() {
       setApplications(applicationPayload);
       setSavedJobs(jobPayload);
       setDocuments(documentPayload.documents);
+      if (applicationId !== undefined) {
+        syncEditor(await getApplication(applicationId));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load applications.");
     } finally {
@@ -171,14 +180,14 @@ export function ApplicationTracker() {
 
   useEffect(() => {
     void loadApplications();
-  }, [statusFilter, stageFilter, showArchived]);
+  }, [statusFilter, stageFilter, showArchived, applicationId]);
 
   useEffect(() => {
-    if (isLoading || openedQueryApplication.current || typeof window === "undefined") return;
+    if (isDetailPage || isLoading || openedQueryApplication.current || typeof window === "undefined") return;
     openedQueryApplication.current = true;
     const applicationId = Number(new URLSearchParams(window.location.search).get("application_id"));
     if (Number.isInteger(applicationId) && applicationId > 0) void openApplication(applicationId);
-  }, [isLoading]);
+  }, [isDetailPage, isLoading]);
 
   function syncEditor(application: ApplicationDetail) {
     setSelectedApplication(application);
@@ -387,13 +396,27 @@ export function ApplicationTracker() {
     }
   }
 
+  async function openAttachment(attachmentId: number) {
+    if (!selectedApplication) return;
+    setError(null);
+    try {
+      await openApplicationDocument(selectedApplication.id, attachmentId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Document preview failed.");
+    }
+  }
+
   async function archiveSelectedApplication() {
     if (!selectedApplication) return;
     setError(null);
     setStatusMessage(null);
     try {
-      await archiveApplication(selectedApplication.id);
-      setSelectedApplication(null);
+      const archived = await archiveApplication(selectedApplication.id);
+      if (isDetailPage) {
+        syncEditor(archived);
+      } else {
+        setSelectedApplication(null);
+      }
       setStatusMessage("Application archived.");
       await loadApplications();
     } catch (err) {
@@ -436,7 +459,7 @@ export function ApplicationTracker() {
       {error ? <div className="error-banner">{error}</div> : null}
       {statusMessage ? <div className="status-banner">{statusMessage}</div> : null}
 
-      <section className="profile-card">
+      {!isDetailPage ? <section className="profile-card">
         <div className="profile-card-header">
           <div>
             <h2>Create Application</h2>
@@ -459,10 +482,10 @@ export function ApplicationTracker() {
             {isSaving ? "Creating..." : "Create Application"}
           </button>
         </form>
-      </section>
+      </section> : null}
 
-      <section className="applications-workspace">
-        <section className="profile-card applications-list-card">
+      <section className={isDetailPage ? "application-detail-page" : "applications-workspace"}>
+        {!isDetailPage ? <section className="profile-card applications-list-card">
           <div className="profile-card-header">
             <h2>Applications</h2>
             <button type="button" className="secondary-button" onClick={() => void loadApplications()}>
@@ -525,10 +548,11 @@ export function ApplicationTracker() {
               </button>
             ))}
           </div>
-        </section>
+        </section> : null}
 
         <div className="applications-detail-pane">
           {selectedApplication ? (
+            isDetailPage ? (
             <section className="profile-card">
               <div className="profile-card-header">
                 <div>
@@ -648,13 +672,12 @@ export function ApplicationTracker() {
                 </button>
               </form>
 
-              <section className="result-list application-materials">
-                <div className="profile-card-header">
-                  <div>
-                    <h2>Application Materials</h2>
-                    <p className="metadata">Attachments stay pinned to the exact file version shown.</p>
-                  </div>
-                </div>
+              <div className="application-editor-sections">
+                <CollapsibleApplicationSection
+                  title="Application Materials"
+                  description={`${selectedApplication.documents.length} attached document${selectedApplication.documents.length === 1 ? "" : "s"}`}
+                >
+                <p className="metadata">Attachments stay pinned to the exact file version shown.</p>
                 <form className="inline-form" onSubmit={attachDocument}>
                   <label>
                     Document Version
@@ -693,7 +716,13 @@ export function ApplicationTracker() {
                     {selectedApplication.documents.map((attachment) => (
                       <article className="application-document-row" key={attachment.id}>
                         <div>
-                          <strong>{attachment.document_title}</strong>
+                          <button
+                            type="button"
+                            className="document-preview-link"
+                            onClick={() => void openAttachment(attachment.id)}
+                          >
+                            {attachment.document_title}
+                          </button>
                           <span className="metadata">
                             {labelize(attachment.purpose)} | Version {attachment.version_number} | {attachment.file_name}
                           </span>
@@ -721,11 +750,12 @@ export function ApplicationTracker() {
                 ) : (
                   <p className="empty">No submitted documents attached.</p>
                 )}
-              </section>
+                </CollapsibleApplicationSection>
 
-              <div className="detail-grid">
-                <section className="result-list">
-                  <h2>Tasks And Reminders</h2>
+                <CollapsibleApplicationSection
+                  title="Tasks And Reminders"
+                  description={`${selectedApplication.tasks.length} task${selectedApplication.tasks.length === 1 ? "" : "s"}`}
+                >
                   <form className="stack-form compact-form" onSubmit={addTask}>
                     <input
                       value={newTaskTitle}
@@ -869,10 +899,12 @@ export function ApplicationTracker() {
                   ) : (
                     <p className="empty">No tasks match these filters.</p>
                   )}
-                </section>
+                </CollapsibleApplicationSection>
 
-                <section className="result-list">
-                  <h2>Notes</h2>
+                <CollapsibleApplicationSection
+                  title="Notes"
+                  description={`${selectedApplication.notes_list.length} note${selectedApplication.notes_list.length === 1 ? "" : "s"}`}
+                >
                   <form className="stack-form compact-form" onSubmit={addNote}>
                     <textarea
                       value={newNote}
@@ -893,7 +925,7 @@ export function ApplicationTracker() {
                   ) : (
                     <p className="empty">No timeline notes yet.</p>
                   )}
-                </section>
+                </CollapsibleApplicationSection>
               </div>
 
               <section className="result-list">
@@ -917,15 +949,123 @@ export function ApplicationTracker() {
                 )}
               </section>
             </section>
+            ) : (
+              <ApplicationReadOnlyPreview
+                application={selectedApplication}
+                onOpenDocument={(attachmentId) => void openAttachment(attachmentId)}
+              />
+            )
           ) : (
             <section className="profile-card">
               <h2>Application Detail</h2>
-              <p className="empty">Select an application to view status, notes, tasks, reminders, and timeline.</p>
+              <p className="empty">
+                {isDetailPage
+                  ? "Loading application details."
+                  : "Select an application to view its summary and attached documents."}
+              </p>
             </section>
           )}
         </div>
       </section>
     </div>
+  );
+}
+
+function ApplicationReadOnlyPreview({
+  application,
+  onOpenDocument,
+}: {
+  application: ApplicationDetail;
+  onOpenDocument: (attachmentId: number) => void;
+}) {
+  return (
+    <section className="profile-card application-readonly-preview">
+      <div className="profile-card-header">
+        <div>
+          <h2>{applicationTitle(application)}</h2>
+          <p className="metadata">
+            {applicationCompany(application)} | Application ID: {application.id}
+          </p>
+        </div>
+        <a className="button-link" href={`/applications/${application.id}`}>
+          View / Edit
+        </a>
+      </div>
+
+      <dl className="application-summary-grid">
+        <div><dt>Status</dt><dd>{labelize(application.status)}</dd></div>
+        <div><dt>Stage</dt><dd>{application.stage ? labelize(application.stage) : "No stage"}</dd></div>
+        <div><dt>Priority</dt><dd>{labelize(application.priority)}</dd></div>
+        <div><dt>Match Score</dt><dd>{application.match_score === null ? "N/A" : `${application.match_score}/10`}</dd></div>
+        <div><dt>Applied</dt><dd>{application.applied_at ? new Date(application.applied_at).toLocaleDateString() : "Not recorded"}</dd></div>
+        <div><dt>Next Action</dt><dd>{application.next_action_label || "Not set"}</dd></div>
+      </dl>
+
+      <section className="application-preview-section">
+        <h3>Notes</h3>
+        <p>{application.notes || "No application notes."}</p>
+      </section>
+
+      <section className="application-preview-section">
+        <h3>Attached Documents</h3>
+        {application.documents.length ? (
+          <div className="application-document-list">
+            {application.documents.map((attachment) => (
+              <button
+                type="button"
+                className="application-document-row application-document-open"
+                key={attachment.id}
+                onClick={() => onOpenDocument(attachment.id)}
+              >
+                <span>
+                  <strong>{attachment.document_title}</strong>
+                  <span className="metadata">
+                    {labelize(attachment.purpose)} | Version {attachment.version_number} | {attachment.file_name}
+                  </span>
+                </span>
+                <span className="document-open-label">View</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="empty">No submitted documents attached.</p>
+        )}
+      </section>
+
+      <div className="application-preview-counts metadata">
+        {application.tasks.length} task{application.tasks.length === 1 ? "" : "s"} | {application.notes_list.length} timeline note{application.notes_list.length === 1 ? "" : "s"}
+      </div>
+    </section>
+  );
+}
+
+function CollapsibleApplicationSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <section className={`result-list application-editor-collapsible${expanded ? " expanded" : ""}`}>
+      <button
+        type="button"
+        className="application-editor-toggle"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <span>
+          <strong>{title}</strong>
+          <span className="metadata">{description}</span>
+        </span>
+        <span>{expanded ? "Hide" : "Show"}</span>
+      </button>
+      {expanded ? <div className="application-editor-collapsible-content">{children}</div> : null}
+    </section>
   );
 }
 

@@ -205,7 +205,7 @@ function AuthenticatedInterviewManager() {
       {error ? <p className="error">{error}</p> : null}
       {message ? <p className="success">{message}</p> : null}
       <form className="interview-create-form" onSubmit={handleCreate}>
-        <div className="section-heading"><div><h2>Schedule Interview</h2><p className="metadata">Link the interview to an existing application.</p></div></div>
+        <div className="section-heading"><div><h2>Add Interview Preparation</h2><p className="metadata">Link the interview to an existing application.</p></div></div>
         <div className="form-grid">
           <label>Application<select value={applicationId} onChange={(event) => setApplicationId(event.target.value)} required><option value="">Select application</option>{activeApplications.map((application) => <option key={application.id} value={application.id}>{jobLabel(application)}</option>)}</select></label>
           <label>Type<select value={interviewType} onChange={(event) => setInterviewType(event.target.value as InterviewType)}>{interviewTypes.map((value) => <option key={value} value={value}>{labelize(value)}</option>)}</select></label>
@@ -215,12 +215,12 @@ function AuthenticatedInterviewManager() {
           <label>Location or meeting URL<input value={location} onChange={(event) => setLocation(event.target.value)} /></label>
         </div>
         <label>Private notes<textarea rows={3} value={privateNotes} onChange={(event) => setPrivateNotes(event.target.value)} /></label>
-        <button disabled={busy || !applicationId}>Schedule Interview</button>
+        <button disabled={busy || !applicationId}>Add Interview Preparation</button>
       </form>
 
       <div className="interviews-workspace">
         <section className="interviews-list-card">
-          <div className="section-heading"><h2>Interview Schedule</h2><button type="button" className="secondary" onClick={() => void loadWorkspace()}>Refresh</button></div>
+          <div className="section-heading"><h2>Interviews</h2><button type="button" className="secondary" onClick={() => void loadWorkspace()}>Refresh</button></div>
           <div className="application-list">
             {interviews.map((interview) => (
               <button key={interview.id} type="button" className={`application-row ${selected?.id === interview.id ? "selected" : ""}`} onClick={() => void openInterview(interview.id)}>

@@ -6,6 +6,8 @@ dist/
 build/
 node_modules/
 .next/
+playwright-report/
+test-results/
 .env
 server/config.ini
 server/*.local.ini

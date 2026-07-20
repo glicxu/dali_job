@@ -103,7 +103,10 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
   if (!getAuthToken()) {
     return <ApplicationTrackerPreview />;
   }
+  return <AuthenticatedApplicationTracker applicationId={applicationId} />;
+}
 
+function AuthenticatedApplicationTracker({ applicationId }: ApplicationTrackerProps) {
   const [applications, setApplications] = useState<TrackedApplication[]>([]);
   const [savedJobs, setSavedJobs] = useState<StoredJob[]>([]);
   const [documents, setDocuments] = useState<StoredDocument[]>([]);
@@ -180,6 +183,8 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
 
   useEffect(() => {
     void loadApplications();
+    // The filter values are the intended refresh boundary; the loader is local to this render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, stageFilter, showArchived, applicationId]);
 
   useEffect(() => {
@@ -187,6 +192,8 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
     openedQueryApplication.current = true;
     const applicationId = Number(new URLSearchParams(window.location.search).get("application_id"));
     if (Number.isInteger(applicationId) && applicationId > 0) void openApplication(applicationId);
+    // Query navigation is handled once after the list is ready.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDetailPage, isLoading]);
 
   function syncEditor(application: ApplicationDetail) {

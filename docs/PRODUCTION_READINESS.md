@@ -1,6 +1,6 @@
 # DaliJob Production Readiness Tracker
 
-Status reviewed on 2026-07-17 against source and deployed commit `95cca3f`.
+Production was reviewed on 2026-07-17 against deployed application commit `95cca3f`. On 2026-07-20, a versioned worktree candidate based on `f725192` was deployed to us3 after clean host-side verification. Because that candidate contains uncommitted implementation changes, it is identified by its deployment marker and artifact SHA-256 rather than represented as a clean Git commit. This runtime validation does not change the private-alpha or public-release decision below.
 
 ## Purpose
 
@@ -20,14 +20,17 @@ An implemented feature is not automatically production-ready. A gate passes only
 
 | Release level | Decision | Reason |
 | --- | --- | --- |
-| Internal testing on production infrastructure | **Ready** | The current application, database, TLS routing, and provider configuration are healthy. |
-| Controlled private alpha | **Conditional** | Restrict enrollment to known users and close the SSRF, backup/recovery, persistent logging, and release-reproducibility gaps first. |
+| Internal testing on production infrastructure | **Conditional** | Runtime health is verified, but public registration must be disabled or restricted to an explicit allowlist before continued testing on an internet-reachable host. |
+| Controlled private alpha | **Not ready** | SEC-001, AUTH-001, DR-001, OPS-001, OPS-002, and REL-001 must all pass before enrollment. |
 | Public production release | **Not ready** | Security, identity recovery, privacy rights, monitoring, backup/restore, and automated release gates remain incomplete. |
 
 ### Decision rule
 
-- A private alpha requires every item marked **Private alpha** in the `Required for` column to be `Passed`.
-- A public release requires every `P0` and `P1` item to be `Passed`, unless a written, dated exception is approved by the product and operations owners.
+- Gap rows in the Prioritized Gap Tracker are authoritative; the gate table is a roll-up and cannot weaken a gap's `Required for` value.
+- Internet-reachable internal testing requires registration to be disabled or restricted to an explicit allowlist, even before private alpha.
+- A private alpha requires every gap marked **Private alpha** in the `Required for` column to be `Passed`.
+- A public release requires every `P0` and `P1` gap to be `Passed`, unless a written, dated exception is approved by named product and operations owners.
+- An unassigned owner or pending approval is not an approved exception.
 - `Deferred` is not equivalent to `Passed`.
 
 ## Status Vocabulary
@@ -41,7 +44,9 @@ An implemented feature is not automatically production-ready. A gate passes only
 | `Not started` | No implementation evidence exists. |
 | `Deferred` | Deliberately excluded from the current release; rationale and approver are required. |
 
-## Verified Production Baseline
+## Recorded Production Baseline
+
+These are point-in-time observations from 2026-07-17, not evidence for a later release candidate. The review summary is recorded below, but a durable evidence bundle was not linked. Future release records must link retained CI output, command output, configuration readback, or monitoring evidence as applicable.
 
 | Check | Status | Evidence from 2026-07-17 |
 | --- | --- | --- |
@@ -56,20 +61,120 @@ An implemented feature is not automatically production-ready. A gate passes only
 | Python environment consistency | `Passed` | `pip check` reported no broken requirements. This does not replace vulnerability scanning or dependency locking. |
 | Real route traffic | `Passed` | Apache access logs showed browser loads of `/profile`, `/analytics`, `/documents`, and `/applications` after deployment. |
 
+## Latest Deployment Readback (2026-07-20)
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Candidate provenance | `Passed with limitation` | Marker `f725192-wt-20260720T164600Z`; artifact SHA-256 `d0ddb359a99431523055a1e669480ce37c818cffa2bb2c934d54c10c781038ad`. The candidate is based on `f725192` but is not a clean Git commit. |
+| Clean us3 build and tests | `Passed` | Fresh Python environment: `pip check`, linear migration history, and `138 passed`. Fresh npm install: lint, 3 unit tests, Next.js production build, and production dependency audit with zero known vulnerabilities. |
+| Database migration/readiness | `Passed` | Alembic upgrade completed as a no-op; `/api/v1/health/db` reported current and expected revision `20260717_0024` with `database_ready=true`. |
+| Runtime and public routing | `Passed` | API/client listen on `127.0.0.1:5020` and `127.0.0.1:3020`; public `/`, `/auth`, `/jobs`, `/match`, `/materials`, and both health endpoints returned `200`. `https://dalifin.com/job_match` returned `302` to the public application and then `200`. |
+| New API surface | `Passed` | Live OpenAPI contains `/api/v1/application-materials/versions/{version_id}/render`. |
+| Supervision recovery | `Passed after operational correction` | The long-running nanny had stale in-memory configuration (`managed_count=16`). It was restarted, loaded all 18 services, detected the stopped DaliJob API, and restored it. |
+| Rollback readiness | `Passed` | Complete prior runtime tree retained at `/home/dali-op/dali/dali_job_previous_95cca3f_20260720T164800Z`; no database downgrade is required because the schema revision did not change. |
+
+This is deployment readback, not a durable evidence bundle and not approval of the remaining release gaps.
+
 ## Readiness Gate Summary
 
 | Gate | Area | Status | Required for | Blocking gap IDs |
 | --- | --- | --- | --- | --- |
 | G-01 | Live runtime and database | `Passed` | Private alpha, Public | None |
 | G-02 | Network-fetch safety | `Blocked` | Private alpha, Public | SEC-001 |
-| G-03 | Identity and session safety | `Partial` | Private alpha, Public | AUTH-001, AUTH-002 |
+| G-03a | Authentication and session safety | `Blocked` | Private alpha, Public | AUTH-001 |
+| G-03b | Identity verification and recovery | `Blocked` | Public | AUTH-002 |
 | G-04 | Data backup and recovery | `Blocked` | Private alpha, Public | DR-001 |
 | G-05 | Observability and supervision | `Blocked` | Private alpha, Public | OPS-001, OPS-002 |
-| G-06 | Reproducible CI and release | `Blocked` | Private alpha, Public | REL-001, QA-001 |
+| G-06a | Reproducible CI and release | `Partial` | Private alpha, Public | REL-001 |
+| G-06b | Browser end-to-end release tests | `Partial` | Public | QA-001 |
 | G-07 | Sensitive-file handling | `Partial` | Public | FILE-001 |
 | G-08 | Privacy and user data rights | `Blocked` | Public | GOV-001 |
 | G-09 | Browser security policy | `Partial` | Public | WEB-001 |
 | G-10 | Provider cost controls | `Partial` | Public or multi-instance | OPS-003 |
+
+## Readiness Closure Plan
+
+This plan closes gates in dependency order. It does not add email, calendar, shared identity, collaboration, or additional provider work to the release scope.
+
+### Phase 0 - Contain the current internet-reachable deployment
+
+**Goal:** Make continued internal testing acceptable while longer-lived controls are built.
+
+- [ ] Disable public self-registration or restrict enrollment to an explicit server-side allowlist.
+- [ ] Name accountable product, backend, platform, SRE/DBA, and incident-response owners.
+- [ ] Record the on-call destination and the durable location for release evidence.
+- [ ] Commit the currently deployed worktree changes, reconcile them with `origin/main`, and replace the worktree deployment with an artifact tied to a clean commit.
+- [ ] Record the enrollment decision and responsible approver in the Decision Log.
+
+**Exit criterion:** The live host is no longer accepting uncontrolled enrollment, release provenance is unambiguous, and operational ownership is recorded. Until then, the deployment remains conditional internal testing only.
+
+### Phase 1 - Establish the repeatable release foundation
+
+**Goal:** Ensure every later security or operational change can be tested, deployed, evidenced, and rolled back consistently.
+
+| Order | Gap | Deliverable | Required evidence |
+| --- | --- | --- | --- |
+| 1.1 | REL-001 | Lock Python dependencies; generate a release manifest; build a versioned artifact; automate preflight, deployment, readback, and rollback retention. | First successful hosted CI run, dependency-lock digest, artifact digest, manifest, deployment log, and production readback. |
+| 1.2 | DEP-001 subset | Add Python/Node vulnerability scanning, secret scanning, and the agreed severity policy to CI. | Retained clean-run output and documented exception process. |
+| 1.3 | OPS-001 foundation | Persist restricted, rotated API/client logs and propagate request IDs across the request path. | Production log samples with sensitive values redacted and a verified cross-service request trace. |
+
+**Exit criterion:** A clean commit produces one identifiable artifact through hosted CI, the artifact can be promoted with retained evidence, and production activity can be traced without relying on `/tmp` logs.
+
+### Phase 2 - Close the private-alpha safety gates
+
+**Goal:** Satisfy every gap whose `Required for` value is **Private alpha**.
+
+Work can proceed concurrently within this phase, but all five workstreams must finish before enrollment:
+
+| Workstream | Gaps | Implementation focus | Completion proof |
+| --- | --- | --- | --- |
+| Network boundary | SEC-001 | Validate every redirect and browser request destination; bind scheme, address, port, size, subrequest, and time limits. | Adversarial unit/integration tests plus a non-destructive deployed smoke test. |
+| Enrollment and sessions | AUTH-001 | Add login/registration throttling, enforce invite/allowlist enrollment, shorten and protect sessions, and support revocation. | Abuse, expiry, revocation, inactive-user, and session-boundary tests; production configuration readback. |
+| Data recovery | DR-001 | Define RPO/RTO; back up MySQL and documents outside the us3 failure domain; monitor backup age. | Successful isolated restore drill with revision, object counts, elapsed time, and operator recorded. |
+| Monitoring and supervision | OPS-001, OPS-002 | Add actionable alerts and health-based supervision with backoff, limits, and durable logs. | Test alert reaches the named on-call destination; API/client termination recovery and migration-not-ready behavior are verified. |
+| Release completion | REL-001 | Retain manifests, CI output, readback, rollback proof, and the completed checklist for the candidate. | A durable evidence bundle linked from the Verification Log. |
+
+**Exit criterion:** SEC-001, AUTH-001, DR-001, OPS-001, OPS-002, and REL-001 are all `Passed`, every checkbox in their acceptance criteria has linked evidence, and no private-alpha exception is implicit or ownerless.
+
+### Phase 3 - Run the private-alpha release drill
+
+**Goal:** Prove the controls together on one clean candidate before inviting users.
+
+- [ ] Run hosted CI from a clean commit and retain all required job results.
+- [ ] Verify migration history and both a fresh-schema and previous-revision upgrade path.
+- [ ] Deploy the versioned artifact using the scripted workflow.
+- [ ] Run localhost health, public routing, authenticated application-flow, and minimal browser smoke tests.
+- [ ] Exercise API/client recovery and verify alert delivery.
+- [ ] Confirm current database and document backups, then verify the retained rollback artifact is schema-compatible.
+- [ ] Complete the Release Verification Checklist and add one fully evidenced Verification Log row.
+- [ ] Obtain an explicit, dated private-alpha decision from the named product and operations owners.
+
+**Exit criterion:** One candidate satisfies the complete private-alpha checklist with current evidence and explicit approval. Evidence from different candidates must not be combined to manufacture a pass.
+
+### Phase 4 - Close public-release gates
+
+**Goal:** Add the user-protection and scale controls required before public enrollment.
+
+Recommended order:
+
+1. Implement account verification and recovery (AUTH-002).
+2. Implement export, deletion, retention, purge, privacy, and AI disclosures together with the audit model (GOV-001 and AUD-001).
+3. Harden file validation, quarantine, scanning/isolation, and storage permissions (FILE-001).
+4. Enforce CSP, Referrer Policy, Permissions Policy, restrictive production CORS, and header tests (WEB-001).
+5. Complete critical UC-01-UC-05 browser journeys, cross-user isolation, and failure-path coverage (QA-001).
+6. Add shared provider limiting or explicitly retain the single-instance constraint; add budgets and quota alerts (OPS-003).
+7. Complete static security checks and retain an SBOM for the release (DEP-001).
+8. Run the full release drill again and obtain an explicit public-release decision.
+
+**Exit criterion:** Every P0 and P1 gap is `Passed`, or a named product and operations owner has approved a written, dated exception. All public promises and disclosures match implemented behavior.
+
+### Status and evidence rules
+
+- Move a gap to `In progress` only when an owner and active implementation are recorded.
+- Move a gap to `Passed` only when every acceptance checkbox is complete and its retained evidence is linked.
+- Update the gate summary, gap tracker, verification checklist, Verification Log, and Decision Log in the same change that alters a release decision.
+- Re-run affected acceptance tests after architecture, dependency, deployment, or production-configuration changes.
+- Do not count deferred roadmap items as readiness work or use them to delay closure of the listed gates.
 
 ## Prioritized Gap Tracker
 
@@ -81,11 +186,11 @@ An implemented feature is not automatically production-ready. A gate passes only
 | DR-001 | P0 | Data durability | `Blocked` | SRE/DBA | Private alpha |
 | OPS-001 | P0 | Observability | `Blocked` | SRE | Private alpha |
 | OPS-002 | P0 | Runtime supervision | `Partial` | SRE | Private alpha |
-| REL-001 | P0 | CI/release | `Blocked` | Platform | Private alpha |
+| REL-001 | P0 | CI/release | `Partial` | Platform | Private alpha |
 | GOV-001 | P0 | Privacy/data rights | `Blocked` | Product + Backend | Public |
 | FILE-001 | P1 | File security | `Partial` | Backend + SRE | Public |
 | WEB-001 | P1 | Browser security | `Partial` | Frontend + SRE | Public |
-| QA-001 | P1 | End-to-end quality | `Blocked` | QA/Engineering | Public |
+| QA-001 | P1 | End-to-end quality | `Partial` | QA/Engineering | Public |
 | OPS-003 | P1 | Provider controls | `Partial` | Backend + SRE | Public or multi-instance |
 | AUD-001 | P1 | Security auditability | `Partial` | Backend + SRE | Public |
 | DEP-001 | P1 | Supply chain | `Partial` | Platform | Public |
@@ -170,17 +275,19 @@ An implemented feature is not automatically production-ready. A gate passes only
 
 ### REL-001 - Make CI and releases reproducible
 
-**Finding:** `requirements.txt` depends on editable `../DaliCommonLib`, while GitHub Actions checks out only DaliJob. Python packages are otherwise unpinned. Production currently uses the clean but separately deployed `DaliCommonLib` commit `4902676`, which is not recorded in the DaliJob release marker. `npm run lint` prompts for initial configuration and is not CI-safe. The OpenAPI job rewrites the contract but does not fail on a diff.
+**Finding:** CI now explicitly checks out pinned `DaliCommonLib` commit `4902676`, runs separate server lint/tests, MySQL migration paths, client lint/unit/browser tests, build, and fails on a stale OpenAPI contract. The repository must configure `DALI_COMMON_LIB_TOKEN` and retain a successful hosted run. Python runtime packages remain unlocked, and versioned release artifacts, manifests, rollback evidence, and production readback are still missing.
 
 **Acceptance criteria:**
 
-- [ ] Package or explicitly check out and pin `DaliCommonLib` in CI and the release manifest.
+- [x] Package or explicitly check out and pin `DaliCommonLib` in CI.
+- [ ] Record the pinned `DaliCommonLib` revision in the release manifest.
 - [ ] Lock Python runtime and test dependencies with hashes or an equivalent reproducible mechanism.
-- [ ] Make server lint, server tests, migration validation, client lint, client tests, client build, and contract verification noninteractive CI jobs.
-- [ ] Make OpenAPI generation fail when the checked-in contract is stale.
+- [x] Make server lint, server tests, migration validation, client lint, client tests, client build, and contract verification noninteractive CI jobs.
+- [x] Make OpenAPI generation fail when the checked-in contract is stale.
 - [ ] Produce a release manifest containing DaliJob commit, DaliCommonLib commit/version, dependency-lock digest, client build ID, and expected Alembic head.
 - [ ] Deploy from a versioned artifact or scripted release workflow with preflight checks and production readback.
 - [ ] Keep and verify the previous API/client artifacts plus a database-compatible rollback or roll-forward plan.
+- [ ] Retain a release evidence bundle containing CI links/output, deployment logs, production readback, and the completed verification checklist.
 
 ### GOV-001 - Enforce privacy, export, deletion, and AI disclosure
 
@@ -223,11 +330,11 @@ An implemented feature is not automatically production-ready. A gate passes only
 
 ### QA-001 - Add critical browser-level end-to-end release tests
 
-**Finding:** Server/API coverage is strong and the client builds, but the client has no automated test script and the implementation plan still records browser E2E coverage as missing.
+**Finding:** Server/API coverage is strong, client unit tests now cover authentication behavior, and a Playwright smoke test covers registration, authenticated navigation, and logout. The complete resume, job, matching, application, material, interview, analytics, isolation, and failure-path browser suite remains incomplete.
 
 **Acceptance criteria:**
 
-- [ ] Automate registration/login for an isolated test environment.
+- [x] Automate registration/login for an isolated test environment.
 - [ ] Cover resume upload/profile creation, manual job creation, URL import, matching, application creation, material attachment, interview workflow, analytics, logout, and cross-user isolation.
 - [ ] Cover provider unavailable, invalid file, stale operation, migration-not-ready, and authorization failure paths.
 - [ ] Run a minimal smoke subset after deployment and retain results with the release record.
@@ -286,6 +393,10 @@ The following remain product-roadmap work unless the release scope promises them
 
 Run this checklist for every production candidate. Never print secret values into the release record.
 
+- [ ] Every gap required for the intended release level is `Passed`, or has a written, dated exception approved by named product and operations owners.
+- [ ] Enrollment mode matches the release level; registration is disabled or explicitly allowlisted for internet-reachable internal testing and private alpha.
+- [ ] A durable evidence-bundle location is recorded in the Verification Log.
+
 ### Source and CI
 
 - [ ] Worktree is clean and the intended commit matches `origin/main`.
@@ -320,17 +431,18 @@ Run this checklist for every production candidate. Never print secret values int
 
 Add one row per production release or formal readiness review.
 
-| Date | DaliJob commit | Database revision | Decision | Verified by | Evidence/notes |
-| --- | --- | --- | --- | --- | --- |
-| 2026-07-17 | `95cca3f` | `20260717_0024` | Internal ready; private alpha conditional; public not ready | Codex review | 136 server tests passed; production client build passed; API/DB healthy; TLS and providers ready; blockers recorded above. |
+| Date | Tracker commit | Application commit | DaliCommonLib commit | Database revision | Decision | Verified by | Evidence/notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-07-17 | `f725192` | `95cca3f` | `4902676` | `20260717_0024` | Internal conditional; private alpha not ready; public not ready | Codex review; accountable human not recorded | 136 server tests passed; production client build passed; API/DB healthy; TLS and providers ready. Durable evidence bundle not linked; do not reuse this row for a later candidate. |
+| 2026-07-20 | `f725192` | `f725192-wt-20260720T164600Z` | `4902676` | `20260717_0024` | Deployed for internal validation; private alpha not ready; public not ready | Codex deployment verification; accountable human not recorded | Artifact SHA-256 `d0ddb359a99431523055a1e669480ce37c818cffa2bb2c934d54c10c781038ad`; clean us3 build/tests passed; public health and route smoke passed; nanny recovery corrected and verified; rollback tree retained. Candidate contains uncommitted changes and no durable evidence-bundle location is recorded. |
 
 ## Decision Log
 
-Use this section for approved exceptions or changes to release criteria.
+Use this section for release decisions, approved exceptions, or changes to release criteria. A row marked as not approved records the current risk decision but does not authorize a release or exception.
 
 | Date | Decision | Rationale | Owner/approver | Review date |
 | --- | --- | --- | --- | --- |
-| 2026-07-17 | Treat current us3 deployment as internal testing, not public-production approval. | Live runtime is healthy, but P0 security, recovery, observability, release, and data-governance gates remain open. | Pending assignment | Before private-alpha enrollment |
+| 2026-07-17 | Treat current us3 deployment as conditional internal testing, not private-alpha or public-production approval. Disable or allowlist registration before continued internet-reachable testing. | Live runtime is healthy, but registration is public and P0 security, recovery, observability, release, and data-governance gates remain open. | Not approved; named product and operations owners required | Before further internet-reachable testing |
 
 ## Maintenance Rules
 

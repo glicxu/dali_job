@@ -20,6 +20,7 @@ from app.modules.materials.schemas import (
     TailoredResumeOutput,
 )
 from app.modules.materials.service import enforce_material_evidence
+from app.modules.materials.rendering import render_material
 
 
 def create_test_client(handler=None) -> tuple[TestClient, sessionmaker]:
@@ -226,3 +227,40 @@ def test_provider_failure_preserves_pending_material_and_application() -> None:
     assert material["versions"][0]["content_data"] is None
     assert material["versions"][0]["source_document_version_id"] == resume["latest_version"]["id"]
     assert client.get(f"/api/v1/applications/{application_id}").status_code == 200
+
+
+def test_completed_material_renders_to_pdf_and_docx() -> None:
+    content = TailoredResumeOutput(
+        headline=EvidenceBackedText(text="Backend Engineer", source_evidence="Backend Engineer"),
+        skills=[EvidenceBackedText(text="Python", source_evidence="Python")],
+    ).model_dump(mode="json")
+
+    pdf = render_material("tailored_resume", content, "pdf")
+    docx = render_material("tailored_resume", content, "docx")
+
+    assert pdf.startswith(b"%PDF")
+    assert docx.startswith(b"PK")
+
+
+def test_rendered_material_is_saved_and_attached_to_application() -> None:
+    client, _ = create_test_client(material_handler)
+    application_id = create_application(client)
+    resume = upload_resume(client, "Backend Engineer\nBuilt Python APIs.\nPython")
+    client.post(
+        "/api/v1/operations/tailored-resume",
+        json={"application_id": application_id, "source_document_version_id": resume["latest_version"]["id"]},
+    )
+    material = client.get("/api/v1/application-materials").json()["materials"][0]
+    version_id = material["versions"][0]["id"]
+
+    rendered = client.post(
+        f"/api/v1/application-materials/versions/{version_id}/render",
+        json={"format": "pdf", "attach_to_application": True},
+    )
+
+    assert rendered.status_code == 201, rendered.text
+    payload = rendered.json()
+    assert payload["content_type"] == "application/pdf"
+    assert payload["attachment_id"] is not None
+    attachments = client.get(f"/api/v1/applications/{application_id}/documents").json()
+    assert any(item["document_version_id"] == payload["document_version_id"] for item in attachments)

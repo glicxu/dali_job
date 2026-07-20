@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { ApplicationTracker } from "../../../components/ApplicationTracker";
 
 type ApplicationDetailPageProps = {
@@ -10,9 +12,9 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
 
   return (
     <section className="panel applications-page">
-      <a className="back-link" href="/applications">
+      <Link className="back-link" href="/applications">
         <span aria-hidden="true">&larr;</span> Back to Applications
-      </a>
+      </Link>
       <div>
         <p className="eyebrow">Application Tracking</p>
         <h1>Application Details</h1>

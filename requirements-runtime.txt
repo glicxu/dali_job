@@ -1,0 +1,15 @@
+alembic
+fastapi
+openai
+pydantic
+python-docx
+playwright
+PyJWT
+pymysql
+pypdf
+reportlab
+pytest
+python-multipart
+python-dotenv
+sqlalchemy
+uvicorn[standard]

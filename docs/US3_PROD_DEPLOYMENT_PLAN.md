@@ -12,7 +12,7 @@ Keep this legacy/convenience entry point as a redirect:
 https://dalifin.com/job_match -> https://jobmatch.dalifin.com
 ```
 
-This is a plan only. Do not change us3 until the repo/config diffs are reviewed and the target runtime ports are confirmed on the host.
+This document began as the deployment plan. The Worklog records completed us3 changes and verification; future changes must still follow the preflight, rollback, and evidence requirements here.
 
 ## Goals
 
@@ -443,6 +443,11 @@ Database rollback:
 - Add real Apify credential under `secret.key_store` key `apify` or as `APIFY_API_TOKEN` in `/data/dali/prod/config/dali_job.env` before using Apify-backed job search in production. OpenAI uses `secret.key_store` key `openai` with `OPENAI_API_KEY` as local/dev fallback.
 
 ## Worklog
+
+- 2026-07-20: Deployed worktree candidate `f725192-wt-20260720T164600Z` (artifact SHA-256 `d0ddb359a99431523055a1e669480ce37c818cffa2bb2c934d54c10c781038ad`) using a side-by-side build and atomic runtime-tree swap. The complete prior runtime is retained at `/home/dali-op/dali/dali_job_previous_95cca3f_20260720T164800Z`.
+- 2026-07-20: Clean us3 candidate verification passed: `pip check`, linear Alembic head `20260717_0024`, 138 server tests, clean `npm ci`, client lint, 3 unit tests, Next.js production build, and zero production npm vulnerabilities. The production Alembic upgrade was a no-op and database health remained ready at `20260717_0024`.
+- 2026-07-20: Public HTTPS smoke returned `200` for `/`, `/auth`, `/jobs`, `/match`, `/materials`, `/api/v1/health`, and `/api/v1/health/db`. The root-domain `https://dalifin.com/job_match` redirect returned `302` to `https://jobmatch.dalifin.com/` and then `200`. Live OpenAPI includes the material-version render endpoint.
+- 2026-07-20: Recovery testing exposed a nanny process that had been running since 2026-05-17 with the pre-DaliJob 16-service array still loaded. Restarted the nanny to load `managed_count=18`; it then detected a deliberately stopped DaliJob API and restored it successfully while the client remained available.
 
 - 2026-07-08: Started deployment preparation. Local `dali_job` repo has pending deployment/config/doc changes; `DaliConfigFile` is on `master` with one pre-existing untracked `win_config/www_app_server_local.ini` file that is unrelated and will not be touched.
 - 2026-07-08: Added local DaliConfigFile deployment artifacts: `prod/config/app_dali_job.ini`, `prod/bin/run_dali_job_api.sh`, `prod/bin/run_dali_job_client.sh`, `web/apache2/jobmatch_dalifin.conf`, root-domain `/job_match` redirect, and nanny entries for `dali_job_api`/`dali_job_client` with port checks on `5020`/`3020`.

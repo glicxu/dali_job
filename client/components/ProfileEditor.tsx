@@ -106,7 +106,10 @@ export function ProfileEditor() {
   if (!getAuthToken()) {
     return <ProfileEditorPreview />;
   }
+  return <AuthenticatedProfileEditor />;
+}
 
+function AuthenticatedProfileEditor() {
   const [resumeProfiles, setResumeProfiles] = useState<ResumeProfile[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [title, setTitle] = useState("Master Resume");

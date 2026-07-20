@@ -6,38 +6,135 @@ on:
     branches:
       - main
 
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+  DALI_COMMON_LIB_REF: "4902676ece7dde023562f35272054146fbc28e74"
+
 jobs:
+  server-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: glicxu/DaliCommonLib
+          ref: ${{ env.DALI_COMMON_LIB_REF }}
+          token: ${{ secrets.DALI_COMMON_LIB_TOKEN }}
+          path: DaliCommonLib
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-runtime.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ./DaliCommonLib -r requirements-runtime.txt ruff
+      - name: Lint server and scripts
+        run: ruff check server scripts
+
   server-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: glicxu/DaliCommonLib
+          ref: ${{ env.DALI_COMMON_LIB_REF }}
+          token: ${{ secrets.DALI_COMMON_LIB_TOKEN }}
+          path: DaliCommonLib
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Install server dependencies
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-runtime.txt
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          python -m pip install -e ./DaliCommonLib -r requirements-runtime.txt
       - name: Run server tests
         working-directory: server
         run: pytest
 
   server-migrations:
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: dalijob-ci-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -pdalijob-ci-password"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: glicxu/DaliCommonLib
+          ref: ${{ env.DALI_COMMON_LIB_REF }}
+          token: ${{ secrets.DALI_COMMON_LIB_TOKEN }}
+          path: DaliCommonLib
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Install server dependencies
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-runtime.txt
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-      - name: Validate Alembic migration history
-        working-directory: server
+          python -m pip install -e ./DaliCommonLib -r requirements-runtime.txt
+      - name: Validate migration graph
+        run: python scripts/verify_migration_history.py --expected-head 20260717_0024
+      - name: Upgrade a fresh database
         run: |
-          alembic heads
-          alembic history --verbose
+          python scripts/create_schema.py --config config/ci-fresh.ini
+          cd server
+          alembic -x config=../config/ci-fresh.ini upgrade head
+          cd ..
+          python scripts/validate_database.py --config config/ci-fresh.ini
+          python scripts/verify_database_revision.py --config config/ci-fresh.ini
+      - name: Upgrade the previous supported revision
+        run: |
+          python scripts/create_schema.py --config config/ci-upgrade.ini
+          cd server
+          alembic -x config=../config/ci-upgrade.ini upgrade 20260715_0023
+          alembic -x config=../config/ci-upgrade.ini upgrade head
+          cd ..
+          python scripts/validate_database.py --config config/ci-upgrade.ini
+          python scripts/verify_database_revision.py --config config/ci-upgrade.ini
+
+  client-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+        working-directory: client
+      - run: npm run lint
+        working-directory: client
+
+  client-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+        working-directory: client
+      - run: npm test
+        working-directory: client
 
   client-build:
     runs-on: ubuntu-latest
@@ -45,24 +142,50 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
-      - name: Install client dependencies
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
         working-directory: client
-        run: npm ci
-      - name: Build client
+      - run: npm run build
         working-directory: client
-        run: npm run build
+
+  browser-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+        working-directory: client
+      - run: npx playwright install --with-deps chromium
+        working-directory: client
+      - run: npm run test:e2e
+        working-directory: client
 
   api-contract:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: glicxu/DaliCommonLib
+          ref: ${{ env.DALI_COMMON_LIB_REF }}
+          token: ${{ secrets.DALI_COMMON_LIB_TOKEN }}
+          path: DaliCommonLib
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Install server dependencies
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-runtime.txt
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-      - name: Export OpenAPI contract
-        run: python scripts/export_openapi.py --output docs/openapi.json
+          python -m pip install -e ./DaliCommonLib -r requirements-runtime.txt
+      - name: Verify OpenAPI contract
+        run: |
+          python scripts/export_openapi.py --output docs/openapi.json
+          git diff --exit-code -- docs/openapi.json

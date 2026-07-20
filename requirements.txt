@@ -1,14 +1,2 @@
 -e ../DaliCommonLib
-alembic
-fastapi
-openai
-pydantic
-playwright
-PyJWT
-pymysql
-pypdf
-pytest
-python-multipart
-python-dotenv
-sqlalchemy
-uvicorn[standard]
+-r requirements-runtime.txt

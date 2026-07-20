@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   ApplicationMaterial, ApplicationMaterialVersion, CoverLetterContent, generateCoverLetter,
   generateTailoredResume, getAuthToken, listApplicationMaterials, listApplications, listDocuments,
-  reviseApplicationMaterial, StoredDocument, TailoredResumeContent, TrackedApplication,
+  renderApplicationMaterial, reviseApplicationMaterial, StoredDocument, TailoredResumeContent, TrackedApplication,
 } from "../lib/api";
 
 type MaterialKind = "tailored_resume" | "cover_letter";
@@ -68,6 +68,8 @@ function AuthenticatedMaterialsManager() {
     }
   }
 
+  // Load the initial workspace once; mutations call load explicitly after completion.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void load(); }, []);
 
   function selectMaterial(material: ApplicationMaterial) {
@@ -111,6 +113,18 @@ function AuthenticatedMaterialsManager() {
     } finally { setBusy(false); }
   }
 
+  async function handleRender(format: "pdf" | "docx") {
+    if (!selectedVersion?.content_data) return;
+    setBusy(true); setError(null); setMessage(null);
+    try {
+      const rendered = await renderApplicationMaterial(selectedVersion.id, format);
+      await load();
+      setMessage(`${rendered.file_name} was rendered and attached to the application.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not render the material.");
+    } finally { setBusy(false); }
+  }
+
   return <div className="materials-manager">
     {error ? <p className="error-banner">{error}</p> : null}{message ? <p className="status-banner">{message}</p> : null}
     <form className="panel-card material-generator" onSubmit={handleGenerate}>
@@ -127,7 +141,7 @@ function AuthenticatedMaterialsManager() {
     <div className="materials-workspace">
       <section className="panel-card materials-list-card"><div className="section-heading"><div><h2>Generated materials</h2><p>{materials.length} application material{materials.length === 1 ? "" : "s"}</p></div></div>{!materials.length ? <p className="empty">No application materials have been generated.</p> : null}<div className="materials-list">{materials.map((material) => <button type="button" key={material.id} className={`material-list-row ${selectedMaterialId === material.id ? "selected" : ""}`} onClick={() => selectMaterial(material)}><strong>{material.material_type === "tailored_resume" ? "Tailored resume" : "Cover letter"}</strong><span>{material.application_label}</span><small>{material.versions.length} version{material.versions.length === 1 ? "" : "s"}</small></button>)}</div></section>
       <section className="panel-card material-detail-pane">{!selectedMaterial || !selectedVersion ? <div className="material-empty"><h2>Review a material</h2><p>Select a generated material to inspect its content, exact source version, and revision history.</p></div> : <>
-        <div className="section-heading"><div><h2>{selectedMaterial.material_type === "tailored_resume" ? "Tailored resume" : "Cover letter"}</h2><p>{selectedMaterial.application_label}</p></div><button type="button" className="secondary-button" onClick={beginRevision} disabled={!selectedVersion.content_data}>Edit revision</button></div>
+        <div className="section-heading"><div><h2>{selectedMaterial.material_type === "tailored_resume" ? "Tailored resume" : "Cover letter"}</h2><p>{selectedMaterial.application_label}</p></div><div className="button-row"><button type="button" className="secondary-button" onClick={() => void handleRender("pdf")} disabled={busy || !selectedVersion.content_data}>Render PDF</button><button type="button" className="secondary-button" onClick={() => void handleRender("docx")} disabled={busy || !selectedVersion.content_data}>Render DOCX</button><button type="button" className="secondary-button" onClick={beginRevision} disabled={!selectedVersion.content_data}>Edit revision</button></div></div>
         <div className="material-provenance"><strong>Version {selectedVersion.version_number}</strong><span>{selectedVersion.version_source === "ai" ? "AI generated" : "User revision"}</span><span>{selectedVersion.source_document_title} v{selectedVersion.source_document_version_number}</span><span>{formatDate(selectedVersion.created_at)}</span></div>
         {selectedVersion.warnings.map((warning) => <p className="warning-banner" key={warning}>{warning}</p>)}
         {editing ? <div className="material-editor"><label>Structured material JSON<textarea value={revisionText} onChange={(event) => setRevisionText(event.target.value)} /></label><div className="button-row"><button type="button" className="secondary-button" onClick={() => setEditing(false)}>Cancel</button><button type="button" onClick={() => void saveRevision()} disabled={busy}>Save revision</button></div></div> : <MaterialContent materialType={selectedMaterial.material_type} content={selectedVersion.content_data} />}

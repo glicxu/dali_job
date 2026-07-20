@@ -413,6 +413,11 @@ export type ApplicationMaterial = {
   application_label: string; created_at: string; updated_at: string; versions: ApplicationMaterialVersion[];
 };
 
+export type MaterialRenderResponse = {
+  material_id: number; material_version_id: number; document_id: number; document_version_id: number;
+  attachment_id: number | null; file_name: string; content_type: string; size_bytes: number;
+};
+
 export type DocumentListResponse = {
   documents: StoredDocument[];
 };
@@ -1194,6 +1199,16 @@ export function reviseApplicationMaterial(
   return requestJson<ApplicationMaterial>(`/application-materials/${materialId}/versions`, {
     method: "POST",
     body: JSON.stringify({ parent_version_id: parentVersionId, content_data: contentData }),
+  });
+}
+
+export function renderApplicationMaterial(
+  materialVersionId: number,
+  format: "pdf" | "docx",
+): Promise<MaterialRenderResponse> {
+  return requestJson<MaterialRenderResponse>(`/application-materials/versions/${materialVersionId}/render`, {
+    method: "POST",
+    body: JSON.stringify({ format, attach_to_application: true }),
   });
 }
 

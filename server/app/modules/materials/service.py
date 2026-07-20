@@ -82,11 +82,14 @@ def _normalized(value: str) -> str:
 def _corpus(value: object) -> list[str]:
     items: list[str] = []
     def collect(current: object) -> None:
-        if isinstance(current, str) and current.strip(): items.append(_normalized(current))
+        if isinstance(current, str) and current.strip():
+            items.append(_normalized(current))
         elif isinstance(current, list):
-            for item in current: collect(item)
+            for item in current:
+                collect(item)
         elif isinstance(current, dict):
-            for item in current.values(): collect(item)
+            for item in current.values():
+                collect(item)
     collect(value)
     return items
 
@@ -110,7 +113,8 @@ def enforce_material_evidence(material_type: str, output: TailoredResumeOutput |
             updates[field] = supported
         headline = output.headline if output.headline and _is_supported(output.headline.source_evidence, resume_evidence) else None
         removed += int(output.headline is not None and headline is None)
-        if removed: warnings.append(f"Removed {removed} tailored resume item(s) whose cited evidence was absent from the selected resume version.")
+        if removed:
+            warnings.append(f"Removed {removed} tailored resume item(s) whose cited evidence was absent from the selected resume version.")
         return output.model_copy(update={**updates, "headline": headline}), warnings
     assert isinstance(output, CoverLetterOutput)
     supported_paragraphs = []

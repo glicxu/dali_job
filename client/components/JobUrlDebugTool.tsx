@@ -7,7 +7,10 @@ export function JobUrlDebugTool() {
   if (!getAuthToken()) {
     return <JobUrlDebugPreview />;
   }
+  return <AuthenticatedJobUrlDebugTool />;
+}
 
+function AuthenticatedJobUrlDebugTool() {
   const [jobUrl, setJobUrl] = useState("");
   const [result, setResult] = useState<JobUrlExtractResponse | null>(null);
   const [error, setError] = useState<string | null>(null);

@@ -265,7 +265,10 @@ export function JobsManager({ creationMode = null }: { creationMode?: ImportMode
   if (!getAuthToken()) {
     return creationMode ? <JobCreationPreview mode={creationMode} /> : <JobsManagerPreview />;
   }
+  return <AuthenticatedJobsManager creationMode={creationMode} />;
+}
 
+function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode | null }) {
   const [jobs, setJobs] = useState<StoredJob[]>([]);
   const [resumeProfiles, setResumeProfiles] = useState<ResumeProfile[]>([]);
   const [documents, setDocuments] = useState<StoredDocument[]>([]);
@@ -312,6 +315,8 @@ export function JobsManager({ creationMode = null }: { creationMode?: ImportMode
         setResumeProfiles([]);
         setDocuments([]);
       });
+    // Archived visibility is the intended reload trigger; the loader is local to this render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showArchived]);
 
   useEffect(() => {

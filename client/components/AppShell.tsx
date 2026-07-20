@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode, useEffect, useState } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AuthForm } from "./AuthForm";
 import { clearAuthToken, CurrentUser, getAuthToken, getCurrentUser } from "../lib/api";
@@ -74,15 +75,15 @@ export function AppShell({ children }: { children: ReactNode }) {
       <aside className="sidebar" aria-label="Primary navigation">
         <div className="brand">DaliJob</div>
         <nav>
-          <a href="/">Home</a>
-          <a href="/profile">Profile</a>
-          <a href="/match">Match</a>
-          <a href="/jobs">Jobs</a>
-          <a href="/jobs/search">Job Search</a>
+          <Link href="/">Home</Link>
+          <Link href="/profile">Profile</Link>
+          <Link href="/match">Match</Link>
+          <Link href="/jobs">Jobs</Link>
+          <Link href="/jobs/search">Job Search</Link>
           <ApplicationNavGroup />
-          <a href="/documents">Documents</a>
-          <a href="/analytics">Analytics</a>
-          <a href="/auth">Account</a>
+          <Link href="/documents">Documents</Link>
+          <Link href="/analytics">Analytics</Link>
+          <Link href="/auth">Account</Link>
           <button type="button" className="sidebar-link" onClick={signOut}>
             Sign Out
           </button>
@@ -100,15 +101,15 @@ function PublicShell({ children }: { children: ReactNode }) {
       <aside className="sidebar" aria-label="Public navigation">
         <div className="brand">DaliJob</div>
         <nav>
-          <a href="/">Home</a>
-          <a href="/profile">Profile</a>
-          <a href="/match">Match</a>
-          <a href="/jobs">Jobs</a>
-          <a href="/jobs/search">Job Search</a>
+          <Link href="/">Home</Link>
+          <Link href="/profile">Profile</Link>
+          <Link href="/match">Match</Link>
+          <Link href="/jobs">Jobs</Link>
+          <Link href="/jobs/search">Job Search</Link>
           <ApplicationNavGroup />
-          <a href="/documents">Documents</a>
-          <a href="/analytics">Analytics</a>
-          <a href="/auth">Login / Register</a>
+          <Link href="/documents">Documents</Link>
+          <Link href="/analytics">Analytics</Link>
+          <Link href="/auth">Login / Register</Link>
         </nav>
       </aside>
       <main className="content">{children}</main>
@@ -138,7 +139,7 @@ function ApplicationNavGroup() {
   return (
     <div className="sidebar-nav-group">
       <div className={`sidebar-nav-parent ${isApplicationSection ? "active" : ""}`}>
-        <a href="/applications">Applications</a>
+        <Link href="/applications">Applications</Link>
         <button
           type="button"
           className="sidebar-expand-button"
@@ -157,8 +158,8 @@ function ApplicationNavGroup() {
         aria-hidden={!expanded}
       >
         <div className="sidebar-subnav">
-          <a className={pathname === "/materials" ? "active" : ""} href="/materials" tabIndex={expanded ? undefined : -1}>Materials</a>
-          <a className={pathname === "/interviews" ? "active" : ""} href="/interviews" tabIndex={expanded ? undefined : -1}>Interviews</a>
+          <Link className={pathname === "/materials" ? "active" : ""} href="/materials" tabIndex={expanded ? undefined : -1}>Materials</Link>
+          <Link className={pathname === "/interviews" ? "active" : ""} href="/interviews" tabIndex={expanded ? undefined : -1}>Interviews</Link>
         </div>
       </div>
     </div>

@@ -63,7 +63,7 @@ Manual entry and pasted text remain supported fallbacks. OpenAI, Apify, scraping
 
 ### Phase 0: Protect The Current MVP While Preserving Change
 
-Implementation status: partially completed on 2026-07-14. UX-01, SEC-01, DATA-01, and the current single-server OPS-01 scope are complete. CI-01 and automated deployment migration-readiness work remain deferred.
+Implementation status: implementation complete on 2026-07-20 for UX-01, CI-01, DB-01 deployment enforcement, SEC-01, DATA-01, and the current single-server OPS-01 scope. A clean hosted CI run and complete UC-01 through UC-05 browser smoke suite remain verification work before private alpha under `PRODUCTION_READINESS.md`.
 
 Use cases: UC-01 through the implemented UC-05 slice, OP-01 through OP-03.
 
@@ -89,15 +89,15 @@ Flexibility rules:
 
 #### Ops/admin track
 
-1. [ ] **CI-01: Make clean-checkout CI reproducible** - Deferred by the project owner; the private `DaliCommonLib` checkout will be addressed later.
-   - [ ] Use the simplest documented method to provide `DaliCommonLib` to Python CI jobs; an explicit checkout is acceptable until the library's packaging strategy is settled.
-   - [ ] Run server tests, migration checks, OpenAPI checks, client lint/tests, and client build as separate visible jobs.
+1. [x] **CI-01: Make clean-checkout CI reproducible** - Implemented on 2026-07-20 with a pinned explicit `DaliCommonLib` checkout. The repository must configure `DALI_COMMON_LIB_TOKEN` and retain a successful hosted run before the release gate passes.
+   - [x] Use the simplest documented method to provide `DaliCommonLib` to Python CI jobs; an explicit checkout is acceptable until the library's packaging strategy is settled.
+   - [x] Run server lint/tests, migration checks, OpenAPI checks, client lint/tests, browser tests, and client build as separate visible jobs.
    - [x] Document the current dependency provenance and make clear that it is replaceable.
 
-2. [ ] **DB-01: Enforce migration readiness** - The readiness endpoint is implemented for head `20260715_0021`; deployment enforcement remains deferred.
-   - [ ] Verify that the configured database is at the current Alembic head during deployment.
+2. [ ] **DB-01: Enforce migration readiness** - Graph validation and deployment failure on revision mismatch were implemented on 2026-07-20. The hosted MySQL job must still prove fresh and previous-revision upgrades.
+   - [x] Verify that the configured database is at the current Alembic head during deployment.
    - [x] Report the current and expected migration revisions through `/api/v1/health/db`.
-   - [ ] Test both a fresh database upgrade and an upgrade from the previous supported revision.
+   - [ ] Test both a fresh database upgrade and an upgrade from the previous supported revision. Both paths are configured in CI and await a retained hosted run.
    - [x] Keep schema migration commands in the release procedure so new code is not served against missing tables.
 
 3. [x] **SEC-01: Enforce production startup policy** - Implemented 2026-07-14.
@@ -120,7 +120,7 @@ Flexibility rules:
 Exit criteria:
 
 - [ ] A clean CI runner builds and tests the server and client without an undeclared sibling checkout.
-- [ ] Deployment verifies that the configured database is at the expected Alembic head before the release is considered ready.
+- [x] Deployment verifies that the configured database is at the expected Alembic head before the release is considered ready.
 - [x] Production refuses unsafe auth configuration.
 - [x] Auth, ownership, provider-limit, and shared-cache isolation tests pass.
 - [x] Provider failures produce a recoverable user path rather than a generic 500.
@@ -346,7 +346,7 @@ Acceptance criteria:
 
 ### Phase 7: Add Resume Tailoring And External Integrations Only After The Core Loop Is Stable
 
-Implementation status: item 3, resume tailoring and cover-letter generation, was completed in code on 2026-07-17. Migration `20260717_0024` must still be applied and verified in the configured database. Email, calendar, and additional job-source integrations remain deferred.
+Implementation status: item 3, resume tailoring and cover-letter generation, was completed in code on 2026-07-17. Migration `20260717_0024` was applied and verified in production on 2026-07-17. Email and calendar integrations were placed on hold by the product owner on 2026-07-20; they are explicitly excluded from the current completion and release scope. Additional job-source integrations remain deferred.
 
 User use cases: UC-06 through UC-09. Ops/admin support: OP-01, OP-02, OP-04, and OP-05.
 
@@ -354,8 +354,8 @@ User use cases: UC-06 through UC-09. Ops/admin support: OP-01, OP-02, OP-04, and
 
 Candidate sequence:
 
-1. [ ] Email classification that proposes reviewable application events.
-2. [ ] Calendar sync for confirmed interviews and reminders.
+1. [ ] **Deferred/on hold:** Email classification that proposes reviewable application events. Excluded from the current release scope by product-owner decision on 2026-07-20.
+2. [ ] **Deferred/on hold:** Calendar sync for confirmed interviews and reminders. Excluded from the current release scope by product-owner decision on 2026-07-20.
 3. [x] Resume tailoring and cover-letter generation tied to exact application/document versions.
    - [x] Select an exact application and immutable resume document version.
    - [x] Snapshot redacted resume text and effective saved-job data before provider execution.
@@ -364,7 +364,7 @@ Candidate sequence:
    - [x] Preserve append-only AI and user-edited material versions with model, prompt, schema, and provider provenance.
    - [x] Optionally tie a cover letter to an exact tailored-resume material version.
    - [x] Add an owner-scoped client workspace for generation, review, evidence inspection, revision, and history.
-   - [ ] Render generated material versions to PDF/DOCX and attach rendered document versions to applications.
+   - [x] Render generated material versions to PDF/DOCX and attach rendered document versions to applications.
 4. [ ] Additional job-source providers behind normalized interfaces.
 
 #### Ops/admin track
@@ -427,18 +427,19 @@ A release that links a user use case to ops/admin support is complete only when 
 
 ## Current Executable Backlog
 
-UX-01, SEC-01, DATA-01, and the single-server OPS-01 guardrails are implemented. The current application migration was applied and verified. CI-01 and automated DB-01 release verification are intentionally deferred and remain required before a public or repeatable production release.
+UX-01, CI-01, SEC-01, DATA-01, the single-server OPS-01 guardrails, and deployment revision enforcement are implemented. The current application migration was applied and verified. A retained hosted CI run must still prove the MySQL fresh/upgrade paths, and the browser suite must expand beyond authentication before private alpha under `PRODUCTION_READINESS.md`.
 
 ### Ops/admin track
 
-1. CI-01 clean-checkout dependency and job separation when private `DaliCommonLib` CI access is addressed.
-2. DB-01 automated migration-head verification for fresh, upgraded, and deployed databases before repeatable production releases.
+1. Configure the `DALI_COMMON_LIB_TOKEN` repository secret and retain a successful clean hosted CI run.
+2. Prove DB-01 fresh and previous-revision MySQL upgrades in hosted CI.
 3. Replace in-process provider limits with a shared limiter before running multiple server instances.
 
 ### User track
 
-1. MATCH-01 understandable, version-aware match history.
-2. UC-05 application tracker completion: lifecycle/stage separation, duplicate confirmation, transition enforcement, saved-job deletion protection, filtering, and user-flow tests.
+1. Expand browser smoke coverage from authentication to the complete UC-01 through UC-05 workflow.
+2. Select and implement an additional job-search provider if that deferred Phase 7 capability enters release scope.
+3. Keep email and calendar integrations on hold until the product owner explicitly resumes them.
 
 Complete the minimum Phase 0 ops/admin gates before treating the implemented application tracker as release-ready, but manage and review the two backlogs separately.
 

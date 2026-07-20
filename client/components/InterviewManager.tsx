@@ -93,6 +93,8 @@ function AuthenticatedInterviewManager() {
     }
   }
 
+  // Initial workspace load is repeated explicitly after mutations.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void loadWorkspace(); }, []);
 
   useEffect(() => {

@@ -8,7 +8,6 @@ from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 
 from app.db.base import Base
-from app.modules.accounts.models import User, Workspace
 from app.modules.auth.dependencies import AuthenticatedIdentity
 from app.modules.profiles import repository
 from app.modules.profiles.schemas import ResumeData, ResumeProfileCreateRequest, ResumeProfileUpdateRequest

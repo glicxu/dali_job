@@ -2855,6 +2855,63 @@
         }
       }
     },
+    "/api/v1/application-materials/versions/{version_id}/render": {
+      "post": {
+        "tags": [
+          "application-materials"
+        ],
+        "summary": "Render Application Material",
+        "operationId": "render_application_material_api_v1_application_materials_versions__version_id__render_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaterialRenderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialRenderResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/operations/job-search": {
       "post": {
         "tags": [
@@ -6097,7 +6154,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           }
         },
@@ -6111,7 +6168,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           }
         },
@@ -6125,7 +6182,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           },
           "title": {
@@ -6155,7 +6212,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           }
         },
@@ -9181,6 +9238,82 @@
         "type": "object",
         "title": "MaterialListResponse"
       },
+      "MaterialRenderRequest": {
+        "properties": {
+          "format": {
+            "type": "string",
+            "enum": [
+              "pdf",
+              "docx"
+            ],
+            "title": "Format"
+          },
+          "attach_to_application": {
+            "type": "boolean",
+            "title": "Attach To Application",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "format"
+        ],
+        "title": "MaterialRenderRequest"
+      },
+      "MaterialRenderResponse": {
+        "properties": {
+          "material_id": {
+            "type": "integer",
+            "title": "Material Id"
+          },
+          "material_version_id": {
+            "type": "integer",
+            "title": "Material Version Id"
+          },
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "document_version_id": {
+            "type": "integer",
+            "title": "Document Version Id"
+          },
+          "attachment_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachment Id"
+          },
+          "file_name": {
+            "type": "string",
+            "title": "File Name"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "material_id",
+          "material_version_id",
+          "document_id",
+          "document_version_id",
+          "file_name",
+          "content_type",
+          "size_bytes"
+        ],
+        "title": "MaterialRenderResponse"
+      },
       "MaterialResponse": {
         "properties": {
           "id": {
@@ -10454,6 +10587,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",

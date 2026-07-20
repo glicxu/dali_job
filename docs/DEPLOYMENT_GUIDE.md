@@ -207,7 +207,17 @@ Rules:
 Deployment sequence:
 
 1. Build server and client artifacts.
-2. Run database migrations.
+2. Validate the migration graph, run database migrations, and fail the deployment if the configured database is not at the expected head:
+
+   ```powershell
+   python scripts/verify_migration_history.py
+   cd server
+   alembic -x config=../local_config.ini upgrade head
+   cd ..
+   python scripts/validate_database.py --config local_config.ini
+   python scripts/verify_database_revision.py --config local_config.ini
+   ```
+
 3. Deploy server API.
 4. Deploy workers.
 5. Deploy client.

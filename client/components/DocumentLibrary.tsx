@@ -23,7 +23,10 @@ export function DocumentLibrary() {
   if (!getAuthToken()) {
     return <DocumentLibraryPreview />;
   }
+  return <AuthenticatedDocumentLibrary />;
+}
 
+function AuthenticatedDocumentLibrary() {
   const [documents, setDocuments] = useState<StoredDocument[]>([]);
   const [textPreview, setTextPreview] = useState<string | null>(null);
   const [textPreviewTitle, setTextPreviewTitle] = useState<string | null>(null);

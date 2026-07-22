@@ -75,7 +75,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="brand">DaliJob</div>
         <nav>
           <a href="/">Home</a>
-          <a href="/profile">Profile</a>
+          <a href="/profile">Resume Profile</a>
           <a href="/match">Match</a>
           <a href="/jobs">Jobs</a>
           <a href="/jobs/search">Job Search</a>
@@ -101,7 +101,7 @@ function PublicShell({ children }: { children: ReactNode }) {
         <div className="brand">DaliJob</div>
         <nav>
           <a href="/">Home</a>
-          <a href="/profile">Profile</a>
+          <a href="/profile">Resume Profile</a>
           <a href="/match">Match</a>
           <a href="/jobs">Jobs</a>
           <a href="/jobs/search">Job Search</a>

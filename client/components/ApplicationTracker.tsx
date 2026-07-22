@@ -79,6 +79,12 @@ function dateTimeInputValue(value: string | null): string {
   return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
+function displayDateTime(value: string | null): string {
+  if (!value) return "Not set";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Not set" : date.toLocaleString();
+}
+
 function toIsoFromDate(value: string): string | null {
   return value ? new Date(`${value}T12:00:00`).toISOString() : null;
 }
@@ -125,8 +131,12 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
   const [taskStatusFilter, setTaskStatusFilter] = useState<"" | "open" | "completed">("");
   const [taskTypeFilter, setTaskTypeFilter] = useState<"" | ApplicationTaskType>("");
   const [taskDrafts, setTaskDrafts] = useState<Record<number, TaskDraft>>({});
+  const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [attachmentVersionId, setAttachmentVersionId] = useState("");
   const [attachmentPurpose, setAttachmentPurpose] = useState<ApplicationDocumentPurpose>("resume");
+  const [showAttachmentForm, setShowAttachmentForm] = useState(false);
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [showNoteForm, setShowNoteForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -292,6 +302,7 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
     try {
       await addApplicationNote(selectedApplication.id, newNote.trim());
       setNewNote("");
+      setShowNoteForm(false);
       syncEditor(await getApplication(selectedApplication.id));
       setApplications(await listApplications(applicationListOptions()));
     } catch (err) {
@@ -313,22 +324,11 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
       setNewTaskDueAt("");
       setNewTaskReminderAt("");
       setNewTaskType("other");
+      setShowTaskForm(false);
       syncEditor(await getApplication(selectedApplication.id));
       setApplications(await listApplications(applicationListOptions()));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Task creation failed.");
-    }
-  }
-
-  async function toggleTask(taskId: number, completed: boolean) {
-    if (!selectedApplication) return;
-    setError(null);
-    try {
-      await updateApplicationTask(selectedApplication.id, taskId, { completed });
-      syncEditor(await getApplication(selectedApplication.id));
-      setApplications(await listApplications(applicationListOptions()));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Task update failed.");
     }
   }
 
@@ -344,6 +344,7 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
         reminder_at: toIsoFromDateTime(draft.reminderAt),
       });
       syncEditor(await getApplication(selectedApplication.id));
+      setEditingTaskId(null);
       setStatusMessage("Task schedule updated.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Task reschedule failed.");
@@ -368,6 +369,7 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
     try {
       await attachApplicationDocument(selectedApplication.id, Number(attachmentVersionId), attachmentPurpose);
       setAttachmentVersionId("");
+      setShowAttachmentForm(false);
       syncEditor(await getApplication(selectedApplication.id));
       setStatusMessage("Document version attached.");
     } catch (err) {
@@ -678,39 +680,62 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
                   description={`${selectedApplication.documents.length} attached document${selectedApplication.documents.length === 1 ? "" : "s"}`}
                 >
                 <p className="metadata">Attachments stay pinned to the exact file version shown.</p>
-                <form className="inline-form" onSubmit={attachDocument}>
-                  <label>
-                    Document Version
-                    <select
-                      value={attachmentVersionId}
-                      disabled={Boolean(selectedApplication.archived_at)}
-                      onChange={(event) => setAttachmentVersionId(event.target.value)}
-                      required
-                    >
-                      <option value="">Select a document</option>
-                      {documents.filter((document) => document.latest_version).map((document) => (
-                        <option value={document.latest_version?.id} key={document.id}>
-                          {document.title} - v{document.latest_version?.version_number}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Purpose
-                    <select
-                      value={attachmentPurpose}
-                      disabled={Boolean(selectedApplication.archived_at)}
-                      onChange={(event) => setAttachmentPurpose(event.target.value as ApplicationDocumentPurpose)}
-                    >
-                      {attachmentPurposeOptions.map((option) => (
-                        <option value={option} key={option}>{labelize(option)}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <button type="submit" disabled={Boolean(selectedApplication.archived_at) || !attachmentVersionId}>
-                    Attach
+                {showAttachmentForm ? (
+                  <form className="inline-form" onSubmit={attachDocument}>
+                    <label>
+                      Document Version
+                      <select
+                        value={attachmentVersionId}
+                        disabled={Boolean(selectedApplication.archived_at)}
+                        onChange={(event) => setAttachmentVersionId(event.target.value)}
+                        required
+                      >
+                        <option value="">Select a document</option>
+                        {documents.filter((document) => document.latest_version).map((document) => (
+                          <option value={document.latest_version?.id} key={document.id}>
+                            {document.title} - v{document.latest_version?.version_number}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Purpose
+                      <select
+                        value={attachmentPurpose}
+                        disabled={Boolean(selectedApplication.archived_at)}
+                        onChange={(event) => setAttachmentPurpose(event.target.value as ApplicationDocumentPurpose)}
+                      >
+                        {attachmentPurposeOptions.map((option) => (
+                          <option value={option} key={option}>{labelize(option)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="button-row">
+                      <button type="submit" disabled={Boolean(selectedApplication.archived_at) || !attachmentVersionId}>
+                        Attach Document
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => {
+                          setAttachmentVersionId("");
+                          setShowAttachmentForm(false);
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <button
+                    type="button"
+                    className="secondary-button application-add-action"
+                    disabled={Boolean(selectedApplication.archived_at)}
+                    onClick={() => setShowAttachmentForm(true)}
+                  >
+                    Attach Document
                   </button>
-                </form>
+                )}
                 {selectedApplication.documents.length ? (
                   <div className="application-document-list">
                     {selectedApplication.documents.map((attachment) => (
@@ -756,42 +781,68 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
                   title="Tasks And Reminders"
                   description={`${selectedApplication.tasks.length} task${selectedApplication.tasks.length === 1 ? "" : "s"}`}
                 >
-                  <form className="stack-form compact-form" onSubmit={addTask}>
-                    <input
-                      value={newTaskTitle}
+                  {showTaskForm ? (
+                    <form className="stack-form compact-form" onSubmit={addTask}>
+                      <input
+                        value={newTaskTitle}
+                        disabled={Boolean(selectedApplication.archived_at)}
+                        onChange={(event) => setNewTaskTitle(event.target.value)}
+                        placeholder="Task title"
+                      />
+                      <select
+                        value={newTaskType}
+                        disabled={Boolean(selectedApplication.archived_at)}
+                        onChange={(event) => setNewTaskType(event.target.value as ApplicationTaskType)}
+                      >
+                        {taskTypeOptions.map((option) => (
+                          <option value={option} key={option}>{labelize(option)}</option>
+                        ))}
+                      </select>
+                      <label>
+                        Due
+                        <input
+                          type="datetime-local"
+                          value={newTaskDueAt}
+                          disabled={Boolean(selectedApplication.archived_at)}
+                          onChange={(event) => setNewTaskDueAt(event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Remind At
+                        <input
+                          type="datetime-local"
+                          value={newTaskReminderAt}
+                          disabled={Boolean(selectedApplication.archived_at)}
+                          onChange={(event) => setNewTaskReminderAt(event.target.value)}
+                        />
+                      </label>
+                      <div className="button-row">
+                        <button type="submit" disabled={Boolean(selectedApplication.archived_at)}>Add Task</button>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => {
+                            setNewTaskTitle("");
+                            setNewTaskDueAt("");
+                            setNewTaskReminderAt("");
+                            setNewTaskType("other");
+                            setShowTaskForm(false);
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <button
+                      type="button"
+                      className="secondary-button application-add-action"
                       disabled={Boolean(selectedApplication.archived_at)}
-                      onChange={(event) => setNewTaskTitle(event.target.value)}
-                      placeholder="Task title"
-                    />
-                    <select
-                      value={newTaskType}
-                      disabled={Boolean(selectedApplication.archived_at)}
-                      onChange={(event) => setNewTaskType(event.target.value as ApplicationTaskType)}
+                      onClick={() => setShowTaskForm(true)}
                     >
-                      {taskTypeOptions.map((option) => (
-                        <option value={option} key={option}>{labelize(option)}</option>
-                      ))}
-                    </select>
-                    <label>
-                      Due
-                      <input
-                        type="datetime-local"
-                        value={newTaskDueAt}
-                        disabled={Boolean(selectedApplication.archived_at)}
-                        onChange={(event) => setNewTaskDueAt(event.target.value)}
-                      />
-                    </label>
-                    <label>
-                      Remind At
-                      <input
-                        type="datetime-local"
-                        value={newTaskReminderAt}
-                        disabled={Boolean(selectedApplication.archived_at)}
-                        onChange={(event) => setNewTaskReminderAt(event.target.value)}
-                      />
-                    </label>
-                    <button type="submit" disabled={Boolean(selectedApplication.archived_at)}>Add Task</button>
-                  </form>
+                      Add Task
+                    </button>
+                  )}
                   <div className="inline-form application-task-filters">
                     <label>
                       State
@@ -812,77 +863,110 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
                     </label>
                   </div>
                   {visibleTasks.length ? (
-                    <ul>
+                    <ul className="application-task-list">
                       {visibleTasks.map((task) => (
-                        <li className={task.is_overdue ? "application-task-overdue" : ""} key={task.id}>
-                          <label className="checkbox-row">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(task.completed_at)}
-                              disabled={Boolean(selectedApplication.archived_at)}
-                              onChange={(event) => void toggleTask(task.id, event.target.checked)}
-                            />
-                            <span>
+                        <li
+                          className={`application-task-row${task.is_overdue ? " application-task-overdue" : ""}`}
+                          key={task.id}
+                        >
+                          <div className="application-task-summary">
+                            <div className="application-task-title">
                               <strong>{task.title}</strong>
-                              <span>{labelize(task.task_type)}{task.is_overdue ? " | Overdue" : ""}</span>
-                            </span>
-                          </label>
-                          <div className="application-task-schedule">
-                            <label>
-                              Due
-                              <input
-                                type="datetime-local"
-                                value={taskDrafts[task.id]?.dueAt ?? ""}
-                                disabled={Boolean(selectedApplication.archived_at)}
-                                onChange={(event) => setTaskDrafts((current) => ({
-                                  ...current,
-                                  [task.id]: {
-                                    ...(current[task.id] ?? { taskType: task.task_type, dueAt: "", reminderAt: "" }),
-                                    dueAt: event.target.value,
-                                  },
-                                }))}
-                              />
-                            </label>
-                            <label>
-                              Reminder
-                              <input
-                                type="datetime-local"
-                                value={taskDrafts[task.id]?.reminderAt ?? ""}
-                                disabled={Boolean(selectedApplication.archived_at)}
-                                onChange={(event) => setTaskDrafts((current) => ({
-                                  ...current,
-                                  [task.id]: {
-                                    ...(current[task.id] ?? { taskType: task.task_type, dueAt: "", reminderAt: "" }),
-                                    reminderAt: event.target.value,
-                                  },
-                                }))}
-                              />
-                            </label>
-                            <select
-                              aria-label="Task type"
-                              value={taskDrafts[task.id]?.taskType ?? task.task_type}
-                              disabled={Boolean(selectedApplication.archived_at)}
-                              onChange={(event) => setTaskDrafts((current) => ({
-                                ...current,
-                                [task.id]: {
-                                  ...(current[task.id] ?? { taskType: task.task_type, dueAt: "", reminderAt: "" }),
-                                  taskType: event.target.value as ApplicationTaskType,
-                                },
-                              }))}
-                            >
-                              {taskTypeOptions.map((option) => (
-                                <option value={option} key={option}>{labelize(option)}</option>
-                              ))}
-                            </select>
+                              <span className="metadata">
+                                {labelize(task.task_type)} | {task.completed_at ? "Completed" : "Open"}
+                                {task.is_overdue ? " | Overdue" : ""}
+                              </span>
+                            </div>
+                            <div className="application-task-times">
+                              <span><strong>Due</strong>{displayDateTime(task.due_at)}</span>
+                              <span><strong>Reminder</strong>{displayDateTime(task.reminder_at)}</span>
+                            </div>
                             <button
                               type="button"
                               className="secondary-button"
                               disabled={Boolean(selectedApplication.archived_at)}
-                              onClick={() => void saveTaskSchedule(task)}
+                              onClick={() => setEditingTaskId(task.id)}
                             >
                               Update
                             </button>
-                            {task.reminder_due ? (
+                          </div>
+                          {editingTaskId === task.id ? (
+                            <div className="application-task-schedule">
+                              <label>
+                                Due
+                                <input
+                                  type="datetime-local"
+                                  value={taskDrafts[task.id]?.dueAt ?? ""}
+                                  disabled={Boolean(selectedApplication.archived_at)}
+                                  onChange={(event) => setTaskDrafts((current) => ({
+                                    ...current,
+                                    [task.id]: {
+                                      ...(current[task.id] ?? { taskType: task.task_type, dueAt: "", reminderAt: "" }),
+                                      dueAt: event.target.value,
+                                    },
+                                  }))}
+                                />
+                              </label>
+                              <label>
+                                Reminder
+                                <input
+                                  type="datetime-local"
+                                  value={taskDrafts[task.id]?.reminderAt ?? ""}
+                                  disabled={Boolean(selectedApplication.archived_at)}
+                                  onChange={(event) => setTaskDrafts((current) => ({
+                                    ...current,
+                                    [task.id]: {
+                                      ...(current[task.id] ?? { taskType: task.task_type, dueAt: "", reminderAt: "" }),
+                                      reminderAt: event.target.value,
+                                    },
+                                  }))}
+                                />
+                              </label>
+                              <label>
+                                Type
+                                <select
+                                  value={taskDrafts[task.id]?.taskType ?? task.task_type}
+                                  disabled={Boolean(selectedApplication.archived_at)}
+                                  onChange={(event) => setTaskDrafts((current) => ({
+                                    ...current,
+                                    [task.id]: {
+                                      ...(current[task.id] ?? { taskType: task.task_type, dueAt: "", reminderAt: "" }),
+                                      taskType: event.target.value as ApplicationTaskType,
+                                    },
+                                  }))}
+                                >
+                                  {taskTypeOptions.map((option) => (
+                                    <option value={option} key={option}>{labelize(option)}</option>
+                                  ))}
+                                </select>
+                              </label>
+                              <div className="button-row application-task-update-actions">
+                                <button
+                                  type="button"
+                                  disabled={Boolean(selectedApplication.archived_at)}
+                                  onClick={() => void saveTaskSchedule(task)}
+                                >
+                                  Save Changes
+                                </button>
+                                <button
+                                  type="button"
+                                  className="secondary-button"
+                                  onClick={() => {
+                                    setTaskDrafts((current) => ({
+                                      ...current,
+                                      [task.id]: {
+                                        taskType: task.task_type,
+                                        dueAt: dateTimeInputValue(task.due_at),
+                                        reminderAt: dateTimeInputValue(task.reminder_at),
+                                      },
+                                    }));
+                                    setEditingTaskId(null);
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                              {task.reminder_due ? (
                               <button
                                 type="button"
                                 className="secondary-button"
@@ -891,8 +975,9 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
                               >
                                 Dismiss Reminder
                               </button>
-                            ) : null}
-                          </div>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </li>
                       ))}
                     </ul>
@@ -905,14 +990,37 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
                   title="Notes"
                   description={`${selectedApplication.notes_list.length} note${selectedApplication.notes_list.length === 1 ? "" : "s"}`}
                 >
-                  <form className="stack-form compact-form" onSubmit={addNote}>
-                    <textarea
-                      value={newNote}
+                  {showNoteForm ? (
+                    <form className="stack-form compact-form" onSubmit={addNote}>
+                      <textarea
+                        value={newNote}
+                        disabled={Boolean(selectedApplication.archived_at)}
+                        onChange={(event) => setNewNote(event.target.value)}
+                      />
+                      <div className="button-row">
+                        <button type="submit" disabled={Boolean(selectedApplication.archived_at)}>Add Note</button>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => {
+                            setNewNote("");
+                            setShowNoteForm(false);
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <button
+                      type="button"
+                      className="secondary-button application-add-action"
                       disabled={Boolean(selectedApplication.archived_at)}
-                      onChange={(event) => setNewNote(event.target.value)}
-                    />
-                    <button type="submit" disabled={Boolean(selectedApplication.archived_at)}>Add Note</button>
-                  </form>
+                      onClick={() => setShowNoteForm(true)}
+                    >
+                      Add Note
+                    </button>
+                  )}
                   {selectedApplication.notes_list.length ? (
                     <ul>
                       {selectedApplication.notes_list.map((note) => (
@@ -928,8 +1036,11 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
                 </CollapsibleApplicationSection>
               </div>
 
-              <section className="result-list">
-                <h2>Timeline</h2>
+              <CollapsibleApplicationSection
+                title="Timeline"
+                description={`${selectedApplication.events.length} event${selectedApplication.events.length === 1 ? "" : "s"}`}
+                compact
+              >
                 {selectedApplication.events.length ? (
                   <ul>
                     {selectedApplication.events.map((event) => (
@@ -947,7 +1058,7 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
                 ) : (
                   <p className="empty">No timeline events yet.</p>
                 )}
-              </section>
+              </CollapsibleApplicationSection>
             </section>
             ) : (
               <ApplicationReadOnlyPreview
@@ -1002,6 +1113,36 @@ function ApplicationReadOnlyPreview({
       </dl>
 
       <section className="application-preview-section">
+        <h3>Tasks And Reminders</h3>
+        {application.tasks.length ? (
+          <ul className="application-task-list application-preview-task-list">
+            {application.tasks.map((task) => (
+              <li
+                className={`application-task-row${task.is_overdue ? " application-task-overdue" : ""}`}
+                key={task.id}
+              >
+                <div className="application-preview-task-summary">
+                  <div className="application-task-title">
+                    <strong>{task.title}</strong>
+                    <span className="metadata">
+                      {labelize(task.task_type)} | {task.completed_at ? "Completed" : "Open"}
+                      {task.is_overdue ? " | Overdue" : ""}
+                    </span>
+                  </div>
+                  <div className="application-task-times">
+                    <span><strong>Due</strong>{displayDateTime(task.due_at)}</span>
+                    <span><strong>Reminder</strong>{displayDateTime(task.reminder_at)}</span>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="empty">No tasks or reminders added.</p>
+        )}
+      </section>
+
+      <section className="application-preview-section">
         <h3>Notes</h3>
         <p>{application.notes || "No application notes."}</p>
       </section>
@@ -1033,7 +1174,7 @@ function ApplicationReadOnlyPreview({
       </section>
 
       <div className="application-preview-counts metadata">
-        {application.tasks.length} task{application.tasks.length === 1 ? "" : "s"} | {application.notes_list.length} timeline note{application.notes_list.length === 1 ? "" : "s"}
+        {application.notes_list.length} timeline note{application.notes_list.length === 1 ? "" : "s"} | {application.events.length} event{application.events.length === 1 ? "" : "s"}
       </div>
     </section>
   );
@@ -1043,15 +1184,17 @@ function CollapsibleApplicationSection({
   title,
   description,
   children,
+  compact = false,
 }: {
   title: string;
   description: string;
   children: React.ReactNode;
+  compact?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <section className={`result-list application-editor-collapsible${expanded ? " expanded" : ""}`}>
+    <section className={`result-list application-editor-collapsible${compact ? " compact" : ""}${expanded ? " expanded" : ""}`}>
       <button
         type="button"
         className="application-editor-toggle"

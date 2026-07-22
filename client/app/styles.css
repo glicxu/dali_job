@@ -786,13 +786,26 @@ li span {
 }
 
 .application-preview-section {
+  border-top: 1px solid #e4e7eb;
   display: grid;
   gap: 10px;
+  padding-top: 16px;
 }
 
 .application-preview-section h3,
 .application-preview-section p {
   margin: 0;
+}
+
+.application-preview-task-list {
+  margin-top: 2px;
+}
+
+.application-preview-task-summary {
+  align-items: center;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(160px, 0.9fr) minmax(260px, 1.1fr);
 }
 
 .application-document-open {
@@ -877,6 +890,35 @@ li span {
   display: grid;
   gap: 14px;
   padding: 16px;
+}
+
+.application-editor-collapsible.compact {
+  margin-top: 14px;
+}
+
+.application-editor-collapsible.compact .application-editor-toggle {
+  background: #fff;
+  min-height: 36px;
+  padding: 7px 10px;
+}
+
+.application-editor-collapsible.compact .application-editor-toggle > span:first-child {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+}
+
+.application-editor-collapsible.compact .application-editor-toggle > span:last-child {
+  font-size: 12px;
+}
+
+.application-editor-collapsible.compact .application-editor-collapsible-content {
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.application-add-action {
+  justify-self: start;
 }
 
 .job-search-workspace {
@@ -1182,11 +1224,56 @@ li span {
   margin-top: 14px;
 }
 
+.application-task-list {
+  list-style: none;
+  padding: 0;
+}
+
+.application-task-row {
+  border: 1px solid #e4e7eb;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.application-task-summary {
+  align-items: center;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(180px, 1fr) minmax(260px, 1fr) auto;
+}
+
+.application-task-title,
+.application-task-times,
+.application-task-times > span {
+  display: grid;
+  gap: 4px;
+}
+
+.application-task-times {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.application-task-times span,
+.application-task-times strong {
+  margin: 0;
+}
+
+.application-task-times strong {
+  color: #52606d;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
 .application-task-schedule {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-top: 10px;
+}
+
+.application-task-update-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
 }
 
 .application-task-schedule button,
@@ -2031,6 +2118,16 @@ li span {
 
   .application-row {
     grid-template-columns: 1fr;
+  }
+
+  .application-task-summary,
+  .application-preview-task-summary,
+  .application-task-schedule {
+    grid-template-columns: 1fr;
+  }
+
+  .application-task-summary > button {
+    justify-self: start;
   }
 
   .default-button {

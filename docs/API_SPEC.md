@@ -5,7 +5,7 @@
 - Base path: `/api/v1`.
 - Request and response format: JSON unless uploading files.
 - Authentication: verified DaliJob account with an opaque server-side session cookie and CSRF protection; local development may run in `dev` auth mode.
-- Authorization: every request is scoped to a private workspace owned by the authenticated user.
+- Authorization: user endpoints are scoped to a private workspace owned by the authenticated user. Administrative endpoints additionally require `users.role = admin`.
 - IDs: integer values.
 - Errors: return structured error bodies.
 
@@ -58,7 +58,7 @@ Required body:
 
 ### `GET /me`
 
-Returns the current user and available workspaces.
+Returns the current user, including the account role (`user` or `admin`). Public registration cannot request or assign an administrator role.
 
 ### Account action endpoints
 
@@ -89,6 +89,24 @@ Required body:
   "name": "My Career Search"
 }
 ```
+
+## 2.1 Reports And Administration
+
+### `POST /reports`
+
+Submits an authenticated user's bug report, product feedback, account issue, or other support request. The user cannot set the report status or internal administrator notes.
+
+### `GET /reports`
+
+Lists only reports submitted by the current user. Internal administrator notes and administrator identity are excluded.
+
+### `GET /admin/reports`
+
+Requires the `admin` role. Lists submitted reports across users for support review. An optional `status` query filters the queue. Access to the privileged report queue creates an `admin.reports.listed` audit event with only the filter and result count.
+
+### `PATCH /admin/reports/{report_id}`
+
+Requires the `admin` role. Updates report status and internal notes. Every successful update creates an `admin.report.updated` audit event containing status-transition metadata and a boolean indicating whether notes changed. The audit event does not contain report content or administrator note text.
 
 ## 2.5 Homepage Dashboard
 
@@ -472,7 +490,7 @@ POST https://api.apify.com/v2/acts/misceres~indeed-scraper/runs?token=<APIFY_API
 POST https://api.apify.com/v2/acts/misceres~indeed-scraper/run-sync-get-dataset-items?token=<APIFY_API_TOKEN>
 ```
 
-The current MVP uses the synchronous dataset-items endpoint for 5-result searches. If Apify runs regularly exceed the server timeout, switch to the async `/runs` endpoint, poll the run, then fetch dataset items.
+The current MVP uses the synchronous dataset-items endpoint for 10-result searches. If Apify runs regularly exceed the server timeout, switch to the async `/runs` endpoint, poll the run, then fetch dataset items.
 
 Apify actor input body:
 
@@ -488,7 +506,7 @@ Apify actor input body:
 }
 ```
 
-DaliJob request `keyword` maps to Apify `position`, and DaliJob request `location` maps to Apify `location`. The first implementation uses `country: "US"`, `saveOnlyUniqueItems: true`, `parseCompanyDetails: false`, and `followApplyRedirects: false`. DaliJob caps `maxItemsPerSearch`; the UI default is 5.
+DaliJob request `keyword` maps to Apify `position`, and DaliJob request `location` maps to Apify `location`. The first implementation uses `country: "US"`, `saveOnlyUniqueItems: true`, `parseCompanyDetails: false`, and `followApplyRedirects: false`. DaliJob caps `maxItemsPerSearch`; the UI default is 10.
 
 Body:
 
@@ -496,7 +514,7 @@ Body:
 {
   "keyword": "software engineer",
   "location": "Maryland",
-  "max_results": 5
+  "max_results": 10
 }
 ```
 
@@ -534,7 +552,7 @@ Result `status` values:
 - `duplicate`
 - `failed`
 
-The server caps `max_results`; the first implementation defaults to 5. Empty Apify datasets, missing `APIFY_API_TOKEN`, actor failures, Apify quota errors, and timeouts return clear structured errors.
+The server caps `max_results`; the current implementation defaults to 10. Empty Apify datasets, missing `APIFY_API_TOKEN`, actor failures, Apify quota errors, and timeouts return clear structured errors.
 
 ### `POST /job-search/indeed/import`
 

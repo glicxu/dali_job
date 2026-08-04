@@ -116,6 +116,17 @@ The sections below are grouped by product area. The order above should guide imp
 - [ ] Add owner-only workspace authorization beyond the current private-workspace profile scope.
 - [ ] Defer workspace sharing, membership, and roles until a future collaboration feature is intentionally designed.
 
+### Administration And Support
+
+- [x] Add account-level `user` and `admin` roles with public registration fixed to `user`.
+- [x] Add a reusable server-side `require_admin` authorization dependency.
+- [x] Add a config-aware CLI for controlled administrator role assignment and removal.
+- [x] Add owner-scoped support report submission and status history.
+- [x] Add an administrator report queue with status updates and internal notes.
+- [x] Hide administrator navigation from regular users while retaining server-side enforcement.
+- [x] Audit administrator report access, report changes, and CLI role changes without storing sensitive content in audit metadata.
+- [ ] Add broader administrator account controls only after their access, privacy, and audit policies are explicitly designed.
+
 ### Profile
 
 - [x] Create initial profile schema with JSON-backed resume data.
@@ -188,11 +199,11 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Document the `misceres/indeed-scraper` input shape using `position`, `location`, `country`, `maxItemsPerSearch`, `parseCompanyDetails`, `saveOnlyUniqueItems`, and `followApplyRedirects`.
 - [x] Add Apify service wrapper for running the synchronous dataset-items endpoint, handling failures, and reading dataset results.
 - [x] Normalize Apify Indeed results into DaliJob job search result DTOs with title, company, location, source URL, raw description text, salary, employment type, posting date, and full description when available.
-- [x] Add `POST /api/v1/job-search/indeed` endpoint accepting keyword, location, and max results with a default cap of 5.
+- [x] Add `POST /api/v1/job-search/indeed` endpoint accepting keyword, location, and max results with a default cap of 10.
 - [x] Add server-side validation, timeouts, and clear errors for Apify token exhaustion, actor failure, empty results, or invalid input.
 - [x] Add initial request rate limiting and cost controls for the current single-server deployment.
 - [x] Add new client Job Search page where the user enters keyword and location.
-- [x] Display up to 5 Apify-sourced Indeed results in a reviewable list.
+- [x] Display up to 10 Apify-sourced Indeed results in a reviewable list.
 - [x] Add result detail view so the user can inspect the full job description before importing.
 - [x] Add selection flow so the user can import one or more Apify search results.
 - [x] Import selected Apify results through the existing `jobs_cache` and `user_saved_jobs` pipeline.
@@ -370,7 +381,7 @@ The sections below are grouped by product area. The order above should guide imp
 
 ## Hardening Before Public Release
 
-- [ ] Add full audit log.
+- [ ] Expand audit logging beyond implemented administrator report and role-change events.
 - [ ] Add account deletion and export.
 - [ ] Add integration revocation.
 - [ ] Add malware scanning or safe file processing boundary.

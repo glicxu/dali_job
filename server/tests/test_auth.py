@@ -16,6 +16,7 @@ from app.db.session import get_db_session
 from app.main import API_ROUTERS, create_app
 from app.modules.accounts.models import User
 from app.modules.auth.models import AuthSession
+from app.modules.audit.models import AuditEvent
 from app.modules.auth.dependencies import get_auth_db_session
 from app.modules.auth.policy import validate_route_authorization
 from app.modules.auth.rate_limit import AuthRateLimiter, AuthRateLimitPolicy
@@ -25,6 +26,7 @@ from app.modules.jobs.router import get_job_description_parser
 from app.modules.jobs.schemas import JobDescriptionData
 from app.modules.resume_job_match import router as match_router
 from app.modules.resume_job_match.job_url_import import JobLinkCandidate, JobListDiscoveryResult
+from app.modules.reports.models import UserReport
 
 
 class FakeJobDescriptionParser:
@@ -137,6 +139,7 @@ def test_registration_requires_email_verification(tmp_path: Path) -> None:
     verify = client.post("/api/v1/auth/verify-email", json={"token": _latest_email_token(client)})
     assert verify.status_code == 200
     assert verify.json()["user"]["email"] == "user@example.com"
+    assert verify.json()["user"]["role"] == "user"
     assert "access_token" not in verify.json()
     assert client.cookies.get("dalijob_session")
     assert client.cookies.get("dalijob_csrf")
@@ -144,6 +147,68 @@ def test_registration_requires_email_verification(tmp_path: Path) -> None:
     csrf = client.get("/api/v1/auth/csrf")
     assert csrf.status_code == 200
     assert csrf.json()["csrf_token"] == client.cookies.get("dalijob_csrf")
+
+
+def test_user_reports_and_admin_boundary_are_enforced_and_audited(tmp_path: Path) -> None:
+    client = create_local_auth_client(tmp_path)
+    _register(client)
+    _verify(client)
+
+    created = client.post(
+        "/api/v1/reports",
+        headers=_csrf_headers(client),
+        json={
+            "category": "bug",
+            "title": "Saved job does not refresh",
+            "description": "The saved jobs list remains stale after an import completes.",
+        },
+    )
+    assert created.status_code == 201
+    report_id = created.json()["id"]
+    assert client.get("/api/v1/reports").json()[0]["status"] == "new"
+    assert client.get("/api/v1/admin/reports").status_code == 403
+
+    session_factory = client.app.state.test_session_factory
+    with session_factory() as db:
+        user = db.scalar(select(User).where(User.email == "user@example.com"))
+        assert user is not None
+        user.role = "admin"
+        db.commit()
+
+    current_user = client.get("/api/v1/me")
+    assert current_user.status_code == 200
+    assert current_user.json()["role"] == "admin"
+
+    admin_list = client.get("/api/v1/admin/reports")
+    assert admin_list.status_code == 200
+    assert admin_list.json()[0]["reporter_email"] == "user@example.com"
+
+    updated = client.patch(
+        f"/api/v1/admin/reports/{report_id}",
+        headers=_csrf_headers(client),
+        json={"status": "in_review", "admin_notes": "Reproduction requested from engineering."},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["status"] == "in_review"
+
+    with session_factory() as db:
+        report = db.get(UserReport, report_id)
+        event = db.scalar(select(AuditEvent).where(AuditEvent.subject_id == str(report_id)))
+        list_event = db.scalar(select(AuditEvent).where(AuditEvent.event_type == "admin.reports.listed"))
+        assert report is not None
+        assert report.admin_notes == "Reproduction requested from engineering."
+        assert event is not None
+        assert event.event_type == "admin.report.updated"
+        assert list_event is not None
+        assert list_event.event_data == {"status_filter": None, "result_count": 1}
+        assert event.event_data == {
+            "previous_status": "new",
+            "new_status": "in_review",
+            "admin_notes_changed": True,
+        }
+        serialized_event = str(event.event_data)
+        assert report.description not in serialized_event
+        assert report.admin_notes not in serialized_event
 
 
 def test_verification_token_is_single_use(tmp_path: Path) -> None:

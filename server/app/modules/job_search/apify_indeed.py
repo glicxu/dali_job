@@ -132,7 +132,7 @@ class ApifyIndeedClient:
     def __init__(self, token: str | None = None) -> None:
         self._token = (token or get_provider_secret("APIFY_API_TOKEN")).strip()
 
-    def search(self, *, keyword: str, location: str, max_results: int = 5) -> list[IndeedJobSearchResult]:
+    def search(self, *, keyword: str, location: str, max_results: int = 10) -> list[IndeedJobSearchResult]:
         if not self._token:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

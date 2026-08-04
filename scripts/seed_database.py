@@ -35,6 +35,7 @@ def main() -> int:
             display_name,
             password_hash,
             auth_provider,
+            role,
             is_active,
             timezone,
             created_at,
@@ -46,6 +47,7 @@ def main() -> int:
             :display_name,
             NULL,
             'dalijob',
+            'admin',
             1,
             :timezone,
             UTC_TIMESTAMP(6),
@@ -54,6 +56,7 @@ def main() -> int:
         ON DUPLICATE KEY UPDATE
             display_name = VALUES(display_name),
             auth_provider = VALUES(auth_provider),
+            role = VALUES(role),
             is_active = VALUES(is_active),
             timezone = VALUES(timezone),
             updated_at = UTC_TIMESTAMP(6)

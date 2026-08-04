@@ -16,10 +16,10 @@ from app.modules.resume_job_match.schemas import ResumeJobMatchRequest, ResumeJo
 
 
 class FakeApifyIndeedClient:
-    def search(self, *, keyword: str, location: str, max_results: int = 5) -> list[IndeedJobSearchResult]:
+    def search(self, *, keyword: str, location: str, max_results: int = 10) -> list[IndeedJobSearchResult]:
         assert keyword == "software engineer"
         assert location == "Maryland"
-        assert max_results == 5
+        assert max_results == 10
         return [
             IndeedJobSearchResult(
                 external_id="abc123",
@@ -35,7 +35,7 @@ class FakeApifyIndeedClient:
 
 
 class FailingApifyIndeedClient:
-    def search(self, *, keyword: str, location: str, max_results: int = 5) -> list[IndeedJobSearchResult]:
+    def search(self, *, keyword: str, location: str, max_results: int = 10) -> list[IndeedJobSearchResult]:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="APIFY_API_TOKEN is not configured for the server process.",

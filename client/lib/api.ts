@@ -370,6 +370,30 @@ export type CurrentUser = {
   email: string;
   display_name: string;
   provider: string;
+  role: "user" | "admin";
+};
+
+export type UserReportCategory = "bug" | "feedback" | "account" | "other";
+export type UserReportStatus = "new" | "in_review" | "resolved" | "closed";
+
+export type UserReport = {
+  id: number;
+  category: UserReportCategory;
+  title: string;
+  description: string;
+  status: UserReportStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AdminReport = UserReport & {
+  workspace_id: number;
+  user_id: number;
+  reporter_email: string;
+  reporter_display_name: string;
+  admin_notes: string | null;
+  resolved_at: string | null;
+  resolved_by_user_id: number | null;
 };
 
 export type AuthResponse = {
@@ -987,6 +1011,36 @@ export function getCurrentUser(): Promise<CurrentUser> {
   });
 }
 
+export function createUserReport(payload: {
+  category: UserReportCategory;
+  title: string;
+  description: string;
+}): Promise<UserReport> {
+  return requestJson<UserReport>("/reports", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listUserReports(): Promise<UserReport[]> {
+  return requestJson<UserReport[]>("/reports");
+}
+
+export function listAdminReports(status?: UserReportStatus): Promise<AdminReport[]> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return requestJson<AdminReport[]>(`/admin/reports${query}`);
+}
+
+export function updateAdminReport(
+  reportId: number,
+  payload: { status?: UserReportStatus; admin_notes?: string | null },
+): Promise<AdminReport> {
+  return requestJson<AdminReport>(`/admin/reports/${reportId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getDashboard(): Promise<DashboardResponse> {
   return requestJson<DashboardResponse>("/dashboard");
 }
@@ -1530,7 +1584,7 @@ export function importJobList(
 export function searchIndeedJobs(
   keyword: string,
   location: string,
-  maxResults = 5,
+  maxResults = 10,
 ): Promise<IndeedJobSearchResponse> {
   return runManagedOperation<IndeedJobSearchResponse>("job_search", "/operations/job-search", {
       keyword,

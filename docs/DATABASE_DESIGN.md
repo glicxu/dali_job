@@ -133,6 +133,7 @@ Resume/document readiness and interview stage are separate from lifecycle status
 | display_name | text | Required |
 | password_hash | text | Nullable for dev/imported users; required for DaliJob local login users |
 | auth_provider | text | `dalijob` for local DaliJob accounts; future providers can use a different value |
+| role | text | `user` or `admin`; public registrations always create `user` accounts |
 | is_active | boolean | Required |
 | timezone | text | Default `America/New_York` |
 | created_at | timestamptz | Required |
@@ -173,7 +174,7 @@ Stores one-time email verification and password-reset links. New links consume o
 
 ### audit_events
 
-Defines the future unified security/data-access audit record. The table structure is implemented, but event producers are intentionally deferred.
+Defines the unified security/data-access audit record. Administrative report changes and CLI role assignments are the first implemented event producers; other sensitive workflows remain future work.
 
 | Field | Type | Notes |
 | --- | --- | --- |
@@ -187,6 +188,25 @@ Defines the future unified security/data-access audit record. The table structur
 | outcome | text | Result such as `success` or `denied` |
 | event_data | json | Safe metadata only; never credentials, tokens, raw resumes, or prompts |
 | created_at | timestamptz | Required |
+
+### user_reports
+
+Stores bug reports, account issues, product feedback, and other support requests submitted by authenticated users. Report content is visible to the submitting user and administrators. `admin_notes` is internal and is never returned by the user-scoped report API.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | integer | Primary key |
+| workspace_id | integer | FK to the submitter's private workspace |
+| user_id | integer | FK to the submitting user |
+| category | text | `bug`, `feedback`, `account`, or `other` |
+| title | text | Short report title |
+| description | text | User-provided report details |
+| status | text | `new`, `in_review`, `resolved`, or `closed` |
+| admin_notes | text | Nullable internal administrator notes |
+| resolved_at | timestamptz | Nullable resolution timestamp |
+| resolved_by_user_id | integer | Nullable FK to the administrator that resolved or closed the report |
+| created_at | timestamptz | Required |
+| updated_at | timestamptz | Required |
 
 ### workspaces
 

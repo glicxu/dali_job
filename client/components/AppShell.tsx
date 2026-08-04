@@ -83,6 +83,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link href="/documents">Documents</Link>
           <Link href="/analytics">Analytics</Link>
           <Link href="/auth">Account</Link>
+          {user?.role === "admin" ? <Link href="/admin">Admin</Link> : null}
           <button type="button" className="sidebar-link sidebar-sign-out" onClick={signOut}>
             Sign Out
           </button>

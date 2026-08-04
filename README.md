@@ -102,6 +102,14 @@ Validate the configured database:
 python scripts\validate_database.py --config server\config.ini
 ```
 
+New registrations always receive the `user` role. Promote an existing verified account through the protected local administration script:
+
+```powershell
+python scripts\set_admin_role.py --config server\config.ini --email admin@example.com --role admin
+```
+
+Use `--role user` to remove administrator access. Role changes made by this script are recorded in `audit_events`. The local development seed account is assigned the `admin` role so the admin interface can be tested in `dev` auth mode.
+
 The older table creation helper is available for quick throwaway local setup from the current SQLAlchemy models:
 
 ```powershell
@@ -126,6 +134,8 @@ DaliJob supports two server auth modes:
 
 - `local`: normal DaliJob email/password registration and login.
 - `dev`: no-token local debugging mode. API requests use the built-in local development user.
+
+Accounts have either a `user` or `admin` role. Public registration can only create `user` accounts. Administrators can review submitted support reports and access diagnostic pages, but the role does not grant a general endpoint for browsing users' resumes, jobs, applications, or documents.
 
 Configure the mode in your private server config:
 

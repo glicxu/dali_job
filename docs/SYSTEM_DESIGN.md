@@ -241,7 +241,7 @@ Apify Indeed search workflow:
 3. The client sends the search request to the DaliJob server.
 4. The server calls the configured Apify Indeed scraper actor using `APIFY_API_TOKEN` from the server environment.
 5. The server normalizes Apify results into DaliJob search result objects.
-6. The client displays up to 5 returned jobs in a reviewable list.
+6. The client displays up to 10 returned jobs in a reviewable list.
 7. The user can open a job result to inspect the full description.
 8. The user selects one or more jobs to import.
 9. Imported jobs flow through the existing `jobs_cache` and `user_saved_jobs` pipeline without immediate OpenAI parsing unless match-on-import is selected.
@@ -256,7 +256,7 @@ Apify API endpoints:
 - Async actor run: `POST https://api.apify.com/v2/acts/misceres~indeed-scraper/runs?token=<APIFY_API_TOKEN>`.
 - Synchronous run returning dataset items: `POST https://api.apify.com/v2/acts/misceres~indeed-scraper/run-sync-get-dataset-items?token=<APIFY_API_TOKEN>`.
 
-The current implementation uses the synchronous dataset-items endpoint for the 5-result MVP. If searches regularly exceed the request timeout, switch to the async run endpoint, poll the run status, and then fetch the default dataset items. The actor input shape should be rechecked during maintenance because Apify actors are third-party components and their input schema can change.
+The current implementation uses the synchronous dataset-items endpoint for the 10-result MVP. If searches regularly exceed the request timeout, switch to the async run endpoint, poll the run status, and then fetch the default dataset items. The actor input shape should be rechecked during maintenance because Apify actors are third-party components and their input schema can change.
 
 Actor input shape for `misceres/indeed-scraper`:
 
@@ -272,7 +272,7 @@ Actor input shape for `misceres/indeed-scraper`:
 }
 ```
 
-DaliJob's client-facing `keyword` maps to Apify `position`, `location` maps to Apify `location`, and the first implementation uses `country: "US"`. DaliJob caps `maxItemsPerSearch` to 5 for the first UI. Keep `parseCompanyDetails: false` and `followApplyRedirects: false` to reduce runtime, cost, and redirect risk. Keep `saveOnlyUniqueItems: true`.
+DaliJob's client-facing `keyword` maps to Apify `position`, `location` maps to Apify `location`, and the first implementation uses `country: "US"`. DaliJob caps `maxItemsPerSearch` to 10 for the current UI. Keep `parseCompanyDetails: false` and `followApplyRedirects: false` to reduce runtime, cost, and redirect risk. Keep `saveOnlyUniqueItems: true`.
 
 Apify results are external data and should be normalized into DaliJob's internal source-data model before storage. The client should not depend directly on Apify field names. If Apify returns a `source_url` already present in `jobs_cache`, DaliJob should reuse the cached job rather than creating duplicate cache rows. Apify import should store `raw_description_text` and metadata first; structured `job_data` should be generated lazily only when matching or a structured job profile requires it.
 
@@ -706,6 +706,14 @@ DaliJob should provide a normal first-party login experience: users can register
 - `dev`: local debugging mode that maps every request to the built-in DaliJob development user.
 
 The broader Dalifin goal of registering once and using many apps should be treated as a shared identity architecture decision. That can be handled later by extracting identity into a common auth service or shared user database used by DaliJob, app_server, DaliBible, and other Dalifin apps. It should not mean DaliJob depends on an app_server login token or requires users to visit another application before using DaliJob.
+
+### Administration Boundary
+
+DaliJob uses a deliberately small account-level role boundary. Every public registration creates a `user`; an existing account can become an `admin` only through the config-aware `scripts/set_admin_role.py` operator command or an equivalent controlled database migration. The built-in development identity is an administrator for local testing.
+
+Administrator access is enforced by the server-side `require_admin` dependency, not by navigation visibility. The initial admin surface is limited to user-submitted support reports and links to safe diagnostic pages. It does not provide general access to users' resumes, documents, jobs, applications, AI prompts, or provider responses. Regular users can submit and track their own reports, but cannot read internal administrator notes.
+
+Every administrative report read or mutation must create an `audit_events` row with the actor, subject, action, outcome, and safe access/change metadata. Audit metadata must never contain passwords, session or action tokens, raw resumes, prompts, report descriptions, administrator note text, or provider response bodies.
 
 ### Integration Adapters
 

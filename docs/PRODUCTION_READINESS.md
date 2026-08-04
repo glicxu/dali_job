@@ -1,6 +1,6 @@
 # DaliJob Production Readiness Tracker
 
-Status updated on 2026-08-03. The new authentication/audit migration is implemented locally and must be applied and verified before deployment.
+Status updated on 2026-08-04. The authentication/audit and administrator-role migrations are implemented locally and must be applied and verified before deployment.
 
 ## Purpose
 
@@ -67,7 +67,7 @@ The ready-now portions of SEC-001, AUTH-001, WEB-001, REL-001, FILE-001, and DEP
 | Client lint and tests | ESLint passed; `2` browser-policy tests passed |
 | Node production dependency audit | No known vulnerabilities after updating Next.js and pinning patched `sharp` and PostCSS versions |
 | Client production build | Next.js 15.5.22 build passed |
-| Migration history | Linear, with one head at `20260803_0026`; deployment remains pending |
+| Migration history | Linear, with one head at `20260804_0027`; deployment remains pending |
 | OpenAPI contract | Regenerated from the current application; CI now fails on future drift |
 
 ## Readiness Gate Summary
@@ -154,7 +154,7 @@ The ready-now portions of SEC-001, AUTH-001, WEB-001, REL-001, FILE-001, and DEP
 - [x] Add a support procedure for lost access and compromised accounts.
 - [ ] Audit recovery and credential-change events without logging secrets or reset tokens.
 
-**Deployment requirement:** Apply migration `20260803_0026`, configure production SMTP and the public client URL, then run focused auth and browser smoke tests. The audit table exists, but event writes are intentionally not implemented yet.
+**Deployment requirement:** Apply migrations through `20260804_0027`, configure production SMTP and the public client URL, then run focused auth, administrator-boundary, and browser smoke tests. Audit producers currently cover administrator report updates and controlled CLI role changes; broader security-event coverage remains under AUD-001.
 
 ### DR-001 - Implement and prove backup and restore
 
@@ -295,7 +295,7 @@ The artifact retention and roll-forward database policy are documented in `RELEA
 
 **Existing control:** Application lifecycle events include actor identity, and application document-download authorization is recorded.
 
-**Current implementation:** Migration `20260803_0026` creates a unified `audit_events` structure with actor, workspace, event type, subject, source, outcome, safe JSON metadata, and timestamp. Per product decision, no event producers write to it yet.
+**Current implementation:** Migration `20260803_0026` creates a unified `audit_events` structure with actor, workspace, event type, subject, source, outcome, safe JSON metadata, and timestamp. Administrator report access and updates plus controlled CLI role assignments now write bounded audit metadata. Coverage of other sensitive workflows remains incomplete.
 
 **Acceptance criteria:**
 

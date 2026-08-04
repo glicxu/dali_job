@@ -100,7 +100,7 @@ class JobListImportResponse(BaseModel):
 class IndeedJobSearchRequest(BaseModel):
     keyword: str = Field(..., min_length=1, max_length=255)
     location: str = Field(..., min_length=1, max_length=255)
-    max_results: int = Field(default=5, ge=1, le=5)
+    max_results: int = Field(default=10, ge=1, le=10)
 
 
 class IndeedJobSearchResult(BaseModel):

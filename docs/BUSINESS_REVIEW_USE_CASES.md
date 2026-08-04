@@ -230,7 +230,7 @@ Current implementation:
 
 - Enter keyword and location.
 - Server calls Apify actor `misceres/indeed-scraper`.
-- Show up to 5 results.
+- Show up to 10 results.
 - Review full job descriptions.
 - Select and import jobs.
 - Optionally match imported jobs against a resume profile.

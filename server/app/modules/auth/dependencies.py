@@ -18,6 +18,7 @@ class AuthenticatedIdentity:
     display_name: str
     timezone: str = "America/New_York"
     provider: str = "dev"
+    role: str = "user"
 
 
 def get_dev_identity() -> AuthenticatedIdentity:
@@ -26,6 +27,7 @@ def get_dev_identity() -> AuthenticatedIdentity:
         email=DEV_USER_EMAIL,
         display_name=DEV_USER_DISPLAY_NAME,
         provider="dev",
+        role="admin",
     )
 
 
@@ -65,4 +67,13 @@ def get_current_identity(
         display_name=user.display_name,
         timezone=user.timezone,
         provider=user.auth_provider,
+        role=user.role,
     )
+
+
+def require_admin(
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> AuthenticatedIdentity:
+    if identity.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin access required")
+    return identity

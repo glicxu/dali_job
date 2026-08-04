@@ -63,6 +63,7 @@ class CurrentUserResponse(BaseModel):
     email: str
     display_name: str
     provider: str
+    role: str
 
 
 class AuthResponse(BaseModel):
@@ -92,6 +93,7 @@ def _public_user(request: Request, identity: AuthenticatedIdentity) -> CurrentUs
         email=identity.email,
         display_name=identity.display_name,
         provider=identity.provider,
+        role=identity.role,
     )
 
 
@@ -102,6 +104,7 @@ def _identity(user: User) -> AuthenticatedIdentity:
         display_name=user.display_name,
         timezone=user.timezone,
         provider=user.auth_provider,
+        role=user.role,
     )
 
 
@@ -125,6 +128,7 @@ def register(payload: RegisterRequest, request: Request, db: Session = Depends(g
         display_name=payload.display_name.strip(),
         password_hash=hash_password(payload.password),
         auth_provider="dalijob",
+        role="user",
         is_active=True,
         timezone=payload.timezone or "America/New_York",
         email_verified_at=None,

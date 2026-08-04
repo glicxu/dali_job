@@ -73,7 +73,7 @@ def test_managed_operation_persists_result_and_deduplicates_idempotency_key() ->
     assert operation["result_payload"]["keyword"] == "software engineer"
     assert operation["usage"]["results"] == 1
     assert operation["usage"]["duration_ms"] >= 0
-    assert calls == [{"keyword": "software engineer", "location": "Maryland", "max_results": 5}]
+    assert calls == [{"keyword": "software engineer", "location": "Maryland", "max_results": 10}]
 
 
 def test_failed_managed_operation_can_retry_without_exposing_exception_details() -> None:

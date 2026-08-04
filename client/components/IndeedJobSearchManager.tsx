@@ -77,7 +77,7 @@ function AuthenticatedIndeedJobSearchManager() {
     setSelectedKeys(new Set());
     setIsSearching(true);
     try {
-      const payload = await searchIndeedJobs(keyword.trim(), location.trim(), 5);
+      const payload = await searchIndeedJobs(keyword.trim(), location.trim(), 10);
       setResult(payload);
       setSelectedKeys(new Set(payload.results.map((item) => resultKey(item))));
       setStatus(`Found ${payload.results.length} job${payload.results.length === 1 ? "" : "s"}.`);

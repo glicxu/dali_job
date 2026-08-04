@@ -79,8 +79,9 @@ Actor: job seeker
 Current implementation:
 
 - Register with email, password, and display name.
+- Verify ownership through a time-limited email link.
 - Log in with email/password.
-- Receive a DaliJob bearer token.
+- Receive an opaque, revocable browser session.
 - Access `/me` and private workspace-scoped APIs.
 
 Business purpose:
@@ -88,9 +89,7 @@ Business purpose:
 - Establish a private user workspace for career data.
 - Avoid requiring users to authenticate through another Dalifin app for the MVP.
 
-Open business/security issue:
-
-- Local auth still has a code fallback JWT secret documented in `docs/ISSUES_IDENTIFIED.md`.
+Current recovery and account controls include single-use password reset, session revocation, and password-confirmed soft deletion. Audit event recording and hard-delete/privacy automation remain deferred.
 
 ### 3. Dashboard And Recommended Next Step
 

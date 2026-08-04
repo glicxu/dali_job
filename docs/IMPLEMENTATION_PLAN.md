@@ -102,7 +102,7 @@ Flexibility rules:
 
 3. [x] **SEC-01: Enforce production startup policy** - Implemented 2026-07-14.
    - [x] Reject production startup when `auth_mode` is `dev` or `disabled`.
-   - [x] Continue rejecting missing, empty, or known-default local JWT secrets.
+   - [x] Require verified accounts and opaque, revocable cookie sessions in production; reject browser-readable bearer credentials.
    - [x] Add a lightweight authorization inventory for every non-health `/api/v1` route and test the protected boundary without freezing route or response design.
 
 4. [x] **DATA-01: Enforce shared-versus-private job ownership** - Implemented 2026-07-14.

@@ -137,7 +137,56 @@ Resume/document readiness and interview stage are separate from lifecycle status
 | timezone | text | Default `America/New_York` |
 | created_at | timestamptz | Required |
 | updated_at | timestamptz | Required |
+| email_verified_at | timestamptz | Nullable until the registration email is verified; existing pre-verification accounts are backfilled during migration |
+| password_changed_at | timestamptz | Nullable; set when password recovery changes credentials |
 | deleted_at | timestamptz | Nullable |
+
+### auth_sessions
+
+Stores opaque, individually revocable browser sessions. Only SHA-256 hashes of the session and CSRF secrets are stored; raw credentials exist only in cookies.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | integer | Primary key |
+| user_id | integer | FK to users |
+| token_hash | text | Unique hash of the opaque `HttpOnly` session cookie |
+| csrf_hash | text | Hash of the double-submit CSRF token |
+| created_at | timestamptz | Required |
+| last_seen_at | timestamptz | Used to extend the idle lifetime at a bounded interval |
+| idle_expires_at | timestamptz | Sliding inactivity deadline |
+| absolute_expires_at | timestamptz | Non-extendable session deadline |
+| revoked_at | timestamptz | Nullable; set on logout, password change, disablement, or deletion |
+
+### auth_action_tokens
+
+Stores one-time email verification and password-reset links. New links consume older outstanding links for the same user and purpose.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | integer | Primary key |
+| user_id | integer | FK to users |
+| purpose | text | `verify_email` or `password_reset` |
+| token_hash | text | Unique hash; raw token is never stored |
+| created_at | timestamptz | Required |
+| expires_at | timestamptz | Required |
+| consumed_at | timestamptz | Nullable; enforces single use |
+
+### audit_events
+
+Defines the future unified security/data-access audit record. The table structure is implemented, but event producers are intentionally deferred.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | integer | Primary key |
+| workspace_id | integer | Nullable FK to workspaces; `SET NULL` on deletion |
+| actor_user_id | integer | Nullable FK to users; `SET NULL` on deletion |
+| event_type | text | Stable event name |
+| subject_type | text | Nullable entity category |
+| subject_id | text | Nullable entity identifier |
+| source | text | Event source such as `api` |
+| outcome | text | Result such as `success` or `denied` |
+| event_data | json | Safe metadata only; never credentials, tokens, raw resumes, or prompts |
+| created_at | timestamptz | Required |
 
 ### workspaces
 
@@ -506,6 +555,7 @@ Stores immutable AI generations and user revisions. The source snapshots are ser
 | parent_version_id | integer | Nullable self-FK for user revisions |
 | operation_id | integer | Nullable unique managed-operation FK |
 | source_document_version_id | integer | Exact uploaded resume version FK |
+| output_document_version_id | integer | Nullable unique FK to the rendered document version automatically attached to the application |
 | source_material_version_id | integer | Nullable exact tailored-resume material version used by a cover letter |
 | source_resume_snapshot | json | Immutable redacted source and provenance |
 | job_snapshot | json | Immutable effective saved-job input |
@@ -764,6 +814,7 @@ Future optional persistence for expensive or historical aggregate snapshots. Pha
 - `generated_application_materials.workspace_id, user_id, application_id, material_type`.
 - `generated_application_material_versions.material_id, version_number`.
 - `generated_application_material_versions.source_document_version_id`.
+- `generated_application_material_versions.output_document_version_id` unique when present.
 - `email_messages.integration_id, provider_message_id` unique.
 - `email_application_links.email_message_id, application_id` unique.
 - JSON indexes on `jobs_cache.job_data`, selected `resume_profiles.resume_data` paths, and analytics JSON fields if needed.

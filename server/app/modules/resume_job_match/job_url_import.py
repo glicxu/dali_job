@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import html
+import http.client
 import ipaddress
 import json
 import re
 import socket
+import ssl
+import time
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from urllib.parse import parse_qsl, urlencode, unquote, urldefrag, urljoin, urlunparse
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
 
 from fastapi import HTTPException, status
 
@@ -23,11 +24,31 @@ class RenderableFetchError(Exception):
 
 
 MAX_JOB_PAGE_BYTES = 2 * 1024 * 1024
+MAX_STATIC_TOTAL_BYTES = MAX_JOB_PAGE_BYTES
 MAX_JOB_TEXT_CHARS = 30_000
 FETCH_TIMEOUT_SECONDS = 12
+STATIC_FETCH_TOTAL_TIMEOUT_SECONDS = 24
+MAX_REDIRECTS = 5
+MAX_URL_LENGTH = 4096
 RENDERED_FETCH_TIMEOUT_MS = 20_000
 RENDERED_SELECTOR_TIMEOUT_MS = 6_000
 RENDERED_SETTLE_TIMEOUT_MS = 2_000
+RENDERED_FETCH_TOTAL_TIMEOUT_SECONDS = 30
+MAX_RENDERED_SUBREQUESTS = 80
+MAX_RENDERED_TOTAL_BYTES = 8 * 1024 * 1024
+MAX_RENDERED_HTML_BYTES = 2 * 1024 * 1024
+REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
+ALLOWED_URL_PORTS = {"http": 80, "https": 443}
+HOP_BY_HOP_HEADERS = {
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+}
 BROWSER_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -200,6 +221,40 @@ NEXT_QUERY_PARAMS = {"p", "page", "pg", "pageNumber", "page_number"}
 OFFSET_QUERY_PARAMS = {"start", "offset", "from", "first", "skip"}
 
 
+@dataclass(frozen=True)
+class ValidatedDestination:
+    url: str
+    scheme: str
+    hostname: str
+    port: int
+    addresses: tuple[str, ...]
+    request_target: str
+
+
+@dataclass(frozen=True)
+class NetworkResponse:
+    status_code: int
+    reason: str
+    headers: tuple[tuple[str, str], ...]
+    body: bytes
+
+    def header(self, name: str, default: str = "") -> str:
+        lowered = name.lower()
+        for key, value in self.headers:
+            if key.lower() == lowered:
+                return value
+        return default
+
+
+@dataclass
+class RenderedFetchBudget:
+    deadline: float
+    requests: int = 0
+    response_bytes: int = 0
+    blocked_reason: str | None = None
+    blocked_status_code: int = status.HTTP_400_BAD_REQUEST
+
+
 @dataclass
 class CandidateBlock:
     tag: str
@@ -208,39 +263,238 @@ class CandidateBlock:
     parts: list[str] = field(default_factory=list)
 
 
-def _is_public_host(hostname: str) -> bool:
+def _is_public_ip(ip_text: str) -> bool:
     try:
-        addresses = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
-    except socket.gaierror:
+        ip = ipaddress.ip_address(ip_text)
+    except ValueError:
         return False
+    return ip.is_global
 
+
+def _resolve_public_addresses(hostname: str, port: int) -> tuple[str, ...]:
+    try:
+        addresses = socket.getaddrinfo(
+            hostname,
+            port,
+            family=socket.AF_UNSPEC,
+            type=socket.SOCK_STREAM,
+            proto=socket.IPPROTO_TCP,
+        )
+    except socket.gaierror as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Job URL host could not be resolved.",
+        ) from exc
+
+    resolved: list[str] = []
     for item in addresses:
         ip_text = item[4][0]
-        try:
-            ip = ipaddress.ip_address(ip_text)
-        except ValueError:
-            return False
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_multicast
-            or ip.is_reserved
-            or ip.is_unspecified
-        ):
-            return False
-    return True
+        if not _is_public_ip(ip_text):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Job URL host is not allowed.")
+        if ip_text not in resolved:
+            resolved.append(ip_text)
+    if not resolved:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Job URL host could not be resolved.")
+    return tuple(resolved)
+
+
+def _validate_public_destination(url: str) -> ValidatedDestination:
+    if not isinstance(url, str) or not url.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Job URL is required.")
+    value = url.strip()
+    if len(value) > MAX_URL_LENGTH or any(ord(character) < 32 for character in value):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Job URL is malformed or too long.")
+
+    parsed = urlparse(value)
+    scheme = parsed.scheme.lower()
+    if scheme not in ALLOWED_URL_PORTS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Job URL must use http or https.")
+    if parsed.username is not None or parsed.password is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Job URL must not contain embedded credentials.",
+        )
+    if not parsed.hostname:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Job URL host is required.")
+    try:
+        port = parsed.port or ALLOWED_URL_PORTS[scheme]
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Job URL port is invalid.") from exc
+    if port != ALLOWED_URL_PORTS[scheme]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Job URL uses a nonstandard port that is not allowed.",
+        )
+
+    raw_hostname = parsed.hostname.rstrip(".")
+    if not raw_hostname:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Job URL host is invalid.")
+    try:
+        hostname = raw_hostname.encode("idna").decode("ascii").lower()
+    except UnicodeError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Job URL host is invalid.") from exc
+    addresses = _resolve_public_addresses(hostname, port)
+    host_for_url = f"[{hostname}]" if ":" in hostname else hostname
+    path = parsed.path or "/"
+    normalized_url = urlunparse((scheme, host_for_url, path, parsed.params, parsed.query, ""))
+    request_target = urlunparse(("", "", path, parsed.params, parsed.query, ""))
+    return ValidatedDestination(
+        url=normalized_url,
+        scheme=scheme,
+        hostname=hostname,
+        port=port,
+        addresses=addresses,
+        request_target=request_target,
+    )
 
 
 def validate_public_job_url(url: str) -> str:
-    parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"}:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Job URL must use http or https.")
-    if not parsed.hostname:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Job URL host is required.")
-    if not _is_public_host(parsed.hostname):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Job URL host is not allowed.")
-    return url
+    return _validate_public_destination(url).url
+
+
+class _PinnedHTTPConnection(http.client.HTTPConnection):
+    def __init__(self, hostname: str, port: int, address: str, timeout: float) -> None:
+        super().__init__(hostname, port=port, timeout=timeout)
+        self._validated_address = address
+
+    def connect(self) -> None:
+        self.sock = socket.create_connection(
+            (self._validated_address, self.port),
+            self.timeout,
+            self.source_address,
+        )
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    def __init__(self, hostname: str, port: int, address: str, timeout: float) -> None:
+        super().__init__(hostname, port=port, timeout=timeout, context=ssl.create_default_context())
+        self._validated_address = address
+
+    def connect(self) -> None:
+        raw_socket = socket.create_connection(
+            (self._validated_address, self.port),
+            self.timeout,
+            self.source_address,
+        )
+        try:
+            self.sock = self._context.wrap_socket(raw_socket, server_hostname=self.host)
+        except Exception:
+            raw_socket.close()
+            raise
+
+
+def _remaining_timeout(deadline: float) -> float:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Job URL fetch timed out.")
+    return max(0.1, min(float(FETCH_TIMEOUT_SECONDS), remaining))
+
+
+def _read_response_body(
+    response: http.client.HTTPResponse,
+    *,
+    max_bytes: int,
+    deadline: float,
+) -> bytes:
+    declared_length = response.headers.get("content-length")
+    if declared_length:
+        try:
+            if int(declared_length) > max_bytes:
+                raise HTTPException(
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    detail="Job page is too large to import.",
+                )
+        except ValueError:
+            pass
+
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        _remaining_timeout(deadline)
+        chunk = response.read(min(64 * 1024, max_bytes + 1 - total))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail="Job page is too large to import.",
+            )
+    return b"".join(chunks)
+
+
+def _request_validated_destination(
+    destination: ValidatedDestination,
+    *,
+    method: str,
+    headers: dict[str, str],
+    max_bytes: int,
+    deadline: float,
+) -> NetworkResponse:
+    last_error: Exception | None = None
+    for address in destination.addresses:
+        connection: http.client.HTTPConnection
+        timeout = _remaining_timeout(deadline)
+        if destination.scheme == "https":
+            connection = _PinnedHTTPSConnection(destination.hostname, destination.port, address, timeout)
+        else:
+            connection = _PinnedHTTPConnection(destination.hostname, destination.port, address, timeout)
+        try:
+            connection.request(method, destination.request_target, headers=headers)
+            response = connection.getresponse()
+            body = b"" if method == "HEAD" else _read_response_body(response, max_bytes=max_bytes, deadline=deadline)
+            response_headers = tuple(
+                (key, value)
+                for key, value in response.getheaders()
+                if key.lower() not in HOP_BY_HOP_HEADERS
+            )
+            return NetworkResponse(
+                status_code=response.status,
+                reason=response.reason or "",
+                headers=response_headers,
+                body=body,
+            )
+        except HTTPException:
+            raise
+        except (OSError, ssl.SSLError, http.client.HTTPException) as exc:
+            last_error = exc
+        finally:
+            connection.close()
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="The job URL is temporarily unreachable. Retry or paste the job description manually.",
+    ) from last_error
+
+
+def _fetch_single_response(
+    url: str,
+    *,
+    method: str = "GET",
+    headers: dict[str, str],
+    max_bytes: int,
+    deadline: float,
+) -> tuple[ValidatedDestination, NetworkResponse]:
+    destination = _validate_public_destination(url)
+    host_header = f"[{destination.hostname}]" if ":" in destination.hostname else destination.hostname
+    safe_headers = {
+        "Host": host_header,
+        "User-Agent": headers.get("User-Agent", BROWSER_USER_AGENT),
+        "Accept": headers.get("Accept", "*/*"),
+        "Accept-Language": headers.get("Accept-Language", "en-US,en;q=0.9"),
+        "Accept-Encoding": "identity",
+        "Connection": "close",
+    }
+    for name in ("Cookie", "Referer", "Origin"):
+        if headers.get(name):
+            safe_headers[name] = headers[name]
+    return destination, _request_validated_destination(
+        destination,
+        method=method,
+        headers=safe_headers,
+        max_bytes=max_bytes,
+        deadline=deadline,
+    )
 
 
 class JobHtmlParser(HTMLParser):
@@ -926,31 +1180,53 @@ def extract_job_page_text_from_html(content: str) -> str:
 
 
 def _fetch_url_text(url: str) -> tuple[str, str]:
-    safe_url = validate_public_job_url(url)
-    request = Request(
-        safe_url,
-        headers={
-            "User-Agent": BROWSER_USER_AGENT,
-            "Accept": "text/html,text/plain,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-        },
-    )
-    try:
-        with urlopen(request, timeout=FETCH_TIMEOUT_SECONDS) as response:
-            content_type = response.headers.get("content-type", "")
-            raw = response.read(MAX_JOB_PAGE_BYTES + 1)
-    except HTTPError as exc:
-        if exc.code in {401, 403, 429, 503}:
-            raise RenderableFetchError(exc.code, exc.reason) from exc
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Job URL returned HTTP {exc.code}.") from exc
-    except URLError as exc:
+    headers = {
+        "User-Agent": BROWSER_USER_AGENT,
+        "Accept": "text/html,text/plain,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    deadline = time.monotonic() + STATIC_FETCH_TOTAL_TIMEOUT_SECONDS
+    current_url = url
+    visited: set[str] = set()
+    total_response_bytes = 0
+    response: NetworkResponse | None = None
+    for redirect_count in range(MAX_REDIRECTS + 1):
+        remaining_bytes = MAX_STATIC_TOTAL_BYTES - total_response_bytes
+        if remaining_bytes <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail="Job URL responses exceeded the allowed total size.",
+            )
+        destination, response = _fetch_single_response(
+            current_url,
+            headers=headers,
+            max_bytes=remaining_bytes,
+            deadline=deadline,
+        )
+        total_response_bytes += len(response.body)
+        if destination.url in visited:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Job URL redirect loop detected.")
+        visited.add(destination.url)
+        if response.status_code not in REDIRECT_STATUS_CODES:
+            break
+        location = response.header("location")
+        if not location:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Job URL returned an invalid redirect.")
+        if redirect_count >= MAX_REDIRECTS:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Job URL returned too many redirects.")
+        current_url = validate_public_job_url(urljoin(destination.url, location))
+
+    if response is None:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Job URL did not return a response.")
+    if response.status_code in {401, 403, 429, 503}:
+        raise RenderableFetchError(response.status_code, response.reason)
+    if response.status_code >= 400:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="The job URL is temporarily unreachable. Retry or paste the job description manually.",
-        ) from exc
+            detail=f"Job URL returned HTTP {response.status_code}.",
+        )
 
-    if len(raw) > MAX_JOB_PAGE_BYTES:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Job page is too large to import.")
+    content_type = response.header("content-type")
     if "text/html" not in content_type and "text/plain" not in content_type and "application/xhtml" not in content_type:
         raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Job URL did not return HTML or text.")
 
@@ -958,8 +1234,110 @@ def _fetch_url_text(url: str) -> tuple[str, str]:
     match = re.search(r"charset=([\w.-]+)", content_type, re.IGNORECASE)
     if match:
         charset = match.group(1)
-    text = raw.decode(charset, errors="ignore")
+    text = response.body.decode(charset, errors="ignore")
     return content_type, text
+
+
+def _block_browser_route(
+    route,
+    budget: RenderedFetchBudget,
+    reason: str,
+    status_code: int = status.HTTP_400_BAD_REQUEST,
+) -> None:
+    if budget.blocked_reason is None:
+        budget.blocked_reason = reason
+        budget.blocked_status_code = status_code
+    route.abort()
+
+
+def _proxy_browser_route(route, budget: RenderedFetchBudget) -> None:
+    request = route.request
+    budget.requests += 1
+    if budget.requests > MAX_RENDERED_SUBREQUESTS:
+        _block_browser_route(
+            route,
+            budget,
+            "Rendered job page exceeded the allowed network request count.",
+            status.HTTP_413_CONTENT_TOO_LARGE,
+        )
+        return
+    if time.monotonic() >= budget.deadline:
+        _block_browser_route(
+            route,
+            budget,
+            "Rendered job page exceeded the allowed fetch time.",
+            status.HTTP_504_GATEWAY_TIMEOUT,
+        )
+        return
+
+    try:
+        safe_url = validate_public_job_url(request.url)
+    except HTTPException as exc:
+        _block_browser_route(route, budget, str(exc.detail), exc.status_code)
+        return
+
+    if request.resource_type in {"image", "media", "font"}:
+        route.abort()
+        return
+    if request.method.upper() not in {"GET", "HEAD"}:
+        route.abort()
+        return
+
+    remaining_bytes = MAX_RENDERED_TOTAL_BYTES - budget.response_bytes
+    if remaining_bytes <= 0:
+        _block_browser_route(
+            route,
+            budget,
+            "Rendered job page exceeded the allowed response size.",
+            status.HTTP_413_CONTENT_TOO_LARGE,
+        )
+        return
+
+    raw_headers = request.headers
+    request_headers = {
+        "User-Agent": raw_headers.get("user-agent", BROWSER_USER_AGENT),
+        "Accept": raw_headers.get("accept", "*/*"),
+        "Accept-Language": raw_headers.get("accept-language", "en-US,en;q=0.9"),
+        "Cookie": raw_headers.get("cookie", ""),
+        "Referer": raw_headers.get("referer", ""),
+        "Origin": raw_headers.get("origin", ""),
+    }
+    try:
+        destination, response = _fetch_single_response(
+            safe_url,
+            method=request.method.upper(),
+            headers=request_headers,
+            max_bytes=min(MAX_JOB_PAGE_BYTES, remaining_bytes),
+            deadline=budget.deadline,
+        )
+        response_headers: dict[str, str] = {}
+        for key, value in response.headers:
+            lowered = key.lower()
+            if lowered in HOP_BY_HOP_HEADERS or lowered == "content-length":
+                continue
+            response_headers[key] = value
+        if response.status_code in REDIRECT_STATUS_CODES:
+            location = response.header("location")
+            if not location:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Rendered job page returned an invalid redirect.",
+                )
+            response_headers["Location"] = validate_public_job_url(urljoin(destination.url, location))
+        budget.response_bytes += len(response.body)
+        route.fulfill(status=response.status_code, headers=response_headers, body=response.body)
+    except HTTPException as exc:
+        _block_browser_route(route, budget, str(exc.detail), exc.status_code)
+
+
+def _remaining_render_timeout_ms(deadline: float, maximum_ms: int) -> int:
+    remaining_ms = int((deadline - time.monotonic()) * 1000)
+    if remaining_ms <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Rendered job page exceeded the allowed fetch time.",
+        )
+    return max(1, min(maximum_ms, remaining_ms))
 
 
 def _fetch_rendered_html(url: str) -> str:
@@ -978,36 +1356,70 @@ def _fetch_rendered_html(url: str) -> str:
             ),
         ) from exc
 
+    budget = RenderedFetchBudget(deadline=time.monotonic() + RENDERED_FETCH_TOTAL_TIMEOUT_SECONDS)
+
     def render_with_browser(browser_type) -> str:
-        browser = browser_type.launch(headless=True)
+        browser = browser_type.launch(
+            headless=True,
+            timeout=_remaining_render_timeout_ms(budget.deadline, RENDERED_FETCH_TIMEOUT_MS),
+        )
         try:
-            page = browser.new_page(
+            context = browser.new_context(
                 user_agent=BROWSER_USER_AGENT,
                 extra_http_headers={"Accept-Language": "en-US,en;q=0.9"},
+                service_workers="block",
             )
-            page.route(
-                "**/*",
-                lambda route: route.abort()
-                if route.request.resource_type in {"image", "media", "font"}
-                else route.continue_(),
-            )
-            page.goto(safe_url, wait_until="domcontentloaded", timeout=RENDERED_FETCH_TIMEOUT_MS)
             try:
-                page.wait_for_selector(
-                    "a[href*='/jobs/'], a[href*='/job/'], a[href*='/GetJob/ViewDetails/'], "
-                    "a[href*='/viewjob'], a[href*='/rc/clk'], [data-document-id], [data-job-id], "
-                    "[data-requisition-id], [data-jk], [data-vjk], #jobDescriptionText, "
-                    "[class*='jobsearch-RightPane'], [class*='jobDescription'], "
-                    "[data-testid='jobsearch-JobComponent-description']",
-                    timeout=RENDERED_SELECTOR_TIMEOUT_MS,
+                context.route("**/*", lambda route: _proxy_browser_route(route, budget))
+                context.route_web_socket(
+                    "**/*",
+                    lambda websocket: websocket.close(code=1008, reason="Network access is restricted."),
                 )
-            except PlaywrightTimeoutError:
-                pass
-            try:
-                page.wait_for_load_state("networkidle", timeout=RENDERED_SETTLE_TIMEOUT_MS)
-            except PlaywrightTimeoutError:
-                pass
-            return page.content()
+                page = context.new_page()
+                try:
+                    page.goto(
+                        safe_url,
+                        wait_until="domcontentloaded",
+                        timeout=_remaining_render_timeout_ms(budget.deadline, RENDERED_FETCH_TIMEOUT_MS),
+                    )
+                except PlaywrightError:
+                    if budget.blocked_reason is not None:
+                        raise HTTPException(
+                            status_code=budget.blocked_status_code,
+                            detail=budget.blocked_reason,
+                        )
+                    raise
+                if budget.blocked_reason is not None:
+                    raise HTTPException(status_code=budget.blocked_status_code, detail=budget.blocked_reason)
+                try:
+                    page.wait_for_selector(
+                        "a[href*='/jobs/'], a[href*='/job/'], a[href*='/GetJob/ViewDetails/'], "
+                        "a[href*='/viewjob'], a[href*='/rc/clk'], [data-document-id], [data-job-id], "
+                        "[data-requisition-id], [data-jk], [data-vjk], #jobDescriptionText, "
+                        "[class*='jobsearch-RightPane'], [class*='jobDescription'], "
+                        "[data-testid='jobsearch-JobComponent-description']",
+                        timeout=_remaining_render_timeout_ms(budget.deadline, RENDERED_SELECTOR_TIMEOUT_MS),
+                    )
+                except PlaywrightTimeoutError:
+                    pass
+                try:
+                    page.wait_for_load_state(
+                        "networkidle",
+                        timeout=_remaining_render_timeout_ms(budget.deadline, RENDERED_SETTLE_TIMEOUT_MS),
+                    )
+                except PlaywrightTimeoutError:
+                    pass
+                if budget.blocked_reason is not None:
+                    raise HTTPException(status_code=budget.blocked_status_code, detail=budget.blocked_reason)
+                rendered_html = page.content()
+                if len(rendered_html.encode("utf-8")) > MAX_RENDERED_HTML_BYTES:
+                    raise HTTPException(
+                        status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                        detail="Rendered job page is too large to import.",
+                    )
+                return rendered_html
+            finally:
+                context.close()
         finally:
             browser.close()
 

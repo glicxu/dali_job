@@ -15,6 +15,9 @@ from app.modules.profiles.schemas import ResumeData
 
 MAX_RESUME_BYTES = 8 * 1024 * 1024
 MAX_RESUME_TEXT_CHARS = 24_000
+MAX_PDF_PAGES = 50
+MAX_PDF_EXTRACTED_CHARS = 200_000
+PDF_SIGNATURE = b"%PDF-"
 
 
 class ResumeImportResponse(BaseModel):
@@ -178,12 +181,34 @@ def redact_resume_personal_info(text: str) -> str:
     return clean_resume_text("\n".join(redacted))
 
 
+def validate_pdf_signature(content: bytes) -> None:
+    if not content.startswith(PDF_SIGNATURE):
+        raise HTTPException(status_code=400, detail="Uploaded PDF content does not have a valid PDF signature.")
+
+
 def extract_pdf_text(content: bytes) -> str:
+    validate_pdf_signature(content)
     try:
-        reader = PdfReader(io.BytesIO(content))
-        pages = [page.extract_text() or "" for page in reader.pages]
+        reader = PdfReader(io.BytesIO(content), strict=True)
+        if reader.is_encrypted:
+            raise HTTPException(status_code=400, detail="Encrypted PDF documents are not supported.")
+        if len(reader.pages) > MAX_PDF_PAGES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"PDF documents may contain at most {MAX_PDF_PAGES} pages.",
+            )
+        pages: list[str] = []
+        extracted_chars = 0
+        for page in reader.pages:
+            page_text = page.extract_text() or ""
+            extracted_chars += len(page_text)
+            if extracted_chars > MAX_PDF_EXTRACTED_CHARS:
+                raise HTTPException(status_code=400, detail="PDF extracted text exceeds the processing limit.")
+            pages.append(page_text)
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Could not read PDF resume: {exc}") from exc
+        raise HTTPException(status_code=400, detail="Could not safely read the uploaded PDF.") from exc
 
     text = redact_resume_personal_info("\n\n".join(page for page in pages if page.strip()))
     if not text:
@@ -195,9 +220,9 @@ async def extract_resume_text(file: UploadFile) -> str:
     if file.content_type not in {"application/pdf", "application/x-pdf"}:
         raise HTTPException(status_code=400, detail="Only PDF resume uploads are supported right now.")
 
-    content = await file.read()
+    content = await file.read(MAX_RESUME_BYTES + 1)
     if len(content) > MAX_RESUME_BYTES:
-        raise HTTPException(status_code=413, detail="Resume PDF is larger than 8 MB.")
+        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="Resume PDF is larger than 8 MB.")
     return extract_pdf_text(content)
 
 

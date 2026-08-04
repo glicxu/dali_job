@@ -3,8 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any
-
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Header, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,6 +16,7 @@ from app.modules.documents.storage import (
     read_supported_upload,
     safe_file_name,
     sha256_hex,
+    normalized_content_type,
     write_document_file,
 )
 from app.modules.job_search.apify_indeed import APIFY_INDEED_ACTOR_ID
@@ -309,7 +308,7 @@ async def enqueue_resume_parse(
 ) -> ManagedOperationResponse:
     content = await read_supported_upload(file)
     file_name = safe_file_name(file.filename)
-    content_type = file.content_type or "application/octet-stream"
+    content_type = normalized_content_type(file.content_type)
     resume_text = extract_redacted_text(content, content_type)
     if not resume_text:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No resume text could be extracted.")

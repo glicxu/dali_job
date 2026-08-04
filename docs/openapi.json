@@ -23,12 +23,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/auth/register": {
@@ -54,7 +49,89 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/verify-email": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Verify Email",
+        "operationId": "verify_email_api_v1_auth_verify_email_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
                   "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/resend-verification": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Resend Verification",
+        "operationId": "resend_verification_api_v1_auth_resend_verification_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             }
@@ -113,6 +190,164 @@
         }
       }
     },
+    "/api/v1/auth/forgot-password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Forgot Password",
+        "operationId": "forgot_password_api_v1_auth_forgot_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/reset-password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Reset Password",
+        "operationId": "reset_password_api_v1_auth_reset_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordResetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logout",
+        "operationId": "logout_api_v1_auth_logout_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/csrf": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Get Csrf Token",
+        "operationId": "get_csrf_token_api_v1_auth_csrf_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsrfResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/account": {
+      "delete": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Delete Account",
+        "operationId": "delete_account_api_v1_auth_account_delete",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/applications": {
       "get": {
         "tags": [
@@ -120,11 +355,6 @@
         ],
         "summary": "List Applications",
         "operationId": "list_applications_api_v1_applications_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "status",
@@ -218,11 +448,6 @@
         ],
         "summary": "Create Application",
         "operationId": "create_application_api_v1_applications_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -264,11 +489,6 @@
         ],
         "summary": "Get Application",
         "operationId": "get_application_api_v1_applications__application_id__get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "application_id",
@@ -309,11 +529,6 @@
         ],
         "summary": "Update Application",
         "operationId": "update_application_api_v1_applications__application_id__patch",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "application_id",
@@ -366,11 +581,6 @@
         ],
         "summary": "Change Application Status",
         "operationId": "change_application_status_api_v1_applications__application_id__status_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "application_id",
@@ -423,11 +633,6 @@
         ],
         "summary": "Archive Application",
         "operationId": "archive_application_api_v1_applications__application_id__archive_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "application_id",
@@ -470,11 +675,6 @@
         ],
         "summary": "Restore Application",
         "operationId": "restore_application_api_v1_applications__application_id__restore_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "application_id",
@@ -527,11 +727,6 @@
         ],
         "summary": "List Application Events",
         "operationId": "list_application_events_api_v1_applications__application_id__events_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "application_id",
@@ -578,11 +773,6 @@
         ],
         "summary": "Add Application Note",
         "operationId": "add_application_note_api_v1_applications__application_id__notes_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "application_id",
@@ -635,11 +825,6 @@
         ],
         "summary": "Add Application Task",
         "operationId": "add_application_task_api_v1_applications__application_id__tasks_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "application_id",
@@ -690,11 +875,6 @@
         ],
         "summary": "List Application Tasks",
         "operationId": "list_application_tasks_api_v1_applications__application_id__tasks_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "application_id",
@@ -784,11 +964,6 @@
         ],
         "summary": "Update Application Task",
         "operationId": "update_application_task_api_v1_applications__application_id__tasks__task_id__patch",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "application_id",
@@ -850,11 +1025,6 @@
         ],
         "summary": "List Application Documents",
         "operationId": "list_application_documents_api_v1_applications__application_id__documents_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "application_id",
@@ -899,11 +1069,6 @@
         ],
         "summary": "Attach Application Document",
         "operationId": "attach_application_document_api_v1_applications__application_id__documents_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "application_id",
@@ -956,11 +1121,6 @@
         ],
         "summary": "Detach Application Document",
         "operationId": "detach_application_document_api_v1_applications__application_id__documents__attachment_id__delete",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "application_id",
@@ -1005,11 +1165,6 @@
         ],
         "summary": "Create Application Document Download Ticket",
         "operationId": "create_application_document_download_ticket_api_v1_applications__application_id__documents__attachment_id__download_ticket_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "application_id",
@@ -1061,11 +1216,6 @@
         ],
         "summary": "Analytics Summary",
         "operationId": "analytics_summary_api_v1_analytics_summary_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "start_date",
@@ -1144,12 +1294,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/documents/downloads/{token}": {
@@ -1210,12 +1355,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       },
       "post": {
         "tags": [
@@ -1254,12 +1394,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/documents/{document_id}/versions": {
@@ -1269,11 +1404,6 @@
         ],
         "summary": "Upload Document Version",
         "operationId": "upload_document_version_api_v1_documents__document_id__versions_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "document_id",
@@ -1324,11 +1454,6 @@
         ],
         "summary": "List Document Versions",
         "operationId": "list_document_versions_api_v1_documents__document_id__versions_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "document_id",
@@ -1375,11 +1500,6 @@
         ],
         "summary": "Create Document Download Ticket",
         "operationId": "create_document_download_ticket_api_v1_documents__document_id__download_ticket_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "document_id",
@@ -1422,11 +1542,6 @@
         ],
         "summary": "Get Document",
         "operationId": "get_document_api_v1_documents__document_id__get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "document_id",
@@ -1467,11 +1582,6 @@
         ],
         "summary": "Delete Document",
         "operationId": "delete_document_api_v1_documents__document_id__delete",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "document_id",
@@ -1517,11 +1627,6 @@
         ],
         "summary": "Get Document Text",
         "operationId": "get_document_text_api_v1_documents__document_id__text_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "document_id",
@@ -1564,11 +1669,6 @@
         ],
         "summary": "Get Document Dependencies",
         "operationId": "get_document_dependencies_api_v1_documents__document_id__dependencies_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "document_id",
@@ -1693,12 +1793,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/job-search/indeed/import": {
@@ -1739,12 +1834,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/interviews": {
@@ -1754,11 +1844,6 @@
         ],
         "summary": "List Interviews",
         "operationId": "list_interviews_api_v1_interviews_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "application_id",
@@ -1811,11 +1896,6 @@
         ],
         "summary": "Create Interview",
         "operationId": "create_interview_api_v1_interviews_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -1857,11 +1937,6 @@
         ],
         "summary": "Get Interview",
         "operationId": "get_interview_api_v1_interviews__interview_id__get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "interview_id",
@@ -1902,11 +1977,6 @@
         ],
         "summary": "Update Interview",
         "operationId": "update_interview_api_v1_interviews__interview_id__patch",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "interview_id",
@@ -1959,11 +2029,6 @@
         ],
         "summary": "Add Interview Note",
         "operationId": "add_interview_note_api_v1_interviews__interview_id__notes_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "interview_id",
@@ -2016,11 +2081,6 @@
         ],
         "summary": "List Jobs",
         "operationId": "list_jobs_api_v1_jobs_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "include_archived",
@@ -2066,11 +2126,6 @@
         ],
         "summary": "Create Job",
         "operationId": "create_job_api_v1_jobs_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -2143,12 +2198,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/jobs/import-description": {
@@ -2189,12 +2239,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/jobs/import-list/discover": {
@@ -2235,12 +2280,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/jobs/import-list": {
@@ -2281,12 +2321,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/jobs/bulk-delete": {
@@ -2327,12 +2362,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/jobs/{job_id}": {
@@ -2342,11 +2372,6 @@
         ],
         "summary": "Get Job",
         "operationId": "get_job_api_v1_jobs__job_id__get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "job_id",
@@ -2387,11 +2412,6 @@
         ],
         "summary": "Update Job",
         "operationId": "update_job_api_v1_jobs__job_id__patch",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "job_id",
@@ -2442,11 +2462,6 @@
         ],
         "summary": "Delete Job",
         "operationId": "delete_job_api_v1_jobs__job_id__delete",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "job_id",
@@ -2482,11 +2497,6 @@
         ],
         "summary": "Get Job Dependencies",
         "operationId": "get_job_dependencies_api_v1_jobs__job_id__dependencies_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "job_id",
@@ -2529,11 +2539,6 @@
         ],
         "summary": "List Job Matches",
         "operationId": "list_job_matches_api_v1_jobs__job_id__matches_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "job_id",
@@ -2576,11 +2581,6 @@
         ],
         "summary": "Archive Job",
         "operationId": "archive_job_api_v1_jobs__job_id__archive_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "job_id",
@@ -2616,11 +2616,6 @@
         ],
         "summary": "Restore Job",
         "operationId": "restore_job_api_v1_jobs__job_id__restore_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "job_id",
@@ -2656,11 +2651,6 @@
         ],
         "summary": "Analyze Job",
         "operationId": "analyze_job_api_v1_jobs__job_id__analyze_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "job_id",
@@ -2703,11 +2693,6 @@
         ],
         "summary": "List Application Materials",
         "operationId": "list_application_materials_api_v1_application_materials_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "application_id",
@@ -2758,11 +2743,6 @@
         ],
         "summary": "Get Application Material",
         "operationId": "get_application_material_api_v1_application_materials__material_id__get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "material_id",
@@ -2805,11 +2785,6 @@
         ],
         "summary": "Revise Application Material",
         "operationId": "revise_application_material_api_v1_application_materials__material_id__versions_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "material_id",
@@ -2862,11 +2837,6 @@
         ],
         "summary": "Enqueue Job Search",
         "operationId": "enqueue_job_search_api_v1_operations_job_search_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -2926,11 +2896,6 @@
         ],
         "summary": "Enqueue Provider Job Import",
         "operationId": "enqueue_provider_job_import_api_v1_operations_provider_job_import_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -2990,11 +2955,6 @@
         ],
         "summary": "Enqueue Job List Discover",
         "operationId": "enqueue_job_list_discover_api_v1_operations_job_list_discover_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -3054,11 +3014,6 @@
         ],
         "summary": "Enqueue Job List Import",
         "operationId": "enqueue_job_list_import_api_v1_operations_job_list_import_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -3118,11 +3073,6 @@
         ],
         "summary": "Enqueue Job Draft",
         "operationId": "enqueue_job_draft_api_v1_operations_job_draft_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -3182,11 +3132,6 @@
         ],
         "summary": "Enqueue Job Analyze",
         "operationId": "enqueue_job_analyze_api_v1_operations_job_analyze_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -3246,11 +3191,6 @@
         ],
         "summary": "Enqueue Resume Job Match",
         "operationId": "enqueue_resume_job_match_api_v1_operations_resume_job_match_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -3310,11 +3250,6 @@
         ],
         "summary": "Enqueue Bulk Resume Job Match",
         "operationId": "enqueue_bulk_resume_job_match_api_v1_operations_bulk_resume_job_match_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -3374,11 +3309,6 @@
         ],
         "summary": "Enqueue Resume Parse",
         "operationId": "enqueue_resume_parse_api_v1_operations_resume_parse_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -3438,11 +3368,6 @@
         ],
         "summary": "Enqueue Resume Parse Retry",
         "operationId": "enqueue_resume_parse_retry_api_v1_operations_resume_parse_retry_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -3502,11 +3427,6 @@
         ],
         "summary": "Enqueue Interview Prep",
         "operationId": "enqueue_interview_prep_api_v1_operations_interview_prep_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -3566,11 +3486,6 @@
         ],
         "summary": "Enqueue Tailored Resume",
         "operationId": "enqueue_tailored_resume_api_v1_operations_tailored_resume_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -3630,11 +3545,6 @@
         ],
         "summary": "Enqueue Cover Letter",
         "operationId": "enqueue_cover_letter_api_v1_operations_cover_letter_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -3694,11 +3604,6 @@
         ],
         "summary": "List Managed Operations",
         "operationId": "list_managed_operations_api_v1_operations_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "status",
@@ -3787,12 +3692,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/operations/{operation_id}": {
@@ -3802,11 +3702,6 @@
         ],
         "summary": "Get Managed Operation",
         "operationId": "get_managed_operation_api_v1_operations__operation_id__get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "operation_id",
@@ -3849,11 +3744,6 @@
         ],
         "summary": "Retry Managed Operation",
         "operationId": "retry_managed_operation_api_v1_operations__operation_id__retry_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "operation_id",
@@ -3896,11 +3786,6 @@
         ],
         "summary": "Cancel Managed Operation",
         "operationId": "cancel_managed_operation_api_v1_operations__operation_id__cancel_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "operation_id",
@@ -3974,12 +3859,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/profile/resume-imports/{document_id}/retry": {
@@ -3989,11 +3869,6 @@
         ],
         "summary": "Retry Resume Import",
         "operationId": "retry_resume_import_api_v1_profile_resume_imports__document_id__retry_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "document_id",
@@ -4067,12 +3942,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/resume-profiles": {
@@ -4093,12 +3963,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       },
       "post": {
         "tags": [
@@ -4137,12 +4002,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/resume-profiles/{resume_profile_id}": {
@@ -4152,11 +4012,6 @@
         ],
         "summary": "Get Resume Profile",
         "operationId": "get_resume_profile_api_v1_resume_profiles__resume_profile_id__get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "resume_profile_id",
@@ -4197,11 +4052,6 @@
         ],
         "summary": "Update Resume Profile",
         "operationId": "update_resume_profile_api_v1_resume_profiles__resume_profile_id__patch",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "resume_profile_id",
@@ -4252,11 +4102,6 @@
         ],
         "summary": "Delete Resume Profile",
         "operationId": "delete_resume_profile_api_v1_resume_profiles__resume_profile_id__delete",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "resume_profile_id",
@@ -4302,11 +4147,6 @@
         ],
         "summary": "Get Resume Profile Dependencies",
         "operationId": "get_resume_profile_dependencies_api_v1_resume_profiles__resume_profile_id__dependencies_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "resume_profile_id",
@@ -4380,12 +4220,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/resume-job-matches": {
@@ -4426,12 +4261,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/resume-job-matches/saved-jobs": {
@@ -4472,12 +4302,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/resume-job-matches/pending-job": {
@@ -4518,12 +4343,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     }
   },
@@ -6073,22 +5893,12 @@
       },
       "AuthResponse": {
         "properties": {
-          "access_token": {
-            "type": "string",
-            "title": "Access Token"
-          },
-          "token_type": {
-            "type": "string",
-            "title": "Token Type",
-            "default": "bearer"
-          },
           "user": {
             "$ref": "#/components/schemas/CurrentUserResponse"
           }
         },
         "type": "object",
         "required": [
-          "access_token",
           "user"
         ],
         "title": "AuthResponse"
@@ -6097,7 +5907,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           }
         },
@@ -6111,7 +5921,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           }
         },
@@ -6125,7 +5935,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           },
           "title": {
@@ -6155,7 +5965,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           }
         },
@@ -6340,6 +6150,19 @@
           "source_document_version_id"
         ],
         "title": "CoverLetterGenerationRequest"
+      },
+      "CsrfResponse": {
+        "properties": {
+          "csrf_token": {
+            "type": "string",
+            "title": "Csrf Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "csrf_token"
+        ],
+        "title": "CsrfResponse"
       },
       "CurrentUserResponse": {
         "properties": {
@@ -6672,6 +6495,21 @@
         ],
         "title": "DashboardResponse"
       },
+      "DeleteAccountRequest": {
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Current Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_password"
+        ],
+        "title": "DeleteAccountRequest"
+      },
       "DocumentDependency": {
         "properties": {
           "dependency_type": {
@@ -6888,6 +6726,21 @@
           "created_at"
         ],
         "title": "DocumentVersionResponse"
+      },
+      "EmailRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "EmailRequest"
       },
       "HTTPValidationError": {
         "properties": {
@@ -9299,6 +9152,17 @@
             ],
             "title": "Source Document Version Id"
           },
+          "output_document_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Document Version Id"
+          },
           "source_material_version_id": {
             "anyOf": [
               {
@@ -9417,6 +9281,41 @@
           "created_at"
         ],
         "title": "MaterialVersionResponse"
+      },
+      "MessageResponse": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "MessageResponse"
+      },
+      "PasswordResetRequest": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 20,
+            "title": "Token"
+          },
+          "new_password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 8,
+            "title": "New Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "new_password"
+        ],
+        "title": "PasswordResetRequest"
       },
       "PendingMatchedJob": {
         "properties": {
@@ -10413,6 +10312,21 @@
         ],
         "title": "TailoredResumeGenerationRequest"
       },
+      "TokenRequest": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 20,
+            "title": "Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "title": "TokenRequest"
+      },
       "UnsupportedRequirement": {
         "properties": {
           "requirement": {
@@ -10454,6 +10368,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",
@@ -10463,12 +10384,6 @@
           "type"
         ],
         "title": "ValidationError"
-      }
-    },
-    "securitySchemes": {
-      "HTTPBearer": {
-        "type": "http",
-        "scheme": "bearer"
       }
     }
   }

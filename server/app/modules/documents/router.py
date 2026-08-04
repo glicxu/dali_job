@@ -22,6 +22,7 @@ from app.modules.documents.storage import (
     read_supported_upload,
     safe_file_name,
     sha256_hex,
+    normalized_content_type,
     write_document_file,
 )
 
@@ -63,9 +64,9 @@ async def upload_document(
 ) -> DocumentResponse:
     content = await read_supported_upload(file)
     file_name = safe_file_name(file.filename)
-    content_type = file.content_type or "application/octet-stream"
-    storage_path = write_document_file(request.app.state.runtime.document_storage_dir, content, file_name)
+    content_type = normalized_content_type(file.content_type)
     extracted_text = extract_redacted_text(content, content_type)
+    storage_path = write_document_file(request.app.state.runtime.document_storage_dir, content, file_name)
     created = repository.create_document_with_version(
         db,
         identity,
@@ -94,7 +95,8 @@ async def upload_document_version(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
     content = await read_supported_upload(file)
     file_name = safe_file_name(file.filename)
-    content_type = file.content_type or "application/octet-stream"
+    content_type = normalized_content_type(file.content_type)
+    extracted_text = extract_redacted_text(content, content_type)
     storage_path = write_document_file(request.app.state.runtime.document_storage_dir, content, file_name)
     try:
         saved = repository.create_document_version(
@@ -105,7 +107,7 @@ async def upload_document_version(
             size_bytes=len(content),
             sha256=sha256_hex(content),
             storage_path=storage_path,
-            extracted_text=extract_redacted_text(content, content_type),
+            extracted_text=extracted_text,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

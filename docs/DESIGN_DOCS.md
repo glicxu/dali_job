@@ -21,6 +21,8 @@ DaliJob is designed as a long-term career operating system, not a job board and 
 - [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) - local, staging, production, CI/CD, observability, and operations guidance.
 - [US3_PROD_DEPLOYMENT_PLAN.md](US3_PROD_DEPLOYMENT_PLAN.md) - concrete plan for deploying DaliJob on us3 at `https://jobmatch.dalifin.com`.
 - [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) - current launch decision, readiness gates, prioritized production gaps, acceptance criteria, and release verification log.
+- [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md) - local structured logs, account-recovery support, readiness checks, and incident triage.
+- [RELEASE_AND_ROLLBACK.md](RELEASE_AND_ROLLBACK.md) - versioned artifact, deployment readback, retention, and database roll-forward policy.
 
 ## Product Phases
 

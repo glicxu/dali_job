@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import replace
+from pathlib import Path
+
 from fastapi import Header
 from fastapi.encoders import jsonable_encoder
 from fastapi.testclient import TestClient
@@ -11,7 +14,9 @@ from app.db.base import Base
 from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.auth.dependencies import AuthenticatedIdentity, get_current_identity
+from app.modules.documents.models import DocumentVersion
 from app.modules.materials import repository
+from app.modules.materials.document_output import materialize_tailored_resume_document
 from app.modules.materials.models import GeneratedApplicationMaterial, GeneratedApplicationMaterialVersion
 from app.modules.materials.schemas import (
     CoverLetterOutput,
@@ -22,7 +27,7 @@ from app.modules.materials.schemas import (
 from app.modules.materials.service import enforce_material_evidence
 
 
-def create_test_client(handler=None) -> tuple[TestClient, sessionmaker]:
+def create_test_client(handler=None, document_storage_dir: str | None = None) -> tuple[TestClient, sessionmaker]:
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool, future=True
     )
@@ -41,6 +46,8 @@ def create_test_client(handler=None) -> tuple[TestClient, sessionmaker]:
             session.close()
 
     app = create_app()
+    if document_storage_dir is not None:
+        app.state.runtime = replace(app.state.runtime, document_storage_dir=document_storage_dir)
     app.dependency_overrides[get_db_session] = override_db
     if handler is not None:
         app.state.operation_handlers = {"application_material_generation": handler}
@@ -106,8 +113,31 @@ def material_handler(db, identity, raw, context):
     return jsonable_encoder(repository.material_response(db, identity, material))
 
 
-def test_tailored_resume_snapshots_exact_document_version_and_appends_revision() -> None:
-    client, session_factory = create_test_client(material_handler)
+def materializing_handler(storage_root: str):
+    def handler(db, identity, raw, context):
+        material_handler(db, identity, raw, context)
+        version = repository.get_version_for_identity(db, identity, int(raw["material_version_id"]))
+        assert version is not None
+        material = db.get(GeneratedApplicationMaterial, version.material_id)
+        assert material is not None
+        materialize_tailored_resume_document(
+            db,
+            identity,
+            storage_root=storage_root,
+            material=material,
+            version=version,
+        )
+        return jsonable_encoder(repository.material_response(db, identity, material))
+
+    return handler
+
+
+def test_tailored_resume_snapshots_exact_document_version_and_appends_revision(tmp_path: Path) -> None:
+    storage_root = str(tmp_path / "documents")
+    client, session_factory = create_test_client(
+        materializing_handler(storage_root),
+        document_storage_dir=storage_root,
+    )
     application_id = create_application(client)
     resume = upload_resume(client, "Backend Engineer\nBuilt Python APIs.\nPython")
     version_one_id = resume["latest_version"]["id"]
@@ -127,6 +157,11 @@ def test_tailored_resume_snapshots_exact_document_version_and_appends_revision()
     first = material["versions"][0]
     assert first["source_document_version_id"] == version_one_id
     assert first["source_document_version_number"] == 1
+    assert first["output_document_version_id"] is not None
+    application_detail = client.get(f"/api/v1/applications/{application_id}").json()
+    assert len(application_detail["documents"]) == 1
+    assert application_detail["documents"][0]["document_version_id"] == first["output_document_version_id"]
+    assert application_detail["documents"][0]["purpose"] == "resume"
 
     revised_content = dict(first["content_data"])
     revised_content["tailoring_notes"] = ["User-approved wording."]
@@ -137,11 +172,17 @@ def test_tailored_resume_snapshots_exact_document_version_and_appends_revision()
     assert revised.status_code == 201, revised.text
     assert [version["version_number"] for version in revised.json()["versions"]] == [2, 1]
     assert revised.json()["versions"][0]["version_source"] == "user"
+    assert revised.json()["versions"][0]["output_document_version_id"] is not None
+    assert len(client.get(f"/api/v1/applications/{application_id}").json()["documents"]) == 2
 
     with session_factory() as db:
         stored = db.scalar(select(GeneratedApplicationMaterialVersion).where(GeneratedApplicationMaterialVersion.id == first["id"]))
         assert stored.source_resume_snapshot["extracted_text"] == "Backend Engineer\nBuilt Python APIs.\nPython"
         assert stored.content_data["tailoring_notes"] == []
+        rendered = db.get(DocumentVersion, stored.output_document_version_id)
+        assert rendered is not None
+        assert "Backend Engineer" in Path(rendered.storage_path).read_text(encoding="utf-8")
+        assert "Built Python APIs for customer workflows." in rendered.extracted_text
 
 
 def test_cover_letter_can_link_to_exact_tailored_resume_version() -> None:

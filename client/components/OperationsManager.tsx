@@ -36,6 +36,10 @@ export function OperationsManager() {
     );
   }
 
+  return <AuthenticatedOperationsManager />;
+}
+
+function AuthenticatedOperationsManager() {
   const [operations, setOperations] = useState<ManagedOperation[]>([]);
   const [summary, setSummary] = useState<ManagedOperationSummary | null>(null);
   const [error, setError] = useState<string | null>(null);

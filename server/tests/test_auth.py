@@ -1,19 +1,24 @@
 from __future__ import annotations
 
-import pytest
-from fastapi import HTTPException
+import re
+from email import policy
+from email.parser import BytesParser
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
 from app.db.session import get_db_session
-from app.main import create_app
-from app.main import API_ROUTERS
-from app.modules.auth import dependencies as auth_dependencies
-from app.modules.auth.dependencies import AuthenticatedIdentity, DEFAULT_AUTH_SECRET, get_auth_secret
+from app.main import API_ROUTERS, create_app
+from app.modules.accounts.models import User
+from app.modules.auth.models import AuthSession
+from app.modules.auth.dependencies import get_auth_db_session
 from app.modules.auth.policy import validate_route_authorization
+from app.modules.auth.rate_limit import AuthRateLimiter, AuthRateLimitPolicy
 from app.modules.auth.security import hash_password, verify_password
 from app.modules.jobs import router as jobs_router
 from app.modules.jobs.router import get_job_description_parser
@@ -46,15 +51,7 @@ class FakeJobDescriptionParser:
         )
 
 
-def create_local_auth_client(
-    monkeypatch: pytest.MonkeyPatch,
-    secret: str | None = "test-local-secret-with-at-least-32-characters",
-) -> TestClient:
-    if secret is None:
-        monkeypatch.setenv("DALIJOB_JWT_SECRET", "")
-    else:
-        monkeypatch.setenv("DALIJOB_JWT_SECRET", secret)
-
+def create_local_auth_client(tmp_path: Path) -> TestClient:
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -68,8 +65,12 @@ def create_local_auth_client(
         **{
             **app.state.runtime.__dict__,
             "auth_mode": "local",
+            "email_delivery_mode": "file",
+            "email_outbox_dir": str(tmp_path / "outbox"),
+            "log_dir": str(tmp_path / "logs"),
         }
     )
+    app.state.test_session_factory = session_factory
 
     def override_db():
         session = session_factory()
@@ -83,128 +84,160 @@ def create_local_auth_client(
             session.close()
 
     app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_auth_db_session] = override_db
     app.dependency_overrides[get_job_description_parser] = lambda: FakeJobDescriptionParser()
     return TestClient(app)
 
 
-def register_and_token(client: TestClient, email: str = "user@example.com") -> str:
+def _latest_email_token(client: TestClient) -> str:
+    outbox = Path(client.app.state.runtime.email_outbox_dir)
+    latest = max(outbox.glob("*.eml"), key=lambda path: path.stat().st_mtime_ns)
+    message = BytesParser(policy=policy.default).parsebytes(latest.read_bytes())
+    match = re.search(r"token=([A-Za-z0-9_-]+)", message.get_content())
+    assert match
+    return match.group(1)
+
+
+def _register(client: TestClient, email: str = "user@example.com") -> None:
     response = client.post(
         "/api/v1/auth/register",
-        json={
-            "email": email,
-            "password": "strong-password",
-            "display_name": "Example User",
-        },
+        json={"email": email, "password": "strong-password", "display_name": "Example User"},
     )
     assert response.status_code == 200
-    return response.json()["access_token"]
+
+
+def _verify(client: TestClient) -> None:
+    response = client.post("/api/v1/auth/verify-email", json={"token": _latest_email_token(client)})
+    assert response.status_code == 200
+
+
+def _csrf_headers(client: TestClient) -> dict[str, str]:
+    token = client.cookies.get("dalijob_csrf")
+    assert token
+    return {"X-CSRF-Token": token}
 
 
 def test_password_hash_round_trip() -> None:
     password_hash = hash_password("correct horse battery staple")
-
     assert verify_password("correct horse battery staple", password_hash)
     assert not verify_password("wrong password", password_hash)
 
 
-def test_auth_secret_prefers_environment(monkeypatch) -> None:
-    monkeypatch.setenv("DALIJOB_JWT_SECRET", "env-secret")
+def test_registration_requires_email_verification(tmp_path: Path) -> None:
+    client = create_local_auth_client(tmp_path)
+    _register(client)
 
-    assert get_auth_secret() == "env-secret"
-
-
-def test_auth_secret_requires_environment(monkeypatch) -> None:
-    monkeypatch.delenv("DALIJOB_JWT_SECRET", raising=False)
-
-    with pytest.raises(HTTPException) as exc_info:
-        get_auth_secret()
-
-    assert exc_info.value.status_code == 500
-    assert "DALIJOB_JWT_SECRET" in str(exc_info.value.detail)
-
-
-def test_auth_secret_rejects_default_secret(monkeypatch) -> None:
-    monkeypatch.setenv("DALIJOB_JWT_SECRET", DEFAULT_AUTH_SECRET)
-
-    with pytest.raises(HTTPException) as exc_info:
-        get_auth_secret()
-
-    assert exc_info.value.status_code == 500
-
-
-def test_register_and_login_issue_dalijob_token(monkeypatch) -> None:
-    client = create_local_auth_client(monkeypatch)
-
-    register_response = client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": "user@example.com",
-            "password": "strong-password",
-            "display_name": "Example User",
-        },
-    )
-
-    assert register_response.status_code == 200
-    register_payload = register_response.json()
-    assert register_payload["token_type"] == "bearer"
-    assert register_payload["user"]["email"] == "user@example.com"
-    assert register_payload["user"]["provider"] == "dalijob"
-    assert register_payload["access_token"]
-
-    login_response = client.post(
+    login = client.post(
         "/api/v1/auth/login",
         json={"email": "user@example.com", "password": "strong-password"},
     )
+    assert login.status_code == 403
+    assert "verify" in login.json()["detail"]
 
-    assert login_response.status_code == 200
-    assert login_response.json()["access_token"]
+    verify = client.post("/api/v1/auth/verify-email", json={"token": _latest_email_token(client)})
+    assert verify.status_code == 200
+    assert verify.json()["user"]["email"] == "user@example.com"
+    assert "access_token" not in verify.json()
+    assert client.cookies.get("dalijob_session")
+    assert client.cookies.get("dalijob_csrf")
+    assert client.get("/api/v1/me").status_code == 200
+    csrf = client.get("/api/v1/auth/csrf")
+    assert csrf.status_code == 200
+    assert csrf.json()["csrf_token"] == client.cookies.get("dalijob_csrf")
 
 
-def test_local_auth_without_jwt_secret_fails_closed(monkeypatch) -> None:
-    client = create_local_auth_client(monkeypatch, secret=None)
+def test_verification_token_is_single_use(tmp_path: Path) -> None:
+    client = create_local_auth_client(tmp_path)
+    _register(client)
+    token = _latest_email_token(client)
+    assert client.post("/api/v1/auth/verify-email", json={"token": token}).status_code == 200
+    assert client.post("/api/v1/auth/verify-email", json={"token": token}).status_code == 400
 
-    response = client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": "user@example.com",
-            "password": "strong-password",
-            "display_name": "Example User",
-        },
+
+def test_password_reset_is_generic_single_use_and_revokes_sessions(tmp_path: Path) -> None:
+    client = create_local_auth_client(tmp_path)
+    _register(client)
+    _verify(client)
+
+    unknown = client.post("/api/v1/auth/forgot-password", json={"email": "unknown@example.com"})
+    known = client.post("/api/v1/auth/forgot-password", json={"email": "user@example.com"})
+    assert unknown.status_code == known.status_code == 200
+    assert unknown.json()["message"] == known.json()["message"]
+
+    reset_token = _latest_email_token(client)
+    reset = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": reset_token, "new_password": "new-strong-password"},
     )
+    assert reset.status_code == 200
+    assert client.get("/api/v1/me").status_code == 401
+    assert client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": reset_token, "new_password": "another-password"},
+    ).status_code == 400
+    assert client.post(
+        "/api/v1/auth/login",
+        json={"email": "user@example.com", "password": "new-strong-password"},
+    ).status_code == 200
 
-    assert response.status_code == 500
-    assert "DALIJOB_JWT_SECRET" in response.json()["detail"]
+
+def test_logout_revokes_session_and_requires_csrf(tmp_path: Path) -> None:
+    client = create_local_auth_client(tmp_path)
+    _register(client)
+    _verify(client)
+    assert client.post("/api/v1/auth/logout").status_code == 403
+    assert client.post("/api/v1/auth/logout", headers=_csrf_headers(client)).status_code == 200
+    assert client.get("/api/v1/me").status_code == 401
 
 
-def test_local_auth_rejects_default_jwt_secret(monkeypatch) -> None:
-    client = create_local_auth_client(monkeypatch, secret=DEFAULT_AUTH_SECRET)
+def test_session_expiry_is_enforced(tmp_path: Path) -> None:
+    client = create_local_auth_client(tmp_path)
+    _register(client)
+    _verify(client)
+    with client.app.state.test_session_factory() as db:
+        session = db.execute(select(AuthSession)).scalar_one()
+        session.idle_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        db.commit()
+    assert client.get("/api/v1/me").status_code == 401
 
-    response = client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": "user@example.com",
-            "password": "strong-password",
-            "display_name": "Example User",
-        },
+
+def test_account_soft_delete_revokes_every_session(tmp_path: Path) -> None:
+    client = create_local_auth_client(tmp_path)
+    _register(client)
+    _verify(client)
+    response = client.request(
+        "DELETE",
+        "/api/v1/auth/account",
+        headers=_csrf_headers(client),
+        json={"current_password": "strong-password"},
     )
+    assert response.status_code == 204
+    with client.app.state.test_session_factory() as db:
+        user = db.execute(select(User).where(User.email == "user@example.com")).scalar_one()
+        assert not user.is_active
+        assert user.deleted_at is not None
+    assert client.get("/api/v1/me").status_code == 401
 
-    assert response.status_code == 500
-    assert "DALIJOB_JWT_SECRET" in response.json()["detail"]
+
+def test_session_cookie_without_csrf_cannot_mutate(tmp_path: Path) -> None:
+    client = create_local_auth_client(tmp_path)
+    _register(client)
+    _verify(client)
+    client.cookies.delete("dalijob_csrf")
+    response = client.post(
+        "/api/v1/jobs/draft",
+        json={"job_description_text": "Build APIs using Python."},
+    )
+    assert response.status_code == 403
 
 
-def test_dev_auth_still_works_without_jwt_secret(monkeypatch) -> None:
-    monkeypatch.delenv("DALIJOB_JWT_SECRET", raising=False)
+def test_dev_auth_still_works_without_session_cookie() -> None:
     client = TestClient(create_app())
-
-    response = client.get("/api/v1/me")
-
-    assert response.status_code == 200
-    assert response.json()["provider"] == "dev"
+    assert client.get("/api/v1/me").status_code == 200
 
 
-def test_scraping_helper_routes_require_auth_in_local_mode(monkeypatch) -> None:
-    client = create_local_auth_client(monkeypatch)
-
+def test_scraping_helper_routes_require_auth_in_local_mode(tmp_path: Path) -> None:
+    client = create_local_auth_client(tmp_path)
     responses = [
         client.post("/api/v1/jobs/draft", json={"job_description_text": "Build APIs using Python."}),
         client.post("/api/v1/jobs/import-list/discover", json={"list_url": "https://example.com/jobs"}),
@@ -213,34 +246,19 @@ def test_scraping_helper_routes_require_auth_in_local_mode(monkeypatch) -> None:
             json={"job_url": "https://example.com/jobs/backend-engineer"},
         ),
     ]
-
     assert [response.status_code for response in responses] == [401, 401, 401]
 
 
-def test_scraping_helper_routes_accept_valid_local_token(monkeypatch) -> None:
-    client = create_local_auth_client(monkeypatch)
-    token = register_and_token(client)
-    headers = {"Authorization": f"Bearer {token}"}
-    monkeypatch.setattr(
-        auth_dependencies,
-        "_identity_from_email",
-        lambda email: AuthenticatedIdentity(
-            external_user_id="1",
-            email=email,
-            display_name="Example User",
-            provider="dalijob",
-        ),
-    )
+def test_scraping_helper_routes_accept_valid_local_session(monkeypatch, tmp_path: Path) -> None:
+    client = create_local_auth_client(tmp_path)
+    _register(client)
+    _verify(client)
+    headers = _csrf_headers(client)
     monkeypatch.setattr(
         jobs_router,
         "discover_job_list_from_url",
         lambda _url, max_results=25: JobListDiscoveryResult(
-            links=[
-                JobLinkCandidate(
-                    title="Backend Engineer",
-                    source_url="https://example.com/jobs/backend-engineer",
-                )
-            ],
+            links=[JobLinkCandidate(title="Backend Engineer", source_url="https://example.com/jobs/backend-engineer")],
             next_page_url=None,
             next_page_confidence=0,
         ),
@@ -250,27 +268,69 @@ def test_scraping_helper_routes_accept_valid_local_token(monkeypatch) -> None:
         "fetch_job_description_from_url",
         lambda _url: "Backend Engineer job text with PostgreSQL.",
     )
-
-    draft_response = client.post(
+    assert client.post(
         "/api/v1/jobs/draft",
         json={"job_description_text": "Build APIs using Python."},
         headers=headers,
-    )
-    discover_response = client.post(
+    ).status_code == 200
+    assert client.post(
         "/api/v1/jobs/import-list/discover",
         json={"list_url": "https://example.com/jobs"},
         headers=headers,
-    )
-    extract_response = client.post(
+    ).status_code == 200
+    assert client.post(
         "/api/v1/resume-job-matches/job-url-extract",
         json={"job_url": "https://example.com/jobs/backend-engineer"},
         headers=headers,
-    )
-
-    assert draft_response.status_code == 200
-    assert discover_response.status_code == 200
-    assert extract_response.status_code == 200
+    ).status_code == 200
 
 
 def test_all_non_public_api_routes_have_identity_dependency() -> None:
     validate_route_authorization(API_ROUTERS)
+
+
+def _test_rate_policy(**overrides: int) -> AuthRateLimitPolicy:
+    values = {
+        "login_ip_limit": 20,
+        "login_account_limit": 20,
+        "login_window_seconds": 60,
+        "register_ip_limit": 20,
+        "register_account_limit": 20,
+        "register_window_seconds": 60,
+    }
+    values.update(overrides)
+    return AuthRateLimitPolicy(**values)
+
+
+def test_registration_rate_limit_blocks_ip_across_accounts(tmp_path: Path) -> None:
+    client = create_local_auth_client(tmp_path)
+    client.app.state.auth_rate_limiter = AuthRateLimiter(_test_rate_policy(register_ip_limit=1))
+    first = client.post(
+        "/api/v1/auth/register",
+        json={"email": "first@example.com", "password": "strong-password", "display_name": "First"},
+    )
+    blocked = client.post(
+        "/api/v1/auth/register",
+        json={"email": "second@example.com", "password": "strong-password", "display_name": "Second"},
+    )
+    assert first.status_code == 200
+    assert blocked.status_code == 429
+    assert int(blocked.headers["Retry-After"]) >= 1
+
+
+def test_login_rate_limit_normalizes_account_and_logs_no_email(tmp_path: Path, caplog) -> None:
+    client = create_local_auth_client(tmp_path)
+    client.app.state.auth_rate_limiter = AuthRateLimiter(_test_rate_policy(login_account_limit=1))
+    first = client.post(
+        "/api/v1/auth/login",
+        json={"email": "candidate@example.com", "password": "wrong-password"},
+    )
+    with caplog.at_level("WARNING"):
+        blocked = client.post(
+            "/api/v1/auth/login",
+            json={"email": " Candidate@Example.COM ", "password": "wrong-password"},
+        )
+    assert first.status_code == 401
+    assert blocked.status_code == 429
+    assert "account_hash=" in caplog.text
+    assert "candidate@example.com" not in caplog.text.lower()

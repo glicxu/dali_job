@@ -4,7 +4,7 @@
 
 - Base path: `/api/v1`.
 - Request and response format: JSON unless uploading files.
-- Authentication: DaliJob bearer token from `/auth/login` or `/auth/register`; local development may run in `dev` auth mode.
+- Authentication: verified DaliJob account with an opaque server-side session cookie and CSRF protection; local development may run in `dev` auth mode.
 - Authorization: every request is scoped to a private workspace owned by the authenticated user.
 - IDs: integer values.
 - Errors: return structured error bodies.
@@ -23,19 +23,15 @@ Error shape:
 
 ## 2. Authentication And Workspaces
 
-DaliJob supports normal email/password registration and login. The client authenticates with DaliJob and sends the returned token on later API requests:
-
-```text
-Authorization: Bearer <token>
-```
+DaliJob supports email/password registration with mandatory email verification. Login creates an opaque server-side session. The browser receives an `HttpOnly`, `SameSite=Lax` session cookie (`Secure` in production) and a readable CSRF cookie; mutating requests echo the CSRF value in `X-CSRF-Token`. No bearer credential is stored in browser JavaScript storage.
 
 The first implementation stores DaliJob-owned account credentials in the DaliJob database. A future Dalifin-wide login can be introduced by moving identity into a shared auth service or shared identity database, but DaliJob should not require users to first log in through app_server.
 
-The browser may show signed-out public previews without an access token. Public previews can include the homepage and read-only versions of major app pages, but they must not call protected APIs, OpenAI-backed endpoints, Apify-backed endpoints, scraping endpoints, document upload endpoints, or user data endpoints. Any live action on a protected app page should require a DaliJob bearer token and direct the user to `/auth` when signed out.
+The browser may show signed-out public previews without a session. Public previews can include the homepage and read-only versions of major app pages, but they must not call protected APIs, provider-backed endpoints, scraping endpoints, uploads, or user-data endpoints. Any live action on a protected page requires a valid session and directs signed-out users to `/auth`.
 
 ### `POST /auth/register`
 
-Creates a DaliJob account and returns a bearer token.
+Creates an unverified DaliJob account and sends a time-limited verification email. It does not create a session.
 
 Required body:
 
@@ -49,7 +45,7 @@ Required body:
 
 ### `POST /auth/login`
 
-Logs in with a DaliJob account and returns a bearer token.
+Logs in with a verified active account and sets the session/CSRF cookies.
 
 Required body:
 
@@ -63,6 +59,16 @@ Required body:
 ### `GET /me`
 
 Returns the current user and available workspaces.
+
+### Account action endpoints
+
+- `POST /auth/verify-email` consumes a single-use verification token and creates a session.
+- `POST /auth/resend-verification` returns a generic result and sends a new link when appropriate.
+- `POST /auth/forgot-password` always returns a generic result to avoid account enumeration.
+- `POST /auth/reset-password` consumes a single-use token, changes the password, and revokes all sessions.
+- `POST /auth/logout` revokes the current session.
+- `GET /auth/csrf` bootstraps the non-secret CSRF value for a separately hosted browser client with a valid session.
+- `DELETE /auth/account` confirms the current password, soft-deletes the account, and revokes all sessions.
 
 ### `PATCH /me`
 

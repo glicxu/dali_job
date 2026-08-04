@@ -15,6 +15,7 @@ from app.modules.documents.storage import (
     read_supported_upload,
     safe_file_name,
     sha256_hex,
+    normalized_content_type,
     write_document_file,
 )
 from app.modules.profiles import repository
@@ -76,7 +77,7 @@ async def import_resume_pdf(
 ) -> ResumeImportResponse:
     content = await read_supported_upload(file)
     file_name = safe_file_name(file.filename)
-    content_type = file.content_type or "application/octet-stream"
+    content_type = normalized_content_type(file.content_type)
     resume_text = extract_redacted_text(content, content_type)
     if not resume_text:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No resume text could be extracted.")

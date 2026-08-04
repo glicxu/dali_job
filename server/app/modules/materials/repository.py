@@ -215,6 +215,7 @@ def _version_response(version: GeneratedApplicationMaterialVersion) -> dict:
         "parent_version_id": version.parent_version_id,
         "operation_id": version.operation_id,
         "source_document_version_id": version.source_document_version_id,
+        "output_document_version_id": version.output_document_version_id,
         "source_material_version_id": version.source_material_version_id,
         "source_document_title": snapshot.get("document_title") or "Resume",
         "source_document_file_name": snapshot.get("file_name") or "",

@@ -13,6 +13,7 @@ from app.modules.job_search.service import JobSearchProvider
 from app.modules.interviews import repository as interview_repository
 from app.modules.interviews.service import OpenAIInterviewPrepGenerator
 from app.modules.materials import repository as material_repository
+from app.modules.materials.document_output import materialize_tailored_resume_document
 from app.modules.materials.models import GeneratedApplicationMaterial
 from app.modules.materials.service import OpenAIMaterialGenerator
 from app.modules.jobs import router as jobs_router
@@ -313,6 +314,13 @@ def build_operation_handlers(app: Any) -> dict[str, OperationHandler]:
             list(dict.fromkeys([*(generated.warnings or []), *content_data.get("warnings", [])])),
             model_name=generated.model_name,
             provider_execution_reference=generated.provider_execution_reference,
+        )
+        materialize_tailored_resume_document(
+            db,
+            identity,
+            storage_root=runtime.document_storage_dir,
+            material=material,
+            version=version,
         )
         db.flush()
         context.update(

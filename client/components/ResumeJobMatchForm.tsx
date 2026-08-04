@@ -23,6 +23,10 @@ export function ResumeJobMatchForm() {
     return <ResumeJobMatchPreview />;
   }
 
+  return <AuthenticatedResumeJobMatchForm />;
+}
+
+function AuthenticatedResumeJobMatchForm() {
   const [resumeProfiles, setResumeProfiles] = useState<ResumeProfile[]>([]);
   const [resumeSourceMode, setResumeSourceMode] = useState<ResumeSourceMode>("profile");
   const [jobSourceMode, setJobSourceMode] = useState<JobSourceMode>("url");

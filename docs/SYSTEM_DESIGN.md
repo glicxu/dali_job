@@ -702,7 +702,7 @@ Database setup and seed operations should be scriptable. The project should incl
 
 DaliJob should provide a normal first-party login experience: users can register and log in directly from DaliJob without needing to open or authenticate through app_server. The first implementation should support two modes:
 
-- `local`: DaliJob-owned email/password registration and login. The server stores password hashes in the DaliJob `users` table and issues DaliJob bearer tokens.
+- `local`: DaliJob-owned email/password registration and verified login. The server stores password hashes in `users` and opaque, revocable sessions in `auth_sessions`; browser credentials use `HttpOnly` cookies and CSRF protection.
 - `dev`: local debugging mode that maps every request to the built-in DaliJob development user.
 
 The broader Dalifin goal of registering once and using many apps should be treated as a shared identity architecture decision. That can be handled later by extracting identity into a common auth service or shared user database used by DaliJob, app_server, DaliBible, and other Dalifin apps. It should not mean DaliJob depends on an app_server login token or requires users to visit another application before using DaliJob.

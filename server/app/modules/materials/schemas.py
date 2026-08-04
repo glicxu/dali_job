@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 MaterialType = Literal["tailored_resume", "cover_letter"]
 
@@ -63,6 +63,7 @@ class MaterialVersionResponse(BaseModel):
     parent_version_id: int | None = None
     operation_id: int | None = None
     source_document_version_id: int | None = None
+    output_document_version_id: int | None = None
     source_material_version_id: int | None = None
     source_document_title: str
     source_document_file_name: str

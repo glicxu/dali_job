@@ -16,6 +16,8 @@ Shared/cache data and user-specific saved data must stay separate.
 - `interview_prep_guides` stores append-only preparation inputs, outputs, warnings, and provenance.
 - `generated_application_materials` identifies one tailored-resume or cover-letter stream per application.
 - `generated_application_material_versions` stores immutable AI outputs and user revisions with exact source snapshots.
+- `auth_sessions` and `auth_action_tokens` provide revocable sign-in sessions and one-time account email actions.
+- `audit_events` reserves a unified event structure; event recording is future work.
 
 This prevents user-specific notes and future application tracking from changing the shared cached job while still letting the app avoid repeated scraping and OpenAI parsing for the same URL.
 
@@ -38,8 +40,13 @@ Owns or relates to:
 - `interview_prep_guides`
 - `generated_application_materials`
 - `generated_application_material_versions`
+- `auth_sessions`
+- `auth_action_tokens`
+- `audit_events` (as the nullable actor)
 
 For the current MVP, a user effectively has one private workspace.
+
+Authentication does not use the job-domain tables. A user has many revocable `auth_sessions` and one-time `auth_action_tokens`. Soft deletion disables the user and revokes sessions while retaining owned career data until the deferred privacy/retention policy defines final purge behavior.
 
 ### workspaces
 
@@ -112,9 +119,10 @@ document_versions 1 -> many generated_application_material_versions
 generated_application_material_versions 1 -> many child revisions
 tailored resume material version 1 -> many cover letter material versions, optional
 managed_operations 1 -> 0 or 1 generated_application_material_versions
+generated_application_material_versions 1 -> 0 or 1 rendered document_versions
 ```
 
-Each material version snapshots redacted extracted resume text and the effective saved-job data at generation time. The direct `source_document_version_id` remains useful for navigation, but the snapshot preserves historical meaning even if an owned document is later soft-deleted. A cover letter can also reference the exact tailored-resume version used as an input. API responses expose source identifiers and hashes, not the private raw snapshots.
+Each material version snapshots redacted extracted resume text and the effective saved-job data at generation time. The direct `source_document_version_id` remains useful for navigation, but the snapshot preserves historical meaning even if an owned document is later soft-deleted. Completed tailored-resume generations and user revisions are rendered as immutable text document versions and automatically attached to the application. A cover letter can also reference the exact tailored-resume version used as an input. API responses expose source identifiers and hashes, not the private raw snapshots.
 
 ### jobs_cache
 
@@ -253,6 +261,9 @@ resume_profiles 1 -> many interview_prep_guides (nullable source reference)
 
 ```text
 users
+  -> auth_sessions
+  -> auth_action_tokens
+  -> audit_events (nullable actor)
   -> workspaces
   -> resume_profiles
   -> documents

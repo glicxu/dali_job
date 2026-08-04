@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApplicationMaterial, ApplicationMaterialVersion, CoverLetterContent, generateCoverLetter,
   generateTailoredResume, getAuthToken, listApplicationMaterials, listApplications, listDocuments,
@@ -40,6 +40,7 @@ function AuthenticatedMaterialsManager() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const queryHandled = useRef(false);
 
   const resumeVersions = useMemo(() => documents.filter((document) => document.document_type === "resume")
     .flatMap((document) => document.versions.map((version) => ({ document, version }))), [documents]);
@@ -68,7 +69,18 @@ function AuthenticatedMaterialsManager() {
     }
   }
 
+  // Load the initial workspace once; mutations call load explicitly after completion.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void load(); }, []);
+
+  useEffect(() => {
+    if (queryHandled.current || typeof window === "undefined" || !applications.length) return;
+    queryHandled.current = true;
+    const queryId = Number(new URLSearchParams(window.location.search).get("application_id"));
+    if (Number.isInteger(queryId) && applications.some((application) => application.id === queryId)) {
+      setApplicationId(String(queryId));
+    }
+  }, [applications]);
 
   function selectMaterial(material: ApplicationMaterial) {
     setSelectedMaterialId(material.id);

@@ -157,7 +157,8 @@ class ApifyIndeedClient:
         )
 
         try:
-            with urlopen(request, timeout=APIFY_TIMEOUT_SECONDS) as response:
+            # The destination is the fixed HTTPS Apify API endpoint assembled by this service.
+            with urlopen(request, timeout=APIFY_TIMEOUT_SECONDS) as response:  # nosec B310
                 response_body = response.read().decode("utf-8", errors="replace")
         except HTTPError as exc:
             raise HTTPException(

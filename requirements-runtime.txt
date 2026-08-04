@@ -1,0 +1,11 @@
+alembic
+fastapi
+openai
+pydantic
+playwright
+pymysql
+pypdf
+python-multipart
+python-dotenv
+sqlalchemy
+uvicorn[standard]

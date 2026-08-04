@@ -102,10 +102,29 @@ host = 127.0.0.1
 port = 5020
 log_level = info
 client_origins = https://jobmatch.dalifin.com
+public_client_url = https://jobmatch.dalifin.com
 auth_mode = local
 
 [dali_job_auth]
-access_ttl_seconds = 604800
+session_idle_seconds = 43200
+session_absolute_seconds = 604800
+email_action_ttl_seconds = 3600
+
+[email]
+delivery_mode = smtp
+from_address = no-reply@dalifin.com
+smtp_host = <production smtp host>
+smtp_port = 587
+smtp_username = <production smtp username>
+smtp_use_tls = true
+
+[logging]
+directory = /data/dali/prod/logs/dali_job
+max_bytes = 10485760
+backup_count = 5
+
+[audit]
+retention_days = 365
 
 [mysql]
 active_server = 10.0.0.10
@@ -127,7 +146,7 @@ Secrets must not be committed in plaintext unless this follows an existing prote
 Required server environment variables:
 
 ```text
-DALIJOB_JWT_SECRET
+DALIJOB_SMTP_PASSWORD
 OPENAI_API_KEY
 APIFY_API_TOKEN
 ```
@@ -276,7 +295,7 @@ Do not add separate cron lines for DaliJob API or DaliJob client. Cron should co
 
 ## Secrets Handling
 
-DaliJob should not commit OpenAI, Apify, JWT, or other production secrets into this repo.
+DaliJob should not commit OpenAI, Apify, SMTP, or other production secrets into this repo.
 
 The Dali AI service uses a DaliConfigFile config for non-secret settings such as model names and server ports. Its startup code can load a dotenv file from `[dali_ai].env_path` when configured. That is the useful pattern to follow: keep provider secrets outside source control and load them into the process environment before the service starts.
 
@@ -289,7 +308,7 @@ For DaliJob, use a protected env file sourced by `run_dali_job_api.sh`:
 Suggested contents:
 
 ```bash
-DALIJOB_JWT_SECRET=<long random production jwt secret>
+DALIJOB_SMTP_PASSWORD=<production smtp password>
 OPENAI_API_KEY=<production openai key>
 APIFY_API_TOKEN=<production apify token>
 ```
@@ -303,7 +322,7 @@ sudo chmod 600 /data/dali/prod/config/dali_job.env
 
 The DaliJob server reads all production secrets from the process environment:
 
-- `DALIJOB_JWT_SECRET` signs and verifies local-auth bearer tokens.
+- `DALIJOB_SMTP_PASSWORD` authenticates verification and password-recovery email delivery when the configured relay requires credentials.
 - `OPENAI_API_KEY` is used by OpenAI-backed parsing and matching.
 - `APIFY_API_TOKEN` is used by the Indeed job-search integration.
 

@@ -16,6 +16,8 @@ venv/
 .idea/
 .vscode/
 deploy_logs/
+release/
+security-reports/
 *.log
 .local/
 server/storage/

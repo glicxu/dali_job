@@ -68,6 +68,7 @@ function AuthenticatedInterviewManager() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
   const queryHandled = useRef(false);
 
   const activeApplications = useMemo(
@@ -90,19 +91,29 @@ function AuthenticatedInterviewManager() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load interviews.");
+    } finally {
+      setWorkspaceLoaded(true);
     }
   }
 
+  // Load once on entry; later mutations refresh the workspace explicitly.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void loadWorkspace(); }, []);
 
   useEffect(() => {
-    if (queryHandled.current || typeof window === "undefined" || !applications.length) return;
+    if (queryHandled.current || typeof window === "undefined" || !workspaceLoaded) return;
     queryHandled.current = true;
-    const queryId = Number(new URLSearchParams(window.location.search).get("application_id"));
-    if (Number.isInteger(queryId) && applications.some((application) => application.id === queryId)) {
-      setApplicationId(String(queryId));
+    const params = new URLSearchParams(window.location.search);
+    const interviewId = Number(params.get("interview_id"));
+    if (Number.isInteger(interviewId) && interviewId > 0) {
+      void openInterview(interviewId);
+      return;
     }
-  }, [applications]);
+    const applicationQueryId = Number(params.get("application_id"));
+    if (Number.isInteger(applicationQueryId) && applications.some((application) => application.id === applicationQueryId)) {
+      setApplicationId(String(applicationQueryId));
+    }
+  }, [applications, workspaceLoaded]);
 
   async function openInterview(interviewId: number) {
     setError(null);

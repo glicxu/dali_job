@@ -11,6 +11,10 @@ from app.modules.auth.dependencies import get_current_identity
 PUBLIC_API_ROUTES = {
     ("POST", "/auth/register"),
     ("POST", "/auth/login"),
+    ("POST", "/auth/verify-email"),
+    ("POST", "/auth/resend-verification"),
+    ("POST", "/auth/forgot-password"),
+    ("POST", "/auth/reset-password"),
     ("GET", "/health"),
     ("GET", "/health/db"),
     ("GET", "/documents/downloads/{token}"),

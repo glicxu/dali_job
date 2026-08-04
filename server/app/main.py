@@ -11,13 +11,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import load_runtime_config
-from app.core.logging import configure_logging
+from app.core.logging import RequestLoggingMiddleware, configure_logging
 from app.core.provider_ops import ProviderRateLimiter
 from app.db.session import dispose_db_engines
 from app.modules.applications.router import router as applications_router
 from app.modules.analytics.router import router as analytics_router
 from app.modules.auth.router import auth_router, router as auth_base_router
 from app.modules.auth.policy import validate_route_authorization
+from app.modules.auth.rate_limit import AuthRateLimiter, AuthRateLimitPolicy
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.documents.router import router as documents_router
 from app.modules.health.router import router as health_router
@@ -69,20 +70,32 @@ async def lifespan(app: FastAPI):
 
 def create_app(config_path: Optional[str] = None) -> FastAPI:
     runtime = load_runtime_config(config_path)
-    configure_logging(runtime.log_level)
+    configure_logging(runtime)
     validate_route_authorization(API_ROUTERS)
 
     app = FastAPI(title="DaliJob API", version="0.1.0", lifespan=lifespan)
     app.state.runtime = runtime
     app.state.provider_rate_limiter = ProviderRateLimiter()
+    app.state.auth_rate_limiter = AuthRateLimiter(
+        AuthRateLimitPolicy(
+            login_ip_limit=runtime.auth_login_ip_limit,
+            login_account_limit=runtime.auth_login_account_limit,
+            login_window_seconds=runtime.auth_login_window_seconds,
+            register_ip_limit=runtime.auth_register_ip_limit,
+            register_account_limit=runtime.auth_register_account_limit,
+            register_window_seconds=runtime.auth_register_window_seconds,
+        )
+    )
+
+    app.add_middleware(RequestLoggingMiddleware)
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=runtime.client_origins,
-        allow_origin_regex=runtime.client_origin_regex,
+        allow_origin_regex=runtime.client_origin_regex or None,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "Authorization", "Idempotency-Key"],
+        allow_headers=["Content-Type", "Idempotency-Key", "X-CSRF-Token", "X-Request-ID"],
     )
 
     app.include_router(auth_base_router, prefix="/api/v1")

@@ -5,13 +5,14 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from DaliCommonLib.dali_config import ProcessConfig
 
 LOGGER = logging.getLogger(__name__)
 
-DEFAULT_HOST = "0.0.0.0"
+DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 5010
 DEFAULT_LOG_LEVEL = "info"
 DEFAULT_ENV_NAME = "local"
@@ -19,15 +20,21 @@ DEFAULT_CLIENT_ORIGIN = "http://localhost:3000"
 DEFAULT_CLIENT_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
 DEFAULT_PROVIDER_USER_LIMIT_PER_MINUTE = 20
 DEFAULT_PROVIDER_IP_LIMIT_PER_MINUTE = 60
+DEFAULT_AUTH_LOGIN_IP_LIMIT = 30
+DEFAULT_AUTH_LOGIN_ACCOUNT_LIMIT = 10
+DEFAULT_AUTH_LOGIN_WINDOW_SECONDS = 300
+DEFAULT_AUTH_REGISTER_IP_LIMIT = 10
+DEFAULT_AUTH_REGISTER_ACCOUNT_LIMIT = 5
+DEFAULT_AUTH_REGISTER_WINDOW_SECONDS = 3600
+DEFAULT_SESSION_IDLE_SECONDS = 60 * 60 * 12
+DEFAULT_SESSION_ABSOLUTE_SECONDS = 60 * 60 * 24 * 7
+DEFAULT_EMAIL_ACTION_TTL_SECONDS = 60 * 60
+DEFAULT_LOG_MAX_BYTES = 10 * 1024 * 1024
+DEFAULT_LOG_BACKUP_COUNT = 5
 CONFIG_ENV_VAR = "DALIJOB_CONFIG"
 SERVER_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 PRODUCTION_ENV_NAMES = {"prod", "production"}
 SUPPORTED_AUTH_MODES = {"dev", "disabled", "local"}
-INVALID_JWT_SECRETS = {
-    "",
-    "change-me",
-    "change-me-dalijob-auth-local-development-only",
-}
 
 
 @dataclass(frozen=True)
@@ -44,6 +51,27 @@ class RuntimeConfig:
     document_storage_dir: str
     provider_user_limit_per_minute: int
     provider_ip_limit_per_minute: int
+    auth_login_ip_limit: int
+    auth_login_account_limit: int
+    auth_login_window_seconds: int
+    auth_register_ip_limit: int
+    auth_register_account_limit: int
+    auth_register_window_seconds: int
+    session_idle_seconds: int
+    session_absolute_seconds: int
+    email_action_ttl_seconds: int
+    public_client_url: str
+    email_delivery_mode: str
+    email_from_address: str
+    smtp_host: str
+    smtp_port: int
+    smtp_username: str
+    smtp_use_tls: bool
+    email_outbox_dir: str
+    log_dir: str
+    log_max_bytes: int
+    log_backup_count: int
+    audit_retention_days: int
 
 
 def _load_process_config(config_path: Optional[str]) -> Optional[str]:
@@ -85,6 +113,12 @@ def _coerce_int(value: Optional[str], default: int) -> int:
         return default
 
 
+def _coerce_bool(value: Optional[str], default: bool) -> bool:
+    if value in (None, ""):
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _split_csv(value: Optional[str], default: list[str]) -> list[str]:
     if not value:
         return default
@@ -99,9 +133,29 @@ def _validate_runtime_config(runtime: RuntimeConfig) -> None:
         return
     if runtime.auth_mode in {"dev", "disabled"}:
         raise RuntimeError("Production DaliJob must use local authentication; dev and disabled auth are not allowed.")
-    jwt_secret = os.getenv("DALIJOB_JWT_SECRET", "").strip()
-    if jwt_secret.lower() in INVALID_JWT_SECRETS:
-        raise RuntimeError("Production DaliJob requires a non-default DALIJOB_JWT_SECRET.")
+    if runtime.client_origin_regex:
+        raise RuntimeError("Production DaliJob must not enable a client origin regex.")
+    for origin in runtime.client_origins:
+        parsed = urlparse(origin)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.params
+            or parsed.query
+            or parsed.fragment
+            or parsed.hostname.lower() in {"localhost", "127.0.0.1", "::1"}
+        ):
+            raise RuntimeError("Production DaliJob client origins must be exact public HTTPS origins.")
+    if runtime.email_delivery_mode != "smtp" or not runtime.smtp_host or not runtime.email_from_address:
+        raise RuntimeError("Production DaliJob requires configured SMTP email delivery and a from address.")
+    public_url = urlparse(runtime.public_client_url)
+    if public_url.scheme != "https" or not public_url.hostname:
+        raise RuntimeError("Production DaliJob requires a public HTTPS client URL for account emails.")
+    if runtime.session_idle_seconds > runtime.session_absolute_seconds:
+        raise RuntimeError("Session idle lifetime cannot exceed its absolute lifetime.")
 
 
 def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
@@ -136,6 +190,8 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         or read_config_value("dali_job", "client_origin_regex", DEFAULT_CLIENT_ORIGIN_REGEX)
         or DEFAULT_CLIENT_ORIGIN_REGEX
     )
+    if env_name.lower() in PRODUCTION_ENV_NAMES:
+        client_origin_regex = ""
     openai_model = (
         os.getenv("DALIJOB_OPENAI_MODEL", "").strip()
         or read_config_value("openai", "model", "gpt-4.1-mini")
@@ -169,6 +225,92 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         ),
         DEFAULT_PROVIDER_IP_LIMIT_PER_MINUTE,
     )
+    auth_login_ip_limit = _coerce_int(
+        os.getenv("DALIJOB_AUTH_LOGIN_IP_LIMIT", "").strip()
+        or read_config_value("auth_limits", "login_ip", str(DEFAULT_AUTH_LOGIN_IP_LIMIT)),
+        DEFAULT_AUTH_LOGIN_IP_LIMIT,
+    )
+    auth_login_account_limit = _coerce_int(
+        os.getenv("DALIJOB_AUTH_LOGIN_ACCOUNT_LIMIT", "").strip()
+        or read_config_value("auth_limits", "login_account", str(DEFAULT_AUTH_LOGIN_ACCOUNT_LIMIT)),
+        DEFAULT_AUTH_LOGIN_ACCOUNT_LIMIT,
+    )
+    auth_login_window_seconds = _coerce_int(
+        os.getenv("DALIJOB_AUTH_LOGIN_WINDOW_SECONDS", "").strip()
+        or read_config_value("auth_limits", "login_window_seconds", str(DEFAULT_AUTH_LOGIN_WINDOW_SECONDS)),
+        DEFAULT_AUTH_LOGIN_WINDOW_SECONDS,
+    )
+    auth_register_ip_limit = _coerce_int(
+        os.getenv("DALIJOB_AUTH_REGISTER_IP_LIMIT", "").strip()
+        or read_config_value("auth_limits", "register_ip", str(DEFAULT_AUTH_REGISTER_IP_LIMIT)),
+        DEFAULT_AUTH_REGISTER_IP_LIMIT,
+    )
+    auth_register_account_limit = _coerce_int(
+        os.getenv("DALIJOB_AUTH_REGISTER_ACCOUNT_LIMIT", "").strip()
+        or read_config_value("auth_limits", "register_account", str(DEFAULT_AUTH_REGISTER_ACCOUNT_LIMIT)),
+        DEFAULT_AUTH_REGISTER_ACCOUNT_LIMIT,
+    )
+    auth_register_window_seconds = _coerce_int(
+        os.getenv("DALIJOB_AUTH_REGISTER_WINDOW_SECONDS", "").strip()
+        or read_config_value(
+            "auth_limits",
+            "register_window_seconds",
+            str(DEFAULT_AUTH_REGISTER_WINDOW_SECONDS),
+        ),
+        DEFAULT_AUTH_REGISTER_WINDOW_SECONDS,
+    )
+    session_idle_seconds = _coerce_int(
+        read_config_value("dali_job_auth", "session_idle_seconds", str(DEFAULT_SESSION_IDLE_SECONDS)),
+        DEFAULT_SESSION_IDLE_SECONDS,
+    )
+    session_absolute_seconds = _coerce_int(
+        read_config_value("dali_job_auth", "session_absolute_seconds", str(DEFAULT_SESSION_ABSOLUTE_SECONDS)),
+        DEFAULT_SESSION_ABSOLUTE_SECONDS,
+    )
+    email_action_ttl_seconds = _coerce_int(
+        read_config_value("dali_job_auth", "email_action_ttl_seconds", str(DEFAULT_EMAIL_ACTION_TTL_SECONDS)),
+        DEFAULT_EMAIL_ACTION_TTL_SECONDS,
+    )
+    public_client_url = (
+        os.getenv("DALIJOB_PUBLIC_CLIENT_URL", "").strip()
+        or read_config_value("dali_job", "public_client_url", client_origins[0])
+        or client_origins[0]
+    ).rstrip("/")
+    email_delivery_mode = (
+        os.getenv("DALIJOB_EMAIL_DELIVERY_MODE", "").strip()
+        or read_config_value("email", "delivery_mode", "file")
+        or "file"
+    ).lower()
+    email_from_address = (
+        os.getenv("DALIJOB_EMAIL_FROM", "").strip()
+        or read_config_value("email", "from_address", "no-reply@dalijob.local")
+        or "no-reply@dalijob.local"
+    )
+    smtp_host = os.getenv("DALIJOB_SMTP_HOST", "").strip() or read_config_value("email", "smtp_host", "") or ""
+    smtp_port = _coerce_int(
+        os.getenv("DALIJOB_SMTP_PORT", "").strip() or read_config_value("email", "smtp_port", "587"),
+        587,
+    )
+    smtp_username = (
+        os.getenv("DALIJOB_SMTP_USERNAME", "").strip()
+        or read_config_value("email", "smtp_username", "")
+        or ""
+    )
+    smtp_use_tls = _coerce_bool(read_config_value("email", "smtp_use_tls", "true"), True)
+    email_outbox_dir = (
+        read_config_value("email", "outbox_dir", "")
+        or str(Path(__file__).resolve().parents[1] / "storage" / "email_outbox")
+    )
+    log_dir = read_config_value("logging", "directory", "") or str(Path(__file__).resolve().parents[1] / "logs")
+    log_max_bytes = _coerce_int(
+        read_config_value("logging", "max_bytes", str(DEFAULT_LOG_MAX_BYTES)),
+        DEFAULT_LOG_MAX_BYTES,
+    )
+    log_backup_count = _coerce_int(
+        read_config_value("logging", "backup_count", str(DEFAULT_LOG_BACKUP_COUNT)),
+        DEFAULT_LOG_BACKUP_COUNT,
+    )
+    audit_retention_days = _coerce_int(read_config_value("audit", "retention_days", "365"), 365)
 
     runtime = RuntimeConfig(
         config_path=loaded_path,
@@ -183,6 +325,27 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         document_storage_dir=str(Path(document_storage_dir).expanduser().resolve()),
         provider_user_limit_per_minute=max(provider_user_limit, 1),
         provider_ip_limit_per_minute=max(provider_ip_limit, 1),
+        auth_login_ip_limit=max(auth_login_ip_limit, 1),
+        auth_login_account_limit=max(auth_login_account_limit, 1),
+        auth_login_window_seconds=max(auth_login_window_seconds, 1),
+        auth_register_ip_limit=max(auth_register_ip_limit, 1),
+        auth_register_account_limit=max(auth_register_account_limit, 1),
+        auth_register_window_seconds=max(auth_register_window_seconds, 1),
+        session_idle_seconds=max(session_idle_seconds, 60),
+        session_absolute_seconds=max(session_absolute_seconds, 300),
+        email_action_ttl_seconds=max(email_action_ttl_seconds, 300),
+        public_client_url=public_client_url,
+        email_delivery_mode=email_delivery_mode,
+        email_from_address=email_from_address,
+        smtp_host=smtp_host,
+        smtp_port=max(smtp_port, 1),
+        smtp_username=smtp_username,
+        smtp_use_tls=smtp_use_tls,
+        email_outbox_dir=str(Path(email_outbox_dir).expanduser().resolve()),
+        log_dir=str(Path(log_dir).expanduser().resolve()),
+        log_max_bytes=max(log_max_bytes, 1024),
+        log_backup_count=max(log_backup_count, 1),
+        audit_retention_days=max(audit_retention_days, 1),
     )
     _validate_runtime_config(runtime)
     return runtime

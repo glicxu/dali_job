@@ -4,11 +4,6 @@ import base64
 import hashlib
 import hmac
 import os
-from datetime import datetime, timedelta, timezone
-
-import jwt
-
-JWT_ALGORITHM = "HS256"
 PASSWORD_ALGORITHM = "pbkdf2_sha256"
 PASSWORD_ITERATIONS = 390000
 
@@ -41,17 +36,3 @@ def verify_password(password: str, password_hash: str | None) -> bool:
 
     actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
     return hmac.compare_digest(actual, expected)
-
-
-def create_access_token(subject: str, secret: str, ttl_seconds: int) -> str:
-    now = datetime.now(timezone.utc)
-    payload = {
-        "sub": subject,
-        "iat": int(now.timestamp()),
-        "exp": int((now + timedelta(seconds=ttl_seconds)).timestamp()),
-    }
-    return jwt.encode(payload, secret, algorithm=JWT_ALGORITHM)
-
-
-def decode_access_token(token: str, secret: str) -> dict:
-    return jwt.decode(token, secret, algorithms=[JWT_ALGORITHM])

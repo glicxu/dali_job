@@ -4,7 +4,7 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol
 
 from fastapi import HTTPException
 from sqlalchemy import select

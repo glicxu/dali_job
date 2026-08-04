@@ -266,6 +266,10 @@ export function JobsManager({ creationMode = null }: { creationMode?: ImportMode
     return creationMode ? <JobCreationPreview mode={creationMode} /> : <JobsManagerPreview />;
   }
 
+  return <AuthenticatedJobsManager creationMode={creationMode} />;
+}
+
+function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode | null }) {
   const [jobs, setJobs] = useState<StoredJob[]>([]);
   const [resumeProfiles, setResumeProfiles] = useState<ResumeProfile[]>([]);
   const [documents, setDocuments] = useState<StoredDocument[]>([]);
@@ -301,6 +305,7 @@ export function JobsManager({ creationMode = null }: { creationMode?: ImportMode
     }
   }
 
+  // Archive mode is the intended list reload trigger.
   useEffect(() => {
     void loadJobs();
     Promise.all([listResumeProfiles(), listDocuments()])
@@ -312,7 +317,7 @@ export function JobsManager({ creationMode = null }: { creationMode?: ImportMode
         setResumeProfiles([]);
         setDocuments([]);
       });
-  }, [showArchived]);
+  }, [showArchived]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

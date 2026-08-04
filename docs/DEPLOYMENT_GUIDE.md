@@ -24,13 +24,13 @@ Required:
 
 - Next.js client.
 - FastAPI server.
-- Celery or equivalent worker.
 - MySQL-compatible SQL database accessed through `DaliCommonLib.dali_db_man.DbMan`.
-- Redis.
-- S3-compatible object storage.
+- Private server filesystem storage for the current single-instance document implementation.
 
 Future optional:
 
+- External worker and queue broker.
+- S3-compatible object storage.
 - Search service.
 - Dedicated document rendering service.
 - Dedicated plugin runner.
@@ -67,16 +67,10 @@ celery -A app.workers.celery_app worker --loglevel=info
 Required server variables:
 
 - `OPENAI_API_KEY`
-- `DALIJOB_JWT_SECRET`
-- `REDIS_URL`
-- `OBJECT_STORAGE_ENDPOINT`
-- `OBJECT_STORAGE_BUCKET`
-- `OBJECT_STORAGE_ACCESS_KEY`
-- `OBJECT_STORAGE_SECRET_KEY`
-- `SESSION_SECRET`
-- `ENCRYPTION_KEY`
-- `APP_BASE_URL`
-- `AI_PROVIDER`
+- `DALIJOB_SMTP_PASSWORD`
+- `APIFY_API_TOKEN` when provider-backed job search is enabled
+
+Future worker/object-storage deployments will also require broker, object-storage, and encryption credentials. They are not required for the current single-instance architecture.
 
 Required server dependency:
 
@@ -87,6 +81,7 @@ Required runtime config:
 - The server must accept `--config [config_file_name].ini`.
 - `server/app/config.py` must load that file through `DaliCommonLib.dali_config.ProcessConfig`.
 - Local, staging, and production database switching should happen by passing different ini files, not by editing code.
+- Production must configure exact HTTPS client origins, `public_client_url`, SMTP delivery, database-backed session lifetimes, rotating logs, and audit retention metadata as shown in `server/config.example.ini`.
 
 Required `ProcessConfig` database section:
 
@@ -171,10 +166,9 @@ Browser
   -> CDN / Client Host
   -> FastAPI Server
        -> SQL Database via DbMan
-       -> Redis
-       -> Object Storage
+       -> Private local document storage
        -> Secrets Manager
-  -> Worker Pool
+  -> Future Worker Pool
        -> AI Provider
        -> Email Providers
        -> Calendar Providers
@@ -212,6 +206,8 @@ Deployment sequence:
 4. Deploy workers.
 5. Deploy client.
 6. Run smoke tests.
+
+Build and deploy the versioned CI artifact rather than rebuilding independently on the host. Keep at least two successful artifacts. Use the readback and roll-forward rules in [RELEASE_AND_ROLLBACK.md](RELEASE_AND_ROLLBACK.md); production Alembic downgrade is never automatic.
 
 ## 7. Object Storage
 

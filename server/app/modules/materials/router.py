@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db_session
 from app.modules.auth.dependencies import AuthenticatedIdentity, get_current_identity
 from app.modules.materials import repository
+from app.modules.materials.document_output import materialize_tailored_resume_document
 from app.modules.materials.schemas import MaterialListResponse, MaterialResponse, MaterialRevisionRequest
 
 router = APIRouter(prefix="/application-materials", tags=["application-materials"])
@@ -36,11 +37,22 @@ def get_application_material(
 def revise_application_material(
     material_id: int,
     payload: MaterialRevisionRequest,
+    request: Request,
     db: Session = Depends(get_db_session),
     identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> dict:
     try:
         version = repository.create_revision(db, identity, material_id, payload)
+        material = repository.get_material_for_identity(db, identity, version.material_id)
+        if material is None:
+            raise ValueError("Application material not found.")
+        materialize_tailored_resume_document(
+            db,
+            identity,
+            storage_root=request.app.state.runtime.document_storage_dir,
+            material=material,
+            version=version,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     db.commit()

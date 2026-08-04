@@ -797,6 +797,37 @@ li span {
   margin: 0;
 }
 
+.application-preview-section-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.application-preview-actions {
+  flex-wrap: wrap;
+}
+
+.application-interview-list {
+  display: grid;
+  gap: 8px;
+}
+
+.application-interview-row {
+  align-items: center;
+  border: 1px solid #d9e2ec;
+  border-radius: 6px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.application-interview-row > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
 .application-preview-task-list {
   margin-top: 2px;
 }
@@ -1408,6 +1439,30 @@ li span {
 
 .auth-form {
   gap: 18px;
+}
+
+.auth-account-card,
+.account-danger-zone,
+.auth-delete-confirmation {
+  display: grid;
+  gap: 12px;
+}
+
+.account-danger-zone {
+  border-top: 1px solid #d9e2ec;
+  padding-top: 16px;
+}
+
+.danger-button {
+  background: #a61b1b;
+  color: #fff;
+}
+
+.text-button {
+  background: transparent;
+  color: #334e68;
+  padding: 6px;
+  text-decoration: underline;
 }
 
 .segmented-control {
@@ -2046,6 +2101,15 @@ li span {
 }
 
 @media (max-width: 760px) {
+  .application-interview-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .application-interview-row .button-link {
+    text-align: center;
+  }
+
   .app-shell {
     grid-template-columns: 1fr;
   }

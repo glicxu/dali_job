@@ -44,7 +44,7 @@ The server supports development identity modes. This is useful locally but risky
 Recommended fix:
 
 - Fail startup in production if `auth_mode` is `dev` or `disabled`.
-- Fail startup if the default JWT secret is still configured.
+- Require production SMTP, verified accounts, and opaque revocable cookie sessions; do not use browser-readable bearer credentials.
 - Keep signed-out previews in the client, but require authenticated API calls for AI, scraping, uploads, saved jobs, profile writes, and dashboard data.
 
 ### Long-Running Requests

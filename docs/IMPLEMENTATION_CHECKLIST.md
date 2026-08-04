@@ -33,7 +33,7 @@ Use the [DaliJob Implementation Plan](IMPLEMENTATION_PLAN.md) for current priori
 ### Phase 0 Hardening
 
 - [x] Reject `dev` and `disabled` authentication when the server environment is production.
-- [x] Reject missing or default JWT secrets for production local authentication.
+- [x] Use verified accounts and opaque, revocable cookie sessions with CSRF protection for production local authentication.
 - [x] Validate authentication coverage for every non-public `/api/v1` route.
 - [x] Restrict shared `jobs_cache` writes to source extraction and provider-normalization paths.
 - [x] Keep user-submitted manual jobs and corrections in `user_edited_jobs`.

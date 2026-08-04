@@ -52,6 +52,8 @@ function AuthenticatedAnalyticsDashboard() {
     }
   }
 
+  // Initial load intentionally uses the default range; later loads are explicit form actions.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void loadAnalytics("", ""); }, []);
 
   function applyRange(event: FormEvent) {

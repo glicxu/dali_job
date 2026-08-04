@@ -348,10 +348,10 @@ export type CurrentUser = {
 };
 
 export type AuthResponse = {
-  access_token: string;
-  token_type: "bearer";
   user: CurrentUser;
 };
+
+export type MessageResponse = { message: string };
 
 export type DocumentVersion = {
   id: number;
@@ -401,6 +401,7 @@ export type CoverLetterContent = {
 export type ApplicationMaterialVersion = {
   id: number; material_id: number; version_number: number; parent_version_id: number | null;
   operation_id: number | null; source_document_version_id: number | null; source_material_version_id: number | null;
+  output_document_version_id: number | null;
   source_document_title: string; source_document_file_name: string; source_document_version_number: number;
   source_document_sha256: string; content_data: TailoredResumeContent | CoverLetterContent | null;
   version_source: "ai" | "user"; warnings: string[]; provider: string; model_name: string | null;
@@ -794,26 +795,39 @@ export const emptyJobDescriptionData: JobDescriptionData = {
   application_deadline: "",
 };
 
-const tokenStorageKey = "dalijob_access_token";
+const legacyTokenStorageKey = "dalijob_access_token";
+const sessionMarkerKey = "dalijob_session_present";
+const csrfStorageKey = "dalijob_csrf_token";
 
 export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(tokenStorageKey);
+  window.localStorage.removeItem(legacyTokenStorageKey);
+  return window.localStorage.getItem(sessionMarkerKey);
 }
 
-export function setAuthToken(token: string): void {
+export function setAuthToken(_ignored = "active"): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(tokenStorageKey, token);
+  window.localStorage.removeItem(legacyTokenStorageKey);
+  window.localStorage.setItem(sessionMarkerKey, "active");
 }
 
 export function clearAuthToken(): void {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(tokenStorageKey);
+  window.localStorage.removeItem(legacyTokenStorageKey);
+  window.localStorage.removeItem(sessionMarkerKey);
+  window.sessionStorage.removeItem(csrfStorageKey);
 }
 
 function authHeaders(): Record<string, string> {
-  const token = getAuthToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  if (typeof document === "undefined") return {};
+  const csrfCookie = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith("dalijob_csrf="));
+  const csrfToken = csrfCookie
+    ? decodeURIComponent(csrfCookie.slice("dalijob_csrf=".length))
+    : window.sessionStorage.getItem(csrfStorageKey) || "";
+  return csrfToken ? { "X-CSRF-Token": csrfToken } : {};
 }
 
 export class ApiRequestError extends Error {
@@ -830,6 +844,7 @@ export class ApiRequestError extends Error {
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...authHeaders(),
@@ -851,6 +866,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // Keep the status-based message when the server does not return JSON.
     }
+    if (response.status === 401) clearAuthToken();
     throw new ApiRequestError(message, response.status, detail);
   }
 
@@ -865,8 +881,8 @@ export async function registerUser(
   email: string,
   password: string,
   displayName: string,
-): Promise<AuthResponse> {
-  const payload = await requestJson<AuthResponse>("/auth/register", {
+): Promise<MessageResponse> {
+  return requestJson<MessageResponse>("/auth/register", {
     method: "POST",
     body: JSON.stringify({
       email,
@@ -874,8 +890,11 @@ export async function registerUser(
       display_name: displayName,
     }),
   });
-  setAuthToken(payload.access_token);
-  return payload;
+}
+
+async function refreshCsrfToken(): Promise<void> {
+  const payload = await requestJson<{ csrf_token: string }>("/auth/csrf");
+  if (typeof window !== "undefined") window.sessionStorage.setItem(csrfStorageKey, payload.csrf_token);
 }
 
 export async function loginUser(email: string, password: string): Promise<AuthResponse> {
@@ -883,12 +902,64 @@ export async function loginUser(email: string, password: string): Promise<AuthRe
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
-  setAuthToken(payload.access_token);
+  setAuthToken();
+  await refreshCsrfToken();
   return payload;
 }
 
+export async function verifyEmail(token: string): Promise<AuthResponse> {
+  const payload = await requestJson<AuthResponse>("/auth/verify-email", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+  setAuthToken();
+  await refreshCsrfToken();
+  return payload;
+}
+
+export function resendVerification(email: string): Promise<MessageResponse> {
+  return requestJson<MessageResponse>("/auth/resend-verification", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function requestPasswordReset(email: string): Promise<MessageResponse> {
+  return requestJson<MessageResponse>("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function resetPassword(token: string, newPassword: string): Promise<MessageResponse> {
+  return requestJson<MessageResponse>("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+}
+
+export async function logoutUser(): Promise<void> {
+  try {
+    await requestJson<MessageResponse>("/auth/logout", { method: "POST" });
+  } finally {
+    clearAuthToken();
+  }
+}
+
+export async function deleteAccount(currentPassword: string): Promise<void> {
+  await requestJson<void>("/auth/account", {
+    method: "DELETE",
+    body: JSON.stringify({ current_password: currentPassword }),
+  });
+  clearAuthToken();
+}
+
 export function getCurrentUser(): Promise<CurrentUser> {
-  return requestJson<CurrentUser>("/me");
+  return requestJson<CurrentUser>("/me").then(async (user) => {
+    setAuthToken();
+    await refreshCsrfToken();
+    return user;
+  });
 }
 
 export function getDashboard(): Promise<DashboardResponse> {
@@ -1211,6 +1282,7 @@ export async function uploadDocument(
 
   const response = await fetch(`${getApiBaseUrl()}/documents`, {
     method: "POST",
+    credentials: "include",
     headers: authHeaders(),
     body: form,
   });
@@ -1236,6 +1308,7 @@ export async function uploadDocumentVersion(documentId: number, file: File): Pro
   form.append("file", file);
   const response = await fetch(`${getApiBaseUrl()}/documents/${documentId}/versions`, {
     method: "POST",
+    credentials: "include",
     headers: authHeaders(),
     body: form,
   });
@@ -1549,6 +1622,7 @@ export async function importResumePdf(file: File): Promise<ResumeImportResponse>
 
   const operation = await fetch(`${getApiBaseUrl()}/operations/resume-parse`, {
     method: "POST",
+    credentials: "include",
     headers: { ...authHeaders(), "Idempotency-Key": operationIdempotencyKey() },
     body: form,
   });

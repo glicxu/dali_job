@@ -20,8 +20,10 @@ import {
   downloadApplicationDocument,
   getApplication,
   getAuthToken,
+  Interview,
   listApplications,
   listDocuments,
+  listInterviews,
   listJobs,
   openApplicationDocument,
   restoreApplication,
@@ -110,10 +112,15 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
     return <ApplicationTrackerPreview />;
   }
 
+  return <AuthenticatedApplicationTracker applicationId={applicationId} />;
+}
+
+function AuthenticatedApplicationTracker({ applicationId }: ApplicationTrackerProps) {
   const [applications, setApplications] = useState<TrackedApplication[]>([]);
   const [savedJobs, setSavedJobs] = useState<StoredJob[]>([]);
   const [documents, setDocuments] = useState<StoredDocument[]>([]);
   const [selectedApplication, setSelectedApplication] = useState<ApplicationDetail | null>(null);
+  const [applicationInterviews, setApplicationInterviews] = useState<Interview[]>([]);
   const [selectedJobId, setSelectedJobId] = useState("");
   const [status, setStatus] = useState<ApplicationStatus>("interested");
   const [stage, setStage] = useState<ApplicationStage | "">("");
@@ -179,7 +186,12 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
       setSavedJobs(jobPayload);
       setDocuments(documentPayload.documents);
       if (applicationId !== undefined) {
-        syncEditor(await getApplication(applicationId));
+        const [application, interviews] = await Promise.all([
+          getApplication(applicationId),
+          listInterviews(applicationId),
+        ]);
+        syncEditor(application);
+        setApplicationInterviews(interviews);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load applications.");
@@ -188,16 +200,18 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
     }
   }
 
+  // Filters and route identity are the intended reload triggers.
   useEffect(() => {
     void loadApplications();
-  }, [statusFilter, stageFilter, showArchived, applicationId]);
+  }, [statusFilter, stageFilter, showArchived, applicationId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Query-driven selection should run once after the list is available.
   useEffect(() => {
     if (isDetailPage || isLoading || openedQueryApplication.current || typeof window === "undefined") return;
     openedQueryApplication.current = true;
     const applicationId = Number(new URLSearchParams(window.location.search).get("application_id"));
     if (Number.isInteger(applicationId) && applicationId > 0) void openApplication(applicationId);
-  }, [isDetailPage, isLoading]);
+  }, [isDetailPage, isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function syncEditor(application: ApplicationDetail) {
     setSelectedApplication(application);
@@ -222,10 +236,24 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
   async function openApplication(applicationId: number) {
     setError(null);
     try {
-      syncEditor(await getApplication(applicationId));
+      const [application, interviews] = await Promise.all([
+        getApplication(applicationId),
+        listInterviews(applicationId),
+      ]);
+      syncEditor(application);
+      setApplicationInterviews(interviews);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not open application.");
     }
+  }
+
+  function toggleApplication(applicationId: number) {
+    if (selectedApplication?.id === applicationId) {
+      setSelectedApplication(null);
+      setApplicationInterviews([]);
+      return;
+    }
+    void openApplication(applicationId);
   }
 
   async function createNewApplication(event: FormEvent<HTMLFormElement>) {
@@ -258,6 +286,7 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
       }
       setSelectedJobId("");
       syncEditor(created);
+      setApplicationInterviews([]);
       setStatusMessage("Application created.");
       await loadApplications();
     } catch (err) {
@@ -418,6 +447,7 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
         syncEditor(archived);
       } else {
         setSelectedApplication(null);
+        setApplicationInterviews([]);
       }
       setStatusMessage("Application archived.");
       await loadApplications();
@@ -530,11 +560,7 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
                 type="button"
                 key={application.id}
                 className={`application-row${selectedApplication?.id === application.id ? " selected" : ""}`}
-                onClick={() =>
-                  selectedApplication?.id === application.id
-                    ? setSelectedApplication(null)
-                    : void openApplication(application.id)
-                }
+                onClick={() => toggleApplication(application.id)}
               >
                 <span className={`status-pill status-${application.status}`}>{labelize(application.status)}</span>
                 <span>
@@ -563,7 +589,13 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
                     {applicationCompany(selectedApplication)} | Application ID: {selectedApplication.id}
                   </p>
                 </div>
-                <div className="button-row">
+                <div className="button-row application-preview-actions">
+                  <a className="button-link secondary-button" href={`/materials?application_id=${selectedApplication.id}`}>
+                    Tailor Resume
+                  </a>
+                  <a className="button-link secondary-button" href={`/interviews?application_id=${selectedApplication.id}`}>
+                    Add Interview
+                  </a>
                   {selectedApplication.archived_at ? (
                     <button type="button" onClick={() => void restoreSelectedApplication()}>
                       Restore
@@ -675,6 +707,13 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
               </form>
 
               <div className="application-editor-sections">
+                <CollapsibleApplicationSection
+                  title="Interviews"
+                  description={`${applicationInterviews.length} interview${applicationInterviews.length === 1 ? "" : "s"}`}
+                >
+                  <ApplicationInterviewList interviews={applicationInterviews} />
+                </CollapsibleApplicationSection>
+
                 <CollapsibleApplicationSection
                   title="Application Materials"
                   description={`${selectedApplication.documents.length} attached document${selectedApplication.documents.length === 1 ? "" : "s"}`}
@@ -1063,6 +1102,7 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
             ) : (
               <ApplicationReadOnlyPreview
                 application={selectedApplication}
+                interviews={applicationInterviews}
                 onOpenDocument={(attachmentId) => void openAttachment(attachmentId)}
               />
             )
@@ -1084,9 +1124,11 @@ export function ApplicationTracker({ applicationId }: ApplicationTrackerProps = 
 
 function ApplicationReadOnlyPreview({
   application,
+  interviews,
   onOpenDocument,
 }: {
   application: ApplicationDetail;
+  interviews: Interview[];
   onOpenDocument: (attachmentId: number) => void;
 }) {
   return (
@@ -1098,9 +1140,11 @@ function ApplicationReadOnlyPreview({
             {applicationCompany(application)} | Application ID: {application.id}
           </p>
         </div>
-        <a className="button-link" href={`/applications/${application.id}`}>
-          View / Edit
-        </a>
+        <div className="button-row application-preview-actions">
+          <a className="button-link secondary-button" href={`/materials?application_id=${application.id}`}>Tailor Resume</a>
+          <a className="button-link secondary-button" href={`/interviews?application_id=${application.id}`}>Add Interview</a>
+          <a className="button-link" href={`/applications/${application.id}`}>View / Edit</a>
+        </div>
       </div>
 
       <dl className="application-summary-grid">
@@ -1143,6 +1187,14 @@ function ApplicationReadOnlyPreview({
       </section>
 
       <section className="application-preview-section">
+        <div className="application-preview-section-heading">
+          <h3>Interviews</h3>
+          <span className="metadata">{interviews.length} total</span>
+        </div>
+        <ApplicationInterviewList interviews={interviews} limit={3} />
+      </section>
+
+      <section className="application-preview-section">
         <h3>Notes</h3>
         <p>{application.notes || "No application notes."}</p>
       </section>
@@ -1177,6 +1229,32 @@ function ApplicationReadOnlyPreview({
         {application.notes_list.length} timeline note{application.notes_list.length === 1 ? "" : "s"} | {application.events.length} event{application.events.length === 1 ? "" : "s"}
       </div>
     </section>
+  );
+}
+
+function ApplicationInterviewList({ interviews, limit }: { interviews: Interview[]; limit?: number }) {
+  const visibleInterviews = typeof limit === "number" ? interviews.slice(0, limit) : interviews;
+  if (!visibleInterviews.length) return <p className="empty">No interviews added for this application.</p>;
+
+  return (
+    <div className="application-interview-list">
+      {visibleInterviews.map((interview) => (
+        <article className="application-interview-row" key={interview.id}>
+          <div>
+            <strong>{labelize(interview.interview_type)}</strong>
+            <span className="metadata">
+              {labelize(interview.status)} | {labelize(interview.stage)} | {displayDateTime(interview.scheduled_at)}
+            </span>
+          </div>
+          <a className="button-link secondary-button" href={`/interviews?interview_id=${interview.id}`}>
+            View
+          </a>
+        </article>
+      ))}
+      {typeof limit === "number" && interviews.length > limit ? (
+        <p className="metadata">Showing {limit} of {interviews.length} interviews.</p>
+      ) : null}
+    </div>
   );
 }
 

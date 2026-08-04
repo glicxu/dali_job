@@ -21,6 +21,8 @@ Key documents:
 - [Testing Strategy](docs/TESTING_STRATEGY.md)
 - [Deployment Guide](docs/DEPLOYMENT_GUIDE.md)
 - [Production Readiness Tracker](docs/PRODUCTION_READINESS.md)
+- [Operations Runbook](docs/OPERATIONS_RUNBOOK.md)
+- [Release and Rollback](docs/RELEASE_AND_ROLLBACK.md)
 
 ## Architecture Direction
 
@@ -31,7 +33,7 @@ Key documents:
 
 ## Run Locally
 
-Server settings come from a `ProcessConfig` ini file. Server secrets, including `DALIJOB_JWT_SECRET`, `OPENAI_API_KEY`, and `APIFY_API_TOKEN`, belong in `server/.env`, which is ignored by git.
+Server settings come from a `ProcessConfig` ini file. Server secrets, including `DALIJOB_SMTP_PASSWORD`, `OPENAI_API_KEY`, and `APIFY_API_TOKEN`, belong in `server/.env`, which is ignored by git.
 
 Create a local server config from the safe example:
 
@@ -121,22 +123,31 @@ Configure the mode in your private server config:
 ```ini
 [dali_job]
 auth_mode = local
+public_client_url = http://127.0.0.1:3000
 
 [dali_job_auth]
-access_ttl_seconds = 604800
+session_idle_seconds = 43200
+session_absolute_seconds = 604800
+email_action_ttl_seconds = 3600
 ```
 
-Set the JWT signing secret in the server process environment:
+Local development writes verification and password-reset messages to `server/storage/email_outbox`. Production must use SMTP:
 
-```powershell
-$env:DALIJOB_JWT_SECRET = "use_a_long_private_random_value"
+```ini
+[email]
+delivery_mode = smtp
+from_address = no-reply@example.com
+smtp_host = smtp.example.com
+smtp_port = 587
+smtp_username = smtp-user
+smtp_use_tls = true
 ```
 
-When `local` auth is enabled, use the client `/auth` page or the `/api/v1/auth/register` and `/api/v1/auth/login` endpoints. The server returns a DaliJob bearer token, and the client sends it on later API requests.
+Set the SMTP password only in `server/.env` as `DALIJOB_SMTP_PASSWORD`. When `local` auth is enabled, registration requires email verification. Login creates an opaque database session and sends it in an `HttpOnly`, `SameSite=Lax` cookie (`Secure` in production). Mutating requests also require the CSRF cookie/header pair. Password changes, logout, account disablement, and soft deletion revoke server-side sessions.
 
 Long term, one registration across multiple Dalifin apps should be handled by a shared identity database or standalone auth service. That is different from requiring users to log in through another app such as app_server.
 
-Production configurations (`env = production` or `env = prod`) must use `auth_mode = local` and a non-default `DALIJOB_JWT_SECRET`. The server refuses to start with `dev` or `disabled` authentication in production. It also validates that every non-health, non-login API route has an authentication dependency.
+Production configurations (`env = production` or `env = prod`) must use `auth_mode = local`, exact HTTPS client origins, an HTTPS public client URL, and SMTP delivery. The server refuses to start with `dev`, `disabled`, file-based email, or unsafe browser origins in production. It also validates that every non-public API route has an authentication dependency.
 
 Provider-backed actions use configurable in-process per-user and per-IP limits:
 

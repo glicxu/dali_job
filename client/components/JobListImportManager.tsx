@@ -17,6 +17,10 @@ export function JobListImportManager() {
     return <JobListImportPreview />;
   }
 
+  return <AuthenticatedJobListImportManager />;
+}
+
+function AuthenticatedJobListImportManager() {
   const [listUrl, setListUrl] = useState("");
   const [result, setResult] = useState<JobListDiscoverResponse | null>(null);
   const [selectedUrls, setSelectedUrls] = useState<Set<string>>(new Set());

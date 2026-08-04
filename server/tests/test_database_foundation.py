@@ -8,8 +8,8 @@ from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 
 from app.db.base import Base
-from app.modules.accounts.models import User, Workspace
 from app.modules.auth.dependencies import AuthenticatedIdentity
+from app.modules.health.router import EXPECTED_ALEMBIC_HEAD
 from app.modules.profiles import repository
 from app.modules.profiles.schemas import ResumeData, ResumeProfileCreateRequest, ResumeProfileUpdateRequest
 
@@ -37,6 +37,9 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "interview_prep_guides",
         "generated_application_materials",
         "generated_application_material_versions",
+        "auth_sessions",
+        "auth_action_tokens",
+        "audit_events",
     }.issubset(Base.metadata.tables.keys())
     assert "skills" not in Base.metadata.tables
     assert "experiences" not in Base.metadata.tables
@@ -64,6 +67,8 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "timezone",
         "created_at",
         "updated_at",
+        "email_verified_at",
+        "password_changed_at",
         "deleted_at",
     }.issubset(user_columns)
     assert {
@@ -240,6 +245,9 @@ def test_foundation_metadata_can_create_tables() -> None:
     assert inspector.has_table("interview_prep_guides")
     assert inspector.has_table("generated_application_materials")
     assert inspector.has_table("generated_application_material_versions")
+    assert inspector.has_table("auth_sessions")
+    assert inspector.has_table("auth_action_tokens")
+    assert inspector.has_table("audit_events")
     assert not inspector.has_table("skills")
     assert not inspector.has_table("experiences")
     assert not inspector.has_table("profiles")
@@ -255,7 +263,7 @@ def test_alembic_has_initial_schema_revision() -> None:
     config.set_main_option("script_location", str(server_dir / "app" / "db" / "migrations"))
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == "20260717_0024"
+    assert script.get_current_head() == EXPECTED_ALEMBIC_HEAD == "20260803_0026"
 
 
 def test_phase3_migration_does_not_recreate_existing_document_version_constraint() -> None:

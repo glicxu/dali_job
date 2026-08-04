@@ -15,37 +15,9 @@ Status checked on 2026-07-08 after the us3 deployment work.
 
 Severity: High
 
-Current status: Fixed.
+Current status: Superseded and fixed.
 
-The original config-file risk has been reduced:
-
-- `server/config.example.ini` no longer contains `jwt_secret = change-me`.
-- The example now documents that JWT signing secret is read from `DALIJOB_JWT_SECRET`.
-- Production us3 uses `/data/dali/prod/config/dali_job.env` for `DALIJOB_JWT_SECRET`.
-
-The code no longer accepts a hardcoded fallback secret:
-
-- `server/app/modules/auth/dependencies.py:16` defines `DEFAULT_AUTH_SECRET`.
-- `server/app/modules/auth/dependencies.py:40` defines `get_auth_secret()`.
-- `server/app/modules/auth/dependencies.py` now requires `DALIJOB_JWT_SECRET` for local auth.
-- `server/app/modules/auth/dependencies.py` rejects empty values and known defaults such as `change-me` and `DEFAULT_AUTH_SECRET`.
-- `server/config.example.ini:12` still sets `auth_mode = local`.
-
-Impact:
-
-If a shared or production-like environment runs with `auth_mode = local` but without `DALIJOB_JWT_SECRET`, local token creation and verification fail closed with a configuration error.
-
-Recommended fix:
-
-Completed fix:
-
-Local auth now fails token creation and verification unless `DALIJOB_JWT_SECRET` is present and is not one of the known default/documentation values. Explicit `auth_mode = dev` still works without a JWT secret.
-
-Add tests:
-
-- Local auth mode without `DALIJOB_JWT_SECRET` returns a startup/config error.
-- Local auth mode rejects `DEFAULT_AUTH_SECRET`.
-- Dev auth mode still works without JWT secret if that behavior is intentionally preserved.
+As of migration `20260803_0026`, DaliJob no longer issues JWT bearer tokens. Local authentication uses high-entropy opaque session identifiers; only their SHA-256 hashes are stored in `auth_sessions`. Browser credentials are sent in `HttpOnly` cookies and are individually revocable. `DALIJOB_JWT_SECRET` is no longer a runtime requirement. Session expiry, revocation, email verification, password reset, soft-deleted users, and CSRF boundaries have automated tests.
 
 ## 2. Scraping/AI helper endpoints bypass API auth
 
@@ -80,8 +52,8 @@ to all three endpoints. The endpoint bodies do not use `identity`; the dependenc
 
 Add tests:
 
-- In `auth_mode = local`, each route returns `401` without a bearer token.
-- Each route succeeds with a valid bearer token.
+- In `auth_mode = local`, each route returns `401` without a valid session.
+- Each route succeeds with a valid session and mutating routes require the CSRF header.
 
 ## 3. GitHub CI likely fails on clean checkout
 

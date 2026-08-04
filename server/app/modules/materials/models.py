@@ -47,6 +47,10 @@ class GeneratedApplicationMaterialVersion(Base):
         Index("ix_gen_material_versions_parent", "parent_version_id"),
         Index("ix_gen_material_versions_document", "source_document_version_id"),
         Index("ix_gen_material_versions_source", "source_material_version_id"),
+        UniqueConstraint(
+            "output_document_version_id",
+            name="uq_generated_material_versions_output_document",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -55,6 +59,11 @@ class GeneratedApplicationMaterialVersion(Base):
     parent_version_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("generated_application_material_versions.id", ondelete="SET NULL"), nullable=True)
     operation_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("managed_operations.id", ondelete="SET NULL"), nullable=True, unique=True)
     source_document_version_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("document_versions.id", ondelete="SET NULL"), nullable=True)
+    output_document_version_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("document_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     source_material_version_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("generated_application_material_versions.id", ondelete="SET NULL"), nullable=True)
     source_resume_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
     job_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)

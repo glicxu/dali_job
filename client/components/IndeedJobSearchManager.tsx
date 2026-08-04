@@ -28,6 +28,10 @@ export function IndeedJobSearchManager() {
     return <IndeedJobSearchPreview />;
   }
 
+  return <AuthenticatedIndeedJobSearchManager />;
+}
+
+function AuthenticatedIndeedJobSearchManager() {
   const [keyword, setKeyword] = useState("");
   const [location, setLocation] = useState("");
   const [result, setResult] = useState<IndeedJobSearchResponse | null>(null);

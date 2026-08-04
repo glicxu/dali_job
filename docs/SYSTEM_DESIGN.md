@@ -717,6 +717,12 @@ Adapters isolate external dependencies:
 - AI providers.
 - Storage providers.
 
+### Ask Scout Workflow Guidance
+
+Ask Scout is a passive, signed-in navigation assistant available from a persistent launcher and a dedicated `/ask-scout` page. It runs through the existing managed-operation boundary and may explain workflows or recommend a local destination, but it cannot submit forms, start imports, mutate records, scrape URLs, or invoke other DaliJob workflows.
+
+The OpenAI adapter returns a strict structured response containing a catalog action ID rather than a route. A server-owned capability catalog validates the action, discards undeclared parameters, accepts record IDs only from validated page context, and constructs the final local link. Destination pages may consume bounded query prefills, but prefills never auto-submit. The Ask Scout model is configured independently through `[ask_scout] model` or `DALIJOB_ASK_SCOUT_MODEL`; provider credentials remain server-side.
+
 ## 5.1 Client/Server Independence Rules
 
 - Keep `client/` and `server/` as separate top-level applications.

@@ -30,6 +30,8 @@ from app.modules.profiles.resume_import import OpenAIResumeProfileParser, Resume
 from app.modules.resume_job_match import router as match_router
 from app.modules.resume_job_match.schemas import BulkSavedJobMatchRequest, ResumeJobMatchRequest
 from app.modules.resume_job_match.service import OpenAIResumeJobMatcher
+from app.modules.scout.schemas import AskScoutRequest
+from app.modules.scout.service import AskScoutService, OpenAIAskScoutProvider
 
 
 class _UnusedProvider:
@@ -81,6 +83,22 @@ def build_operation_handlers(app: Any) -> dict[str, OperationHandler]:
     runtime = app.state.runtime
 
     search_provider: JobSearchProvider = ApifyIndeedClient()
+
+    def ask_scout(db, identity: AuthenticatedIdentity, raw: dict, context: OperationContext):
+        del db, identity
+        payload = AskScoutRequest.model_validate(raw)
+        context.update(0, total=1, message="Preparing guidance")
+        provider = getattr(app.state, "ask_scout_provider", None)
+        if provider is None:
+            provider = OpenAIAskScoutProvider(model=runtime.ask_scout_model)
+        response = AskScoutService(provider).answer(payload)
+        context.update(
+            1,
+            total=1,
+            message="Guidance ready",
+            usage={"recommended_action": response.primary_action.action_id if response.primary_action else None},
+        )
+        return jsonable_encoder(response)
 
     def job_search(db, identity: AuthenticatedIdentity, raw: dict, context: OperationContext):
         payload = IndeedJobSearchRequest.model_validate(raw)
@@ -335,6 +353,7 @@ def build_operation_handlers(app: Any) -> dict[str, OperationHandler]:
         return jsonable_encoder(material_repository.material_response(db, identity, material))
 
     return {
+        "ask_scout": ask_scout,
         "job_search": job_search,
         "provider_job_import": provider_import,
         "job_list_discover": list_discover,

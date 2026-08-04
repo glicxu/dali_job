@@ -45,6 +45,8 @@ from app.modules.operations.schemas import (
 )
 from app.modules.operations.service import execute_operation, session_factory_for
 from app.modules.resume_job_match.schemas import BulkSavedJobMatchRequest, ResumeJobMatchRequest
+from app.modules.scout.prompts import PROMPT_VERSION as ASK_SCOUT_PROMPT_VERSION
+from app.modules.scout.schemas import AskScoutRequest
 
 router = APIRouter(prefix="/operations", tags=["operations"])
 TERMINAL_STATUSES = {"succeeded", "failed", "cancelled"}
@@ -126,6 +128,30 @@ def enqueue_job_search(
         idempotency_key=idempotency_key,
         provider="apify",
         model_or_actor=APIFY_INDEED_ACTOR_ID,
+        progress_total=1,
+    )
+
+
+@router.post("/ask-scout", response_model=ManagedOperationResponse, status_code=status.HTTP_202_ACCEPTED)
+def enqueue_ask_scout(
+    payload: AskScoutRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> ManagedOperationResponse:
+    return _enqueue(
+        operation_type="ask_scout",
+        payload=payload.model_dump(mode="json"),
+        request=request,
+        background_tasks=background_tasks,
+        db=db,
+        identity=identity,
+        idempotency_key=idempotency_key,
+        provider="openai",
+        model_or_actor=request.app.state.runtime.ask_scout_model,
+        prompt_version=ASK_SCOUT_PROMPT_VERSION,
         progress_total=1,
     )
 

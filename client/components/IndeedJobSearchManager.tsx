@@ -60,6 +60,9 @@ function AuthenticatedIndeedJobSearchManager() {
   );
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setKeyword(params.get("keyword")?.trim().slice(0, 200) || "");
+    setLocation(params.get("location")?.trim().slice(0, 200) || "");
     listResumeProfiles()
       .then((payload) => setResumeProfiles(payload.resume_profiles))
       .catch(() => setResumeProfiles([]));

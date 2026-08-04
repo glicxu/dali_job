@@ -83,13 +83,21 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link href="/documents">Documents</Link>
           <Link href="/analytics">Analytics</Link>
           <Link href="/auth">Account</Link>
-          <button type="button" className="sidebar-link" onClick={signOut}>
+          <button type="button" className="sidebar-link sidebar-sign-out" onClick={signOut}>
             Sign Out
           </button>
         </nav>
         {user ? <p className="metadata">{user.email}</p> : null}
       </aside>
       <main className="content">{children}</main>
+      <Link
+        className="ask-scout-launcher"
+        href={`/ask-scout?from=${encodeURIComponent(pathname)}`}
+        aria-label="Open Ask Scout"
+        title="Ask Scout"
+      >
+        Ask Scout
+      </Link>
     </div>
   );
 }

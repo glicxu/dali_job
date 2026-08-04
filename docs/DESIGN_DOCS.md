@@ -11,6 +11,7 @@ DaliJob is designed as a long-term career operating system, not a job board and 
 - [ER_MODEL_OVERVIEW.md](ER_MODEL_OVERVIEW.md) - plain-English explanation of current entities, relationships, and database design rules.
 - [ARCHITECTURE_REVIEW.md](ARCHITECTURE_REVIEW.md) - functional and architectural review of current risks, gaps, low-value areas, and recommended next steps.
 - [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) - use-case-first delivery plan with dependencies, work packages, acceptance criteria, and release boundaries.
+- [ASK_SCOUT_IMPLEMENTATION_PLAN.md](ASK_SCOUT_IMPLEMENTATION_PLAN.md) - passive AI navigation assistant design, capability catalog, API contract, security boundaries, phased implementation, and tests.
 - [DATA_LIFECYCLE.md](DATA_LIFECYCLE.md) - archive/delete semantics, immutable match history, retention, export, and account cleanup contract.
 - [API_SPEC.md](API_SPEC.md) - versioned REST API specification for the client, workers, and integrations.
 - [ER_DIAGRAM.md](ER_DIAGRAM.md) - Mermaid ER diagram and relationship notes.

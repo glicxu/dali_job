@@ -61,6 +61,15 @@ APIFY_API_TOKEN=your_apify_token_here
 
 The Apify token is read only by the FastAPI server and is never sent to the client.
 
+Ask Scout uses the server-side `OPENAI_API_KEY`. Its model is independent from other AI workflows and defaults to `gpt-5.6-luna`:
+
+```ini
+[ask_scout]
+model = gpt-5.6-luna
+```
+
+Set `DALIJOB_ASK_SCOUT_MODEL` to override that value for one server process.
+
 ## Database Setup
 
 All database commands use the database selected by the active `ProcessConfig` ini file. For local development, that is usually `server\config.ini`.
@@ -109,7 +118,7 @@ npm install
 npm run dev -- --hostname 127.0.0.1 --port 3000
 ```
 
-The API defaults to `http://127.0.0.1:5010`; the client defaults to `http://127.0.0.1:3000`. Stop either process with `Ctrl+C` in its terminal.
+The API defaults to port `5010`. In local browser sessions, the client automatically uses the same hostname used to open the client: `localhost` stays paired with `localhost`, and `127.0.0.1` stays paired with `127.0.0.1`. This is required for the local `SameSite=Lax` session cookie. Do not explicitly set `NEXT_PUBLIC_API_BASE_URL` to the other hostname. Stop either process with `Ctrl+C` in its terminal.
 
 ## Authentication
 

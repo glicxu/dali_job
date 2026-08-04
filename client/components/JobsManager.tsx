@@ -290,6 +290,12 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
   const [isBulkRemoving, setIsBulkRemoving] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
 
+  useEffect(() => {
+    if (creationMode !== "url") return;
+    const value = new URLSearchParams(window.location.search).get("job_url")?.trim();
+    if (value && /^https?:\/\//i.test(value)) setJobUrl(value);
+  }, [creationMode]);
+
   const sortedJobs = useMemo(() => jobs, [jobs]);
 
   async function loadJobs() {

@@ -48,6 +48,8 @@ function AuthenticatedJobListImportManager() {
   );
 
   useEffect(() => {
+    const value = new URLSearchParams(window.location.search).get("list_url")?.trim();
+    if (value && /^https?:\/\//i.test(value)) setListUrl(value);
     listResumeProfiles()
       .then((payload) => setResumeProfiles(payload.resume_profiles))
       .catch(() => {

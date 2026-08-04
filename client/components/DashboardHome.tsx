@@ -103,13 +103,28 @@ export function DashboardHome() {
         </a>
       </section>
 
-      <section className="profile-card">
-        <h2>Setup Alerts</h2>
+      <section className={`profile-card dashboard-setup-section${dashboard.setup_alerts.length ? " has-alerts" : ""}`}>
+        <div className="dashboard-setup-heading">
+          <div>
+            <p className="eyebrow">Account Setup</p>
+            <h2>Setup Alerts</h2>
+          </div>
+          {dashboard.setup_alerts.length ? (
+            <span className="dashboard-alert-count" aria-label={`${dashboard.setup_alerts.length} setup tasks remaining`}>
+              {dashboard.setup_alerts.length}
+            </span>
+          ) : null}
+        </div>
         {dashboard.setup_alerts.length ? (
           <div className="dashboard-alert-list">
             {dashboard.setup_alerts.map((alert) => (
               <a className="dashboard-alert" href={alert.href} key={alert.kind}>
-                {alert.message}
+                <span className="dashboard-alert-icon" aria-hidden="true">!</span>
+                <span className="dashboard-alert-content">
+                  <strong>Action required</strong>
+                  <span>{alert.message}</span>
+                </span>
+                <span className="dashboard-alert-action">Resolve</span>
               </a>
             ))}
           </div>

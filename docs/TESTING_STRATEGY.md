@@ -40,6 +40,8 @@ Test:
 - Resume-to-job match output includes score, matched skills, missing skills, supported requirements, and unsupported requirements.
 - Email classification maps to allowed application statuses.
 - Interview prep output includes required sections.
+- Ask Scout accepts only server-owned capability action IDs and strips arbitrary routes and parameters.
+- Ask Scout replaces model claims that imply it executed a workflow.
 
 ### Frontend
 
@@ -51,6 +53,7 @@ Test:
 - Resume review diff rendering.
 - Document attachment UI.
 - Analytics display formatting.
+- Ask Scout signed-out gating, persistent launcher, safe return path, and passive prefill adapters.
 
 ## 3. Integration Tests
 
@@ -89,6 +92,8 @@ Critical integration cases:
 - Tailored resume generation creates `ai_generation_job`, `resume_version`, `document_version`, and application event.
 - Cover letter generation links to application and resume version.
 - Status suggestion from email does not apply until accepted.
+- Ask Scout requests use authenticated managed operations with idempotency, owner scoping, provider limits, strict input validation, and safe operation failures.
+- Ask Scout job URL, job-list URL, keyword, and location prefills do not automatically submit destination forms.
 
 ## 4. End-To-End Tests
 

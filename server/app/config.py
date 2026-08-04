@@ -47,6 +47,7 @@ class RuntimeConfig:
     client_origins: list[str]
     client_origin_regex: str
     openai_model: str
+    ask_scout_model: str
     auth_mode: str
     document_storage_dir: str
     provider_user_limit_per_minute: int
@@ -197,6 +198,11 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         or read_config_value("openai", "model", "gpt-4.1-mini")
         or "gpt-4.1-mini"
     )
+    ask_scout_model = (
+        os.getenv("DALIJOB_ASK_SCOUT_MODEL", "").strip()
+        or read_config_value("ask_scout", "model", "gpt-5.6-luna")
+        or "gpt-5.6-luna"
+    )
     auth_mode = (
         os.getenv("DALIJOB_AUTH_MODE", "").strip()
         or read_config_value("dali_job", "auth_mode", "dev")
@@ -321,6 +327,7 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         client_origins=client_origins,
         client_origin_regex=client_origin_regex,
         openai_model=openai_model,
+        ask_scout_model=ask_scout_model,
         auth_mode=auth_mode.lower(),
         document_storage_dir=str(Path(document_storage_dir).expanduser().resolve()),
         provider_user_limit_per_minute=max(provider_user_limit, 1),

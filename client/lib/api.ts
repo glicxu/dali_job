@@ -146,6 +146,31 @@ export type ManagedOperationSummary = {
   provider_failures: Record<string, number>;
 };
 
+export type AskScoutAction = {
+  action_id: string;
+  label: string;
+  href: string;
+};
+
+export type AskScoutResult = {
+  status: "answered" | "navigate" | "needs_context" | "unsupported";
+  answer: string;
+  primary_action: AskScoutAction | null;
+  alternative_actions: AskScoutAction[];
+  limitations: string[];
+};
+
+export type AskScoutRequest = {
+  question: string;
+  current_path?: string | null;
+  page_context?: {
+    application_id?: number | null;
+    job_id?: number | null;
+    interview_id?: number | null;
+    resume_profile_id?: number | null;
+  };
+};
+
 export type JobDraftResponse = {
   source_url: string | null;
   raw_description_text: string;
@@ -1205,6 +1230,10 @@ async function runManagedOperation<T>(
   });
   rememberActiveOperation(operationType, operation.id, fingerprint);
   return waitForManagedOperation<T>(operation);
+}
+
+export function askScout(payload: AskScoutRequest): Promise<AskScoutResult> {
+  return runManagedOperation<AskScoutResult>("ask_scout", "/operations/ask-scout", payload);
 }
 
 export function listApplicationTasks(

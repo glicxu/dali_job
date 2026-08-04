@@ -73,6 +73,16 @@ def test_provider_limits_can_be_configured_from_environment(monkeypatch) -> None
     assert runtime.provider_ip_limit_per_minute == 15
 
 
+def test_ask_scout_model_has_an_independent_environment_override(monkeypatch) -> None:
+    monkeypatch.setenv("DALIJOB_OPENAI_MODEL", "general-model")
+    monkeypatch.setenv("DALIJOB_ASK_SCOUT_MODEL", "scout-model")
+
+    runtime = load_runtime_config()
+
+    assert runtime.openai_model == "general-model"
+    assert runtime.ask_scout_model == "scout-model"
+
+
 def test_auth_limits_can_be_configured_from_environment(monkeypatch) -> None:
     monkeypatch.setenv("DALIJOB_AUTH_LOGIN_IP_LIMIT", "12")
     monkeypatch.setenv("DALIJOB_AUTH_LOGIN_ACCOUNT_LIMIT", "4")

@@ -358,6 +358,16 @@ The sections below are grouped by product area. The order above should guide imp
 - [ ] Implement Adzuna integration if API access is available.
 - [ ] Implement Remotive integration if API access is available.
 
+## Ask Scout
+
+- [x] Add a server-owned workflow capability catalog and validated local action builder.
+- [x] Add strict OpenAI structured output through `POST /api/v1/operations/ask-scout`.
+- [x] Add the dedicated `/ask-scout` page and persistent signed-in launcher.
+- [x] Keep Ask Scout passive: no submissions, scraping, provider work, or data mutations outside its guidance operation.
+- [x] Add safe job URL, job-list URL, keyword, and location prefills without automatic execution.
+- [x] Add focused server, API, client, route-inventory, hostile-output, and passive-wording tests.
+- [ ] Add full browser end-to-end coverage for focus, navigation, provider outage, and rate-limit states.
+
 ## Hardening Before Public Release
 
 - [ ] Add full audit log.

@@ -1112,6 +1112,7 @@ Provider-backed client workflows enqueue through operation-specific endpoints an
 
 Enqueue endpoints:
 
+- `POST /operations/ask-scout`
 - `POST /operations/job-search`
 - `POST /operations/provider-job-import`
 - `POST /operations/job-list-discover`
@@ -1124,6 +1125,12 @@ Enqueue endpoints:
 - `POST /operations/bulk-resume-job-match`
 
 Clients may send `Idempotency-Key`. The server stores only its SHA-256 digest and returns the existing owner-scoped operation for duplicate keys.
+
+### `POST /operations/ask-scout`
+
+Creates passive workflow guidance for a signed-in user. The request accepts a 3-1,000 character `question`, an optional validated local `current_path`, and an optional allowlisted `page_context` containing positive `application_id`, `job_id`, `interview_id`, or `resume_profile_id` values.
+
+The completed operation result contains `status`, `answer`, a server-validated `primary_action`, up to two validated `alternative_actions`, and `limitations`. Actions contain only server-owned action IDs and local DaliJob links. Ask Scout cannot execute workflows, fetch a supplied URL, submit forms, or return arbitrary model-generated routes. Job, list, keyword, and location values may be safely prefilled for user review without automatically running the destination workflow.
 
 ### `GET /operations`
 

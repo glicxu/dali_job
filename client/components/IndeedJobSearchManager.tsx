@@ -12,6 +12,8 @@ import {
   searchIndeedJobs,
 } from "../lib/api";
 
+const RESULTS_PER_PAGE = 2;
+
 function resultKey(result: IndeedJobSearchResult): string {
   return result.source_url || result.external_id || `${result.title}|${result.company}|${result.location}`;
 }
@@ -35,6 +37,7 @@ function AuthenticatedIndeedJobSearchManager() {
   const [keyword, setKeyword] = useState("");
   const [location, setLocation] = useState("");
   const [result, setResult] = useState<IndeedJobSearchResponse | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [activeResult, setActiveResult] = useState<IndeedJobSearchResult | null>(null);
   const [resumeProfiles, setResumeProfiles] = useState<ResumeProfile[]>([]);
@@ -47,6 +50,9 @@ function AuthenticatedIndeedJobSearchManager() {
   const [isImporting, setIsImporting] = useState(false);
 
   const results = result?.results ?? [];
+  const totalPages = Math.max(1, Math.ceil(results.length / RESULTS_PER_PAGE));
+  const pageStartIndex = (currentPage - 1) * RESULTS_PER_PAGE;
+  const visibleResults = results.slice(pageStartIndex, pageStartIndex + RESULTS_PER_PAGE);
   const selectedResults = results.filter((item) => selectedKeys.has(resultKey(item)));
   const canImport = selectedResults.length > 0 && (!runMatching || Boolean(resumeProfileId));
 
@@ -74,6 +80,7 @@ function AuthenticatedIndeedJobSearchManager() {
     setStatus(null);
     setImportResult(null);
     setActiveResult(null);
+    setCurrentPage(1);
     setSelectedKeys(new Set());
     setIsSearching(true);
     try {
@@ -103,6 +110,11 @@ function AuthenticatedIndeedJobSearchManager() {
 
   function setAllResults(nextResults: IndeedJobSearchResult[]) {
     setSelectedKeys(new Set(nextResults.map((item) => resultKey(item))));
+  }
+
+  function openResultsPage(page: number) {
+    setCurrentPage(page);
+    setActiveResult(null);
   }
 
   async function importSelected() {
@@ -199,7 +211,7 @@ function AuthenticatedIndeedJobSearchManager() {
                 <span>Status</span>
                 <span>Actions</span>
               </div>
-              {results.map((item) => {
+              {visibleResults.map((item) => {
                 const key = resultKey(item);
                 const isActive = activeResult ? resultKey(activeResult) === key : false;
                 return (
@@ -228,6 +240,28 @@ function AuthenticatedIndeedJobSearchManager() {
                 );
               })}
             </div>
+
+            {results.length ? (
+              <nav className="job-search-pagination" aria-label="Search result pages">
+                <p className="metadata">
+                  Showing {pageStartIndex + 1}-{Math.min(pageStartIndex + RESULTS_PER_PAGE, results.length)} of {results.length}
+                </p>
+                <div className="job-search-page-list">
+                  {Array.from({ length: totalPages }, (_, index) => index + 1).map((pageNumber) => (
+                    <button
+                      type="button"
+                      className={pageNumber === currentPage ? "job-search-page-button active" : "job-search-page-button"}
+                      aria-current={pageNumber === currentPage ? "page" : undefined}
+                      aria-label={`Show search results page ${pageNumber}`}
+                      onClick={() => openResultsPage(pageNumber)}
+                      key={pageNumber}
+                    >
+                      {pageNumber}
+                    </button>
+                  ))}
+                </div>
+              </nav>
+            ) : null}
 
             <div className="bulk-import-options">
               <label className="checkbox-row">

@@ -93,22 +93,19 @@ export function DashboardHome() {
       </div>
 
       <section className="dashboard-next-step">
-        <div>
-          <p className="eyebrow">Recommended Next Step</p>
+        <div className="dashboard-next-step-copy">
+          <p className="dashboard-next-step-label">Recommended Next Step</p>
           <h2>{dashboard.recommended_next_step.label}</h2>
           <p className="summary">{dashboard.recommended_next_step.reason}</p>
         </div>
-        <a className="button-link" href={dashboard.recommended_next_step.href}>
-          Open
+        <a className="button-link dashboard-next-step-action" href={dashboard.recommended_next_step.href}>
+          Open next step
         </a>
       </section>
 
       <section className={`profile-card dashboard-setup-section${dashboard.setup_alerts.length ? " has-alerts" : ""}`}>
         <div className="dashboard-setup-heading">
-          <div>
-            <p className="eyebrow">Account Setup</p>
-            <h2>Setup Alerts</h2>
-          </div>
+          <h2>Setup Alerts</h2>
           {dashboard.setup_alerts.length ? (
             <span className="dashboard-alert-count" aria-label={`${dashboard.setup_alerts.length} setup tasks remaining`}>
               {dashboard.setup_alerts.length}
@@ -119,11 +116,8 @@ export function DashboardHome() {
           <div className="dashboard-alert-list">
             {dashboard.setup_alerts.map((alert) => (
               <a className="dashboard-alert" href={alert.href} key={alert.kind}>
-                <span className="dashboard-alert-icon" aria-hidden="true">!</span>
-                <span className="dashboard-alert-content">
-                  <strong>Action required</strong>
-                  <span>{alert.message}</span>
-                </span>
+                <span className="dashboard-alert-icon" aria-hidden="true" />
+                <span className="dashboard-alert-content">{alert.message}</span>
                 <span className="dashboard-alert-action">Resolve</span>
               </a>
             ))}

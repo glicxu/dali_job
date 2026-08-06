@@ -100,7 +100,7 @@ def test_import_job_description_from_url_saves_raw_text_and_json(monkeypatch) ->
     client = create_test_client()
     monkeypatch.setattr(
         jobs_router,
-        "fetch_job_page_text_from_url",
+        "fetch_job_description_from_url",
         lambda _url: "Build APIs using Python and PostgreSQL for customer workflows.",
     )
 
@@ -141,7 +141,7 @@ def test_draft_job_description_does_not_save_until_user_creates_job(monkeypatch)
     client = create_test_client()
     monkeypatch.setattr(
         jobs_router,
-        "fetch_job_page_text_from_url",
+        "fetch_job_description_from_url",
         lambda _url: "Build APIs using Python and PostgreSQL for customer workflows.",
     )
 
@@ -335,7 +335,7 @@ def test_updating_saved_job_does_not_mutate_cached_url_job(monkeypatch) -> None:
     client = create_test_client()
     monkeypatch.setattr(
         jobs_router,
-        "fetch_job_page_text_from_url",
+        "fetch_job_description_from_url",
         lambda _url: "Build APIs using Python and PostgreSQL for customer workflows.",
     )
     create_response = client.post(
@@ -669,7 +669,7 @@ def test_bulk_job_list_import_saves_selected_jobs(monkeypatch) -> None:
     client.app.dependency_overrides[get_job_description_parser] = lambda: FailingJobDescriptionParser()
     monkeypatch.setattr(
         jobs_router,
-        "fetch_job_page_text_from_url",
+        "fetch_job_description_from_url",
         lambda _url: "Build APIs using Python and PostgreSQL for customer workflows.",
     )
 
@@ -701,7 +701,7 @@ def test_analyze_saved_job_generates_missing_job_data(monkeypatch) -> None:
     client.app.dependency_overrides[get_job_description_parser] = lambda: FailingJobDescriptionParser()
     monkeypatch.setattr(
         jobs_router,
-        "fetch_job_page_text_from_url",
+        "fetch_job_description_from_url",
         lambda _url: "Build APIs using Python and PostgreSQL for customer workflows.",
     )
 
@@ -731,7 +731,7 @@ def test_bulk_job_list_import_matching_uses_selected_resume_profile(monkeypatch)
     client.app.dependency_overrides[jobs_router.get_resume_job_matcher] = lambda: FakeBulkImportMatcher()
     monkeypatch.setattr(
         jobs_router,
-        "fetch_job_page_text_from_url",
+        "fetch_job_description_from_url",
         lambda _url: "Build APIs using Python and PostgreSQL for customer workflows.",
     )
     profile_response = client.post(

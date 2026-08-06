@@ -15,7 +15,6 @@ from app.modules.jobs.schemas import JobDescriptionData
 from app.modules.jobs.service import JobDescriptionParser, OpenAIJobDescriptionParser
 from app.modules.profiles import repository as profile_repository
 from app.modules.resume_job_match.job_url_import import fetch_job_description_from_url
-from app.modules.resume_job_match.job_url_import import fetch_job_page_text_from_url
 from app.modules.resume_job_match.schemas import (
     BulkSavedJobMatchRequest,
     BulkSavedJobMatchResponse,
@@ -139,11 +138,11 @@ def import_job_for_match(
                 identity,
                 provider="web_extraction",
                 feature="job_url_extract",
-                operation=lambda: fetch_job_page_text_from_url(source_url),
+                operation=lambda: fetch_job_description_from_url(source_url),
                 usage_units=lambda text: len(text),
             )
             if request is not None
-            else fetch_job_page_text_from_url(source_url)
+            else fetch_job_description_from_url(source_url)
         )
     else:
         source_url = None

@@ -28,7 +28,7 @@ from app.modules.jobs.schemas import (
 )
 from app.modules.jobs.service import JobDescriptionParser, OpenAIJobDescriptionParser
 from app.modules.profiles import repository as profile_repository
-from app.modules.resume_job_match.job_url_import import discover_job_list_from_url, fetch_job_page_text_from_url
+from app.modules.resume_job_match.job_url_import import discover_job_list_from_url, fetch_job_description_from_url
 from app.modules.resume_job_match.schemas import ResumeJobMatchRequest, ResumeJobMatchResponse
 from app.modules.resume_job_match.service import OpenAIResumeJobMatcher, ResumeJobMatcher
 
@@ -73,7 +73,7 @@ def get_resume_job_matcher(
 
 def resolve_raw_job_text(payload: JobImportRequest) -> str:
     if payload.job_url:
-        return fetch_job_page_text_from_url(str(payload.job_url))
+        return fetch_job_description_from_url(str(payload.job_url))
     return (payload.job_description_text or "").strip()
 
 
@@ -190,7 +190,7 @@ def draft_job_description(
             identity,
             provider="web_extraction",
             feature="job_url_extract",
-            operation=lambda: fetch_job_page_text_from_url(str(payload.job_url)),
+            operation=lambda: fetch_job_description_from_url(str(payload.job_url)),
             usage_units=lambda text: len(text),
         )
     return build_job_draft(payload, parser, db, raw_text_override=raw_text)
@@ -221,7 +221,7 @@ def import_job_description(
             identity,
             provider="web_extraction",
             feature="job_url_extract",
-            operation=lambda: fetch_job_page_text_from_url(str(payload.job_url)),
+            operation=lambda: fetch_job_description_from_url(str(payload.job_url)),
             usage_units=lambda text: len(text),
         )
         if payload.job_url
@@ -304,7 +304,7 @@ def import_job_list(
                     identity,
                     provider="web_extraction",
                     feature="job_url_extract",
-                    operation=lambda: fetch_job_page_text_from_url(source_url),
+                    operation=lambda: fetch_job_description_from_url(source_url),
                     usage_units=lambda text: len(text),
                 )
             saved_job = repository.create_job_from_source(

@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+import json
+import logging
+import time
+from pathlib import Path
+
+import pytest
+from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -12,14 +19,19 @@ from app.modules.documents.models import Document, DocumentVersion
 from app.modules.jobs.schemas import JobDescriptionData
 from app.modules.resume_job_match import job_url_import
 from app.modules.resume_job_match import router as match_router
+from app.modules.resume_job_match.adapters import REGISTERED_ADAPTERS, AdapterExtraction
+from app.modules.resume_job_match.adapters.registry import extract_from_adapters
+from app.modules.resume_job_match.extraction_quality import measure_extraction_quality
 from app.modules.resume_job_match.job_url_import import (
     RenderableFetchError,
     extract_job_description_from_html,
+    extract_job_result_from_html,
     extract_job_page_text_from_html,
     extract_job_links_from_html,
     extract_next_page_url_from_html,
     fetch_job_description_from_url,
     fetch_job_page_text_from_url,
+    normalize_job_sections,
     validate_public_job_url,
 )
 from app.modules.resume_job_match.router import get_match_job_description_parser, get_resume_job_matcher
@@ -29,6 +41,9 @@ from app.modules.resume_job_match.schemas import (
     SupportedRequirement,
     UnsupportedRequirement,
 )
+
+
+JOB_PAGE_FIXTURES = Path(__file__).parent / "fixtures" / "job_pages"
 
 
 class FakeMatcher:
@@ -408,7 +423,7 @@ def test_resume_job_match_uses_document_and_job_url(monkeypatch) -> None:
     client, document_id = create_document_test_client()
     monkeypatch.setattr(
         match_router,
-        "fetch_job_page_text_from_url",
+        "fetch_job_description_from_url",
         lambda _url: "Build APIs using PostgreSQL and Kubernetes.",
     )
 
@@ -481,7 +496,7 @@ def test_resume_job_match_reuses_cached_job_url(monkeypatch) -> None:
     client = create_test_client()
     monkeypatch.setattr(
         match_router,
-        "fetch_job_page_text_from_url",
+        "fetch_job_description_from_url",
         lambda _url: "Build APIs using PostgreSQL and Kubernetes.",
     )
 
@@ -497,7 +512,7 @@ def test_resume_job_match_reuses_cached_job_url(monkeypatch) -> None:
     client.app.dependency_overrides[get_match_job_description_parser] = lambda: FailingJobDescriptionParser()
     monkeypatch.setattr(
         match_router,
-        "fetch_job_page_text_from_url",
+        "fetch_job_description_from_url",
         lambda _url: (_ for _ in ()).throw(AssertionError("cached job URL should not be fetched again")),
     )
 
@@ -789,7 +804,7 @@ def test_extract_job_description_prefers_job_detail_body_over_navigation() -> No
     text = extract_job_description_from_html(html)
 
     assert "Lead a software engineering team" in text
-    assert "Basic Qualifications" in text
+    assert "Required Qualifications" in text
     assert "Preferred Qualifications" in text
     assert "Job categories" not in text
     assert "Home" not in text
@@ -815,9 +830,590 @@ def test_extract_job_description_trims_legal_footer_sections() -> None:
     text = extract_job_description_from_html(html)
 
     assert "Build backend services" in text
-    assert "Basic Qualifications" in text
+    assert "Required Qualifications" in text
     assert "Our inclusive culture empowers" not in text
     assert "benefits" not in text
+
+
+def test_job_extraction_regression_fixtures_preserve_required_sections() -> None:
+    amazon = extract_job_result_from_html(
+        (JOB_PAGE_FIXTURES / "amazon_job.html").read_text(encoding="utf-8"),
+        source_url="https://jobs.example.test/en/jobs/1001/software-development-engineer",
+    )
+    usajobs = extract_job_result_from_html(
+        (JOB_PAGE_FIXTURES / "usajobs_job.html").read_text(encoding="utf-8"),
+        source_url="https://www.usajobs.gov/job/1001",
+    )
+
+    assert amazon.title == "Software Development Engineer"
+    assert "Required Qualifications" in amazon.focused_text
+    assert "Job categories" not in amazon.focused_text
+    assert usajobs.extraction_method == "json_ld"
+    assert "Education" in usajobs.focused_text
+    assert "equivalent qualifying experience" in usajobs.focused_text
+    assert "Application deadline: 2026-09-03" in usajobs.focused_text
+
+
+@pytest.mark.parametrize(
+    ("adapter_name", "fixture_name", "source_url", "expected_title", "expected_text"),
+    [
+        (
+            "greenhouse",
+            "greenhouse_job.html",
+            "https://job-boards.greenhouse.io/northstar/jobs/1001",
+            "Platform Engineer",
+            "Kubernetes",
+        ),
+        (
+            "lever",
+            "lever_job.html",
+            "https://jobs.lever.co/beacon/lever-1001",
+            "Backend Software Engineer",
+            "API design",
+        ),
+        (
+            "workday",
+            "workday_job.html",
+            "https://meridian.wd5.myworkdayjobs.com/jobs/job/security-engineer",
+            "Security Automation Engineer",
+            "incident response",
+        ),
+        (
+            "smartrecruiters",
+            "smartrecruiters_job.html",
+            "https://jobs.smartrecruiters.com/AtlasAnalytics/1001-data-pipeline-engineer",
+            "Data Pipeline Engineer",
+            "cloud data platforms",
+        ),
+        (
+            "ashby",
+            "ashby_job.html",
+            "https://jobs.ashbyhq.com/harbor/ashby-1001",
+            "Product Software Engineer",
+            "TypeScript",
+        ),
+        (
+            "icims",
+            "icims_job.html",
+            "https://careers-summit.icims.com/jobs/1001/cloud-infrastructure-engineer/job",
+            "Cloud Infrastructure Engineer",
+            "infrastructure as code",
+        ),
+    ],
+)
+def test_ats_adapters_return_shared_candidate_contract(
+    adapter_name: str,
+    fixture_name: str,
+    source_url: str,
+    expected_title: str,
+    expected_text: str,
+) -> None:
+    html = (JOB_PAGE_FIXTURES / fixture_name).read_text(encoding="utf-8")
+
+    extractions = extract_from_adapters(url=source_url, html=html)
+    result = extract_job_result_from_html(html, source_url=source_url)
+
+    assert len(extractions) == 1
+    assert isinstance(extractions[0], AdapterExtraction)
+    assert extractions[0].adapter_name == adapter_name
+    assert result.extraction_method == f"ats_{adapter_name}"
+    assert result.title == expected_title
+    assert expected_text in result.focused_text
+    assert f"source_adapter:{adapter_name}" in result.warnings
+
+
+def test_ats_adapter_registry_has_unique_names_and_matches_protocol() -> None:
+    names = [adapter.name for adapter in REGISTERED_ADAPTERS]
+
+    assert names == ["greenhouse", "lever", "workday", "smartrecruiters", "ashby", "icims"]
+    assert len(names) == len(set(names))
+
+
+def test_failed_ats_adapter_does_not_block_generic_extraction() -> None:
+    class FailingAdapter:
+        name = "failing"
+
+        def matches(self, url: str, html: str | None) -> bool:
+            return True
+
+        def extract(self, *, url: str, html: str, network=None) -> AdapterExtraction | None:
+            raise RuntimeError("adapter failed")
+
+    html = (JOB_PAGE_FIXTURES / "usajobs_job.html").read_text(encoding="utf-8")
+
+    assert extract_from_adapters(
+        url="https://example.com/jobs/1001",
+        html=html,
+        adapters=(FailingAdapter(),),
+    ) == []
+    result = extract_job_result_from_html(html, source_url="https://example.com/jobs/1001")
+    assert result.extraction_method == "json_ld"
+
+
+@pytest.mark.parametrize(
+    ("source_name", "fixture_name", "source_url", "required_terms", "excluded_terms", "expected_sections"),
+    [
+        (
+            "amazon_style",
+            "amazon_job.html",
+            "https://jobs.example.test/en/jobs/1001/software-development-engineer",
+            ("distributed systems", "cloud services"),
+            ("Job categories", "View all jobs"),
+            ("required_qualifications", "preferred_qualifications"),
+        ),
+        (
+            "usajobs_style",
+            "usajobs_job.html",
+            "https://www.usajobs.gov/job/1001",
+            ("data integrations", "equivalent qualifying experience"),
+            ("Saved searches",),
+            ("responsibilities", "required_qualifications", "education", "application_details"),
+        ),
+        (
+            "greenhouse",
+            "greenhouse_job.html",
+            "https://job-boards.greenhouse.io/northstar/jobs/1001",
+            ("observability", "Kubernetes"),
+            ("candidate login",),
+            (),
+        ),
+        (
+            "lever",
+            "lever_job.html",
+            "https://jobs.lever.co/beacon/lever-1001",
+            ("operate production services", "API design"),
+            ("related jobs",),
+            (),
+        ),
+        (
+            "workday",
+            "workday_job.html",
+            "https://meridian.wd5.myworkdayjobs.com/jobs/job/security-engineer",
+            ("security tools", "incident response"),
+            ("sign in",),
+            (),
+        ),
+        (
+            "smartrecruiters",
+            "smartrecruiters_job.html",
+            "https://jobs.smartrecruiters.com/AtlasAnalytics/1001-data-pipeline-engineer",
+            ("streaming pipelines", "cloud data platforms"),
+            ("all company jobs",),
+            (),
+        ),
+        (
+            "ashby",
+            "ashby_job.html",
+            "https://jobs.ashbyhq.com/harbor/ashby-1001",
+            ("accessible interfaces", "TypeScript"),
+            ("open roles",),
+            (),
+        ),
+        (
+            "icims",
+            "icims_job.html",
+            "https://careers-summit.icims.com/jobs/1001/cloud-infrastructure-engineer/job",
+            ("observability", "infrastructure as code"),
+            ("join talent community",),
+            (),
+        ),
+    ],
+)
+def test_fixture_extraction_quality_metrics(
+    source_name: str,
+    fixture_name: str,
+    source_url: str,
+    required_terms: tuple[str, ...],
+    excluded_terms: tuple[str, ...],
+    expected_sections: tuple[str, ...],
+) -> None:
+    result = extract_job_result_from_html(
+        (JOB_PAGE_FIXTURES / fixture_name).read_text(encoding="utf-8"),
+        source_url=source_url,
+    )
+
+    metrics = measure_extraction_quality(
+        result,
+        source_name=source_name,
+        required_terms=required_terms,
+        excluded_terms=excluded_terms,
+        expected_sections=expected_sections,
+    )
+
+    assert metrics.passed
+    assert metrics.confidence >= job_url_import.MIN_ACCEPTABLE_EXTRACTION_CONFIDENCE
+
+
+def test_job_extraction_logs_safe_versioned_success_diagnostics(monkeypatch, caplog) -> None:
+    html = (JOB_PAGE_FIXTURES / "usajobs_job.html").read_text(encoding="utf-8")
+    monkeypatch.setattr(job_url_import, "_fetch_url_text", lambda _url: ("text/html", html))
+    caplog.set_level(logging.INFO, logger="dalijob.job_extraction")
+
+    result = job_url_import.fetch_job_result_from_url(
+        "https://www.usajobs.gov/job/1001?token=do-not-log-this"
+    )
+
+    assert result.extractor_version == job_url_import.JOB_EXTRACTOR_VERSION
+    assert "extractor_version=2" in caplog.text
+    assert "host=www.usajobs.gov" in caplog.text
+    assert "outcome=succeeded" in caplog.text
+    assert "method=json_ld" in caplog.text
+    assert "confidence_band=high" in caplog.text
+    assert "path=static" in caplog.text
+    assert "failure_category=none" in caplog.text
+    assert "do-not-log-this" not in caplog.text
+    assert "equivalent qualifying experience" not in caplog.text
+
+
+def test_job_extraction_logs_normalized_failure_without_error_detail(monkeypatch, caplog) -> None:
+    def blocked_fetch(_url: str) -> tuple[str, str]:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="The page returned a sign-in verification screen containing secret-detail.",
+        )
+
+    monkeypatch.setattr(job_url_import, "_fetch_url_text", blocked_fetch)
+    caplog.set_level(logging.WARNING, logger="dalijob.job_extraction")
+
+    with pytest.raises(HTTPException):
+        job_url_import.fetch_job_result_from_url("https://example.com/jobs/blocked?secret=query-value")
+
+    assert "outcome=failed" in caplog.text
+    assert "failure_category=access_gate" in caplog.text
+    assert "secret-detail" not in caplog.text
+    assert "query-value" not in caplog.text
+
+
+def test_job_extraction_diagnostics_do_not_mask_invalid_url_failure(monkeypatch, caplog) -> None:
+    def rejected_fetch(_url: str) -> tuple[str, str]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Job URL host is not allowed.",
+        )
+
+    monkeypatch.setattr(job_url_import, "_fetch_url_text", rejected_fetch)
+    caplog.set_level(logging.WARNING, logger="dalijob.job_extraction")
+
+    with pytest.raises(HTTPException) as exc_info:
+        job_url_import.fetch_job_result_from_url("https://[invalid-host")
+
+    assert exc_info.value.status_code == 400
+    assert "host=invalid" in caplog.text
+    assert "failure_category=invalid_url_or_network_policy" in caplog.text
+
+
+def test_job_extraction_separates_focused_text_from_broad_visible_text() -> None:
+    html = """
+    <html><head><meta property="og:title" content="Platform Engineer"></head><body>
+      <nav>Home Teams Locations Candidate login Search all jobs</nav>
+      <div id="job-detail-body">
+        <h2>Description</h2>
+        <p>Build reliable platform services for engineering teams and production workloads.</p>
+        <h2>Requirements</h2>
+        <p>Experience with Python, Kubernetes, observability, testing, and incident response.</p>
+        <h2>Preferred Qualifications</h2>
+        <p>Experience designing internal developer platforms and cloud infrastructure.</p>
+      </div>
+    </body></html>
+    """
+
+    result = extract_job_result_from_html(html, source_url="https://example.com/jobs/platform-engineer")
+
+    assert "Candidate login" in (result.raw_visible_text or "")
+    assert "Candidate login" not in result.focused_text
+    assert "Platform Engineer" in result.focused_text
+    assert result.confidence >= job_url_import.MIN_ACCEPTABLE_EXTRACTION_CONFIDENCE
+
+
+def test_fetch_job_description_renders_low_confidence_success_page(monkeypatch) -> None:
+    static_html = """
+    <html><body><main>
+      <h1>Careers</h1>
+      <p>Explore teams, offices, employee stories, events, and opportunities across our organization.</p>
+      <p>Use search and filters to find openings that fit your interests and preferred location.</p>
+      <p>Join our talent community to receive general company news and career updates.</p>
+    </main></body></html>
+    """
+    rendered_html = """
+    <html><body><div id="job-detail-body">
+      <h1>Backend Engineer</h1>
+      <h2>Description</h2>
+      <p>Build secure Python APIs and PostgreSQL services for customer workflows.</p>
+      <h2>Responsibilities</h2>
+      <p>Design, test, deploy, monitor, and maintain reliable distributed systems.</p>
+      <h2>Required Qualifications</h2>
+      <p>Professional backend engineering experience with cloud infrastructure.</p>
+    </div></body></html>
+    """
+    rendered_calls: list[str] = []
+    monkeypatch.setattr(job_url_import, "_fetch_url_text", lambda _url: ("text/html", static_html))
+    monkeypatch.setattr(
+        job_url_import,
+        "_fetch_rendered_html",
+        lambda url: rendered_calls.append(url) or rendered_html,
+    )
+
+    text = fetch_job_description_from_url("https://example.com/jobs/backend-engineer")
+
+    assert rendered_calls == ["https://example.com/jobs/backend-engineer"]
+    assert "PostgreSQL" in text
+    assert "talent community" not in text
+
+
+def test_fetch_job_description_skips_render_for_high_confidence_static_page(monkeypatch) -> None:
+    static_html = (JOB_PAGE_FIXTURES / "usajobs_job.html").read_text(encoding="utf-8")
+    monkeypatch.setattr(job_url_import, "_fetch_url_text", lambda _url: ("text/html", static_html))
+
+    def unexpected_render(_url: str) -> str:
+        raise AssertionError("high-confidence structured data should not invoke Playwright")
+
+    monkeypatch.setattr(job_url_import, "_fetch_rendered_html", unexpected_render)
+
+    text = fetch_job_description_from_url("https://www.usajobs.gov/job/1001")
+
+    assert "Data Solutions Developer" in text
+    assert "Education" in text
+
+
+def test_extract_job_from_microdata() -> None:
+    html = """
+    <html><body>
+      <article itemscope itemtype="https://schema.org/JobPosting">
+        <h1 itemprop="title">Security Engineer</h1>
+        <span itemprop="hiringOrganization">Example Security</span>
+        <span itemprop="jobLocation">Baltimore, Maryland</span>
+        <div itemprop="description">
+          <p>Protect production services and improve security engineering practices.</p>
+        </div>
+        <div itemprop="responsibilities">Build detection, response, and vulnerability-management automation.</div>
+        <div itemprop="qualifications">Experience with cloud security, Python, and incident response.</div>
+      </article>
+    </body></html>
+    """
+
+    result = extract_job_result_from_html(html, source_url="https://example.com/jobs/security-engineer")
+
+    assert result.extraction_method == "microdata"
+    assert result.title == "Security Engineer"
+    assert result.company == "Example Security"
+    assert "vulnerability-management" in result.focused_text
+
+
+def test_extract_job_from_nested_embedded_application_state() -> None:
+    html = """
+    <html><head>
+      <script id="__NEXT_DATA__" type="application/json">
+      {
+        "props": {
+          "pageProps": {
+            "job": {
+              "jobId": "ABC-123",
+              "jobTitle": "Machine Learning Engineer",
+              "companyName": "Example AI",
+              "formattedLocation": "Remote, US",
+              "jobDescription": "Build and operate production machine-learning services for customer-facing products.",
+              "responsibilities": ["Develop model-serving APIs.", "Monitor model and service quality."],
+              "requiredQualifications": ["Python experience", "Production ML experience"]
+            }
+          }
+        }
+      }
+      </script>
+    </head><body><div id="application-shell">Loading job details.</div></body></html>
+    """
+
+    result = extract_job_result_from_html(html, source_url="https://example.com/jobs/ABC-123")
+
+    assert result.extraction_method == "embedded_json"
+    assert result.title == "Machine Learning Engineer"
+    assert result.company == "Example AI"
+    assert "Production ML experience" in result.focused_text
+
+
+def test_section_aliases_normalize_unconventional_job_headings() -> None:
+    sections = normalize_job_sections(
+        """
+        The Opportunity
+        Build software used by customer support teams.
+        Your Impact
+        Own APIs, testing, deployment, and operational quality.
+        What You Bring
+        Experience with Python, SQL, and distributed systems.
+        Nice to Have
+        Experience with Kubernetes and event-driven systems.
+        """
+    )
+
+    assert sections["summary"] == ["Build software used by customer support teams."]
+    assert sections["responsibilities"] == ["Own APIs, testing, deployment, and operational quality."]
+    assert "Python" in sections["required_qualifications"][0]
+    assert "Kubernetes" in sections["preferred_qualifications"][0]
+
+
+def test_section_aware_shortening_preserves_late_education_section() -> None:
+    oversized_summary = " ".join(["Build reliable software systems for customer workflows."] * 1_200)
+    html = f"""
+    <html><head><script type="application/ld+json">
+    {{
+      "@type": "JobPosting",
+      "title": "Senior Software Engineer",
+      "hiringOrganization": {{"name": "Example Systems"}},
+      "description": {json.dumps(oversized_summary)},
+      "responsibilities": "Design, test, deploy, and operate distributed services.",
+      "qualifications": "Seven years of professional software engineering experience.",
+      "educationRequirements": "Bachelor's degree in computer science or equivalent experience."
+    }}
+    </script></head><body></body></html>
+    """
+
+    result = extract_job_result_from_html(html, source_url="https://example.com/jobs/senior-engineer")
+
+    assert len(result.focused_text) <= job_url_import.MAX_JOB_TEXT_CHARS
+    assert "Education" in result.focused_text
+    assert "Bachelor's degree" in result.focused_text
+    assert "content_shortened" in result.warnings
+
+
+def test_malformed_embedded_json_does_not_block_dom_extraction() -> None:
+    html = """
+    <html><head><script type="application/json">{"broken":</script></head><body>
+      <div id="job-detail-body">
+        <h2>Description</h2>
+        <p>Build backend services and maintain production systems for customer workflows.</p>
+        <h2>Responsibilities</h2>
+        <p>Design APIs, review code, write tests, and improve operational reliability.</p>
+        <h2>Requirements</h2>
+        <p>Experience with Python, SQL, cloud infrastructure, and distributed systems.</p>
+      </div>
+    </body></html>
+    """
+
+    result = extract_job_result_from_html(html, source_url="https://example.com/jobs/backend")
+
+    assert result.extraction_method == "dom_candidate"
+    assert "operational reliability" in result.focused_text
+
+
+def test_dom_scoring_prefers_job_content_over_link_heavy_generic_container() -> None:
+    navigation_links = "".join(
+        f'<a href="/jobs/{index}">Requirements and qualifications for related role {index}</a>'
+        for index in range(40)
+    )
+    html = f"""
+    <html><body>
+      <div class="content search-results">{navigation_links}</div>
+      <section class="role-copy">
+        <h2>Description</h2>
+        <p>Build secure application services for high-volume customer workflows.</p>
+        <h2>Responsibilities</h2>
+        <p>Design APIs, write tests, deploy changes, and operate production systems.</p>
+        <h2>Required Qualifications</h2>
+        <p>Experience with Python, PostgreSQL, cloud infrastructure, and distributed systems.</p>
+      </section>
+    </body></html>
+    """
+
+    result = extract_job_result_from_html(html, source_url="https://example.com/jobs/application-engineer")
+
+    assert "high-volume customer workflows" in result.focused_text
+    assert "related role 39" not in result.focused_text
+
+
+def test_dom_parser_recovers_malformed_job_html() -> None:
+    html = """
+    <html><body><main><section class="job-description">
+      <h2>Description<p>Build data APIs and reliable ingestion services.
+      <h2>Responsibilities<ul><li>Design pipelines<li>Monitor production data quality
+      <h2>Requirements<p>Experience with Python, SQL, testing, and cloud services.
+    """
+
+    result = extract_job_result_from_html(html, source_url="https://example.com/jobs/data-engineer")
+
+    assert result.extraction_method == "dom_candidate"
+    assert "Build data APIs" in result.focused_text
+    assert "Monitor production data quality" in result.focused_text
+
+
+def test_oversized_job_html_is_rejected_before_dom_parsing() -> None:
+    html = f"<html><body>{'x' * job_url_import.MAX_RENDERED_HTML_BYTES}</body></html>"
+
+    with pytest.raises(Exception) as exc_info:
+        extract_job_result_from_html(html, source_url="https://example.com/jobs/oversized")
+
+    assert getattr(exc_info.value, "status_code", None) == 413
+
+
+def test_rendered_json_capture_normalizes_job_payload_for_extraction() -> None:
+    payload = {
+        "data": {
+            "job": {
+                "jobId": "captured-123",
+                "jobTitle": "Site Reliability Engineer",
+                "companyName": "Example Reliability",
+                "formattedLocation": "Remote, US",
+                "jobDescription": "Operate reliable production platforms and improve service availability for customer workloads.",
+                "responsibilities": ["Build observability automation", "Improve incident response"],
+                "requiredQualifications": ["Python", "Cloud infrastructure", "Distributed systems"],
+            }
+        }
+    }
+    response = job_url_import.NetworkResponse(
+        status_code=200,
+        reason="OK",
+        headers=(("Content-Type", "application/json; charset=utf-8"),),
+        body=json.dumps(payload).encode("utf-8"),
+    )
+    budget = job_url_import.RenderedFetchBudget(deadline=10_000)
+
+    job_url_import._capture_job_json_response(response, budget)
+    rendered_html = job_url_import._inject_captured_json(
+        "<html><body><main>Loading job information.</main></body></html>",
+        budget.captured_json_blocks,
+    )
+    result = extract_job_result_from_html(rendered_html, source_url="https://example.com/jobs/captured-123")
+
+    assert len(budget.captured_json_blocks) == 1
+    assert result.extraction_method == "embedded_json"
+    assert result.title == "Site Reliability Engineer"
+    assert "incident response" in result.focused_text
+
+
+def test_oversized_rendered_json_response_is_not_captured() -> None:
+    response = job_url_import.NetworkResponse(
+        status_code=200,
+        reason="OK",
+        headers=(("Content-Type", "application/json"),),
+        body=b'{"jobId":"large","jobDescription":"' + b"x" * job_url_import.MAX_STRUCTURED_JSON_BYTES + b'"}',
+    )
+    budget = job_url_import.RenderedFetchBudget(deadline=10_000)
+
+    job_url_import._capture_job_json_response(response, budget)
+
+    assert budget.captured_json_blocks == []
+    assert budget.captured_json_bytes == 0
+
+
+def test_rendered_wait_checks_semantic_content_and_dom_stability() -> None:
+    class FakePage:
+        def __init__(self) -> None:
+            self.function_calls: list[tuple[str, int, int]] = []
+            self.load_state_calls: list[tuple[str, int]] = []
+
+        def wait_for_function(self, script: str, *, polling: int, timeout: int) -> None:
+            self.function_calls.append((script, polling, timeout))
+
+        def wait_for_load_state(self, state: str, *, timeout: int) -> None:
+            self.load_state_calls.append((state, timeout))
+
+    class FakeTimeoutError(Exception):
+        pass
+
+    page = FakePage()
+    job_url_import._wait_for_rendered_job_content(page, FakeTimeoutError, time.monotonic() + 10)
+
+    assert page.function_calls[0][0] == job_url_import.RENDERED_SEMANTIC_READY_SCRIPT
+    assert page.function_calls[1][0] == job_url_import.RENDERED_DOM_STABLE_SCRIPT
+    assert page.load_state_calls[0][0] == "networkidle"
 
 
 def test_job_list_discovery_filters_usajobs_navigation_links() -> None:

@@ -258,6 +258,23 @@ Recommended initial adapters:
 
 Adapters should be prioritized from actual failed-import telemetry, not added only because a platform exists.
 
+### Implemented adapter ownership and limitations
+
+Phase 4 keeps ATS-specific behavior in `server/app/modules/resume_job_match/adapters/`. The registry owns source detection and failure isolation. Each adapter returns a normalized mapping that is converted into the shared `JobExtractionCandidate` by `job_url_import.py`; adapters do not choose final confidence, call OpenAI, persist jobs, or bypass URL validation. The generic pipeline remains responsible for static fetching, redirect and destination validation, rendered fallback, access-gate detection, candidate comparison, limits, and section-aware shortening.
+
+The initial adapters deliberately inspect only the bounded static or rendered HTML already obtained by the generic pipeline. The adapter protocol exposes a restricted `SafeJobNetworkClient` boundary for a future public ATS endpoint, but no adapter receives unrestricted HTTP access and no secondary provider request is currently required.
+
+| Adapter | Primary source-aware signals | Current limitations |
+| --- | --- | --- |
+| Greenhouse | Greenhouse board hosts, job-board fingerprints, `content`/`app_body` job containers | Custom employer-hosted Greenhouse themes may rely on the generic structured-data or DOM fallback. |
+| Lever | Lever posting hosts, posting headline, categories, and section wrappers | Heavily customized or embedded Lever pages may require rendered extraction. |
+| Workday | Workday hosts and stable `data-automation-id` job fields | Tenant shells and automation identifiers vary; captured rendered JSON and generic DOM extraction remain fallbacks. |
+| SmartRecruiters | SmartRecruiters hosts, schema attributes, and job sections | Locale-specific/custom templates may expose only JSON-LD, which the generic structured-data extractor handles. |
+| Ashby | Ashby hosts, test identifiers, description containers, and main job content | Ashby markup can be generated dynamically; this adapter is conservative and depends on rendered content when static HTML is only a shell. |
+| iCIMS | iCIMS hosts, iCIMS job classes, schema attributes, and job-description containers | Employer themes vary considerably; unsupported themes fall through to structured-data and DOM strategies. |
+
+Every adapter has a sanitized fixture contract test. A source adapter exception is intentionally swallowed by the registry so one provider-specific regression cannot prevent generic extraction.
+
 ## Browser Rendering Strategy
 
 Rendered extraction should remain bounded and secondary to static extraction.
@@ -379,50 +396,86 @@ Record structured operational metadata without storing job text in logs:
 
 Useful reliability metrics include success rate by hostname and method, rendered-fallback rate, low-confidence rate, access-gate rate, and regression rate after extractor-version changes.
 
+### Implemented reliability diagnostics
+
+Phase 5 records one `dalijob.job_extraction` event at the public job-fetch boundary. Successful events contain the extractor version, source hostname, extraction method, confidence band and numeric confidence, static/rendered path, duration, bounded visible-input and focused-output character counts, and warning categories. Failed events contain the same stable event shape with a normalized failure category such as `access_gate`, `expired_or_removed`, `resource_limit`, `invalid_url_or_network_policy`, `unextractable`, `timeout`, or `upstream_failure`.
+
+Diagnostics intentionally exclude the submitted URL path and query string, canonical URL, raw or focused job text, exception message, response body, headers, cookies, and credentials. The current generalized extractor version is `2` and is also attached to the internal `JobExtractionResult` metadata.
+
+Fixture quality is measured deterministically with:
+
+- Required-content recall: expected job terms present in focused text.
+- Noise-exclusion rate: known navigation or marketing terms absent from focused text.
+- Expected-section recall: fixture sections represented in the normalized section map.
+- Extraction method and confidence: recorded for regression comparison, without treating confidence alone as correctness.
+
+The 2026-08-05 baseline is:
+
+| Fixture source | Selected method | Confidence | Quality contract |
+| --- | --- | ---: | --- |
+| Amazon-style | `dom_candidate` | 0.99 | Pass |
+| USAJobs-style | `json_ld` | 0.99 | Pass |
+| Greenhouse | `ats_greenhouse` | 0.89 | Pass |
+| Lever | `ats_lever` | 0.85 | Pass |
+| Workday | `ats_workday` | 0.97 | Pass |
+| SmartRecruiters | `ats_smartrecruiters` | 0.93 | Pass |
+| Ashby | `ats_ashby` | 0.85 | Pass |
+| iCIMS | `ats_icims` | 0.89 | Pass |
+
+All eight fixtures have complete required-content recall, noise exclusion, and configured section recall. The existing `0.60` acceptance and `0.80` high-confidence/review thresholds remain unchanged. The fixture minimum confidence is 0.85, but the corpus is intentionally controlled and too small to justify raising thresholds; a future threshold change requires broader failed-import telemetry and additional adversarial fixtures.
+
 ## Implementation Phases
 
 ### Phase 1: Quality-aware generic pipeline
 
-- [ ] Add `JobExtractionCandidate` and `JobExtractionResult` internal models.
-- [ ] Add deterministic confidence scoring and warning categories.
-- [ ] Attempt rendered extraction after static extraction failure or low confidence.
-- [ ] Return and compare static and rendered candidates.
-- [ ] Separate focused job text from broad visible page text.
-- [ ] Add regression fixtures for existing Amazon and USAJobs behavior.
-- [ ] Preserve all existing network-safety tests.
+- [x] Add `JobExtractionCandidate` and `JobExtractionResult` internal models.
+- [x] Add deterministic confidence scoring and warning categories.
+- [x] Attempt rendered extraction after static extraction failure or low confidence.
+- [x] Return and compare static and rendered candidates.
+- [x] Separate focused job text from broad visible page text.
+- [x] Add regression fixtures for existing Amazon and USAJobs behavior.
+- [x] Preserve all existing network-safety tests.
 
 ### Phase 2: Structured data and normalization
 
-- [ ] Expand JSON-LD `JobPosting` field coverage.
-- [ ] Support nested JSON-LD graphs and arrays with bounded recursion.
-- [ ] Add microdata and metadata extraction.
-- [ ] Add bounded embedded application-state parsing.
-- [ ] Normalize headings and list content into stable sections.
-- [ ] Replace blind truncation with section-aware shortening.
+- [x] Expand JSON-LD `JobPosting` field coverage.
+- [x] Support nested JSON-LD graphs and arrays with bounded recursion.
+- [x] Add microdata and metadata extraction.
+- [x] Add bounded embedded application-state parsing.
+- [x] Normalize headings and list content into stable sections.
+- [x] Replace blind truncation with section-aware shortening.
+
+Implementation verification on 2026-08-05: the Phase 1 and Phase 2 implementation passed the full server suite, including scraper regression fixtures for Amazon-style and USAJobs-style pages.
 
 ### Phase 3: DOM and rendered-response improvements
 
-- [ ] Introduce a maintained DOM parser dependency.
-- [ ] Implement subtree scoring with text density and link-density signals.
-- [ ] Remove broad container keywords as standalone acceptance signals.
-- [ ] Add semantic wait and short DOM-stability behavior to Playwright.
-- [ ] Capture bounded job-shaped JSON responses during rendering.
-- [ ] Add malformed and oversized DOM/JSON tests.
+- [x] Introduce a maintained DOM parser dependency.
+- [x] Implement subtree scoring with text density and link-density signals.
+- [x] Remove broad container keywords as standalone acceptance signals.
+- [x] Add semantic wait and short DOM-stability behavior to Playwright.
+- [x] Capture bounded job-shaped JSON responses during rendering.
+- [x] Add malformed and oversized DOM/JSON tests.
+
+Phase 3 verification on 2026-08-05: `lxml` is an explicit runtime dependency, the full server suite passed with 203 tests, Ruff passed for the server application and tests, and `pip check` reported no broken requirements.
 
 ### Phase 4: ATS adapters
 
-- [ ] Add the adapter interface and registry.
-- [ ] Implement Greenhouse and Lever adapters first.
-- [ ] Add Workday and SmartRecruiters based on fixture coverage.
-- [ ] Add Ashby and iCIMS when supported by actual failure data.
-- [ ] Document adapter ownership and source-specific limitations.
+- [x] Add the adapter interface and registry.
+- [x] Implement Greenhouse and Lever adapters first.
+- [x] Add Workday and SmartRecruiters based on fixture coverage.
+- [x] Add conservative Ashby and iCIMS adapters with fixture-backed source patterns and generic fallback behavior.
+- [x] Document adapter ownership and source-specific limitations.
+
+Phase 4 verification on 2026-08-05: all six adapters pass sanitized fixture-based contract and regression tests, adapter names are unique in the registry, and a forced adapter exception falls through without blocking generic extraction. The full server suite passed with 211 tests, Ruff passed for the server application and tests, and `pip check` reported no broken requirements. The adapters make no unrestricted or additional provider network requests. Phase 5 remains deferred.
 
 ### Phase 5: Reliability measurement
 
-- [ ] Add extractor method, confidence band, timing, and failure-category logs.
-- [ ] Add an extractor version to diagnostic metadata.
-- [ ] Establish fixture-based extraction quality metrics.
-- [ ] Review source reliability before changing acceptance thresholds.
+- [x] Add extractor method, confidence band, timing, and failure-category logs.
+- [x] Add an extractor version to diagnostic metadata.
+- [x] Establish fixture-based extraction quality metrics.
+- [x] Review source reliability before changing acceptance thresholds.
+
+Phase 5 verification on 2026-08-05: the eight-source fixture baseline passes its required-content, noise-exclusion, and configured section-recall contracts. Safe-logging tests confirm URL query values, exception details, and job text are excluded. The full server suite passed with 222 tests, Ruff passed for the server application and tests, and `pip check` reported no broken requirements. The acceptance thresholds remain unchanged pending broader production telemetry.
 
 ## Acceptance Criteria
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { LogIn, LogOut, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import {
   clearAuthToken,
   CurrentUser,
@@ -14,6 +15,7 @@ import {
   resetPassword,
   verifyEmail,
 } from "../lib/api";
+import { AlertBanner, Badge, Button, SectionHeader, ToastRegion } from "./ui";
 
 type Mode = "login" | "register" | "forgot" | "reset";
 
@@ -121,25 +123,33 @@ export function AuthForm({ onAuthChange }: { onAuthChange?: (user: CurrentUser |
 
   return (
     <section className="auth-panel">
-      {error ? <div className="error-banner">{error}</div> : null}
-      {status ? <div className="status-banner">{status}</div> : null}
+      {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
+      <ToastRegion message={status} onDismiss={() => setStatus(null)} />
 
       {user ? (
         <div className="profile-card auth-account-card">
-          <div>
-            <h2>Signed in</h2>
-            <p className="metadata">{user.email}</p>
+          <div className="profile-card-header">
+            <div>
+              <p className="eyebrow">Active session</p>
+              <h2>{user.display_name}</h2>
+              <p className="metadata">{user.email}</p>
+            </div>
+            <div className="button-row">
+              <Badge tone={user.role === "admin" ? "warning" : "info"}>{user.role}</Badge>
+              <Button type="button" variant="secondary" size="compact" icon={LogOut} onClick={signOut}>Sign Out</Button>
+            </div>
           </div>
-          <button type="button" className="secondary-button" onClick={signOut}>Sign Out</button>
+          <section className="account-security-summary">
+            <ShieldCheck size={21} aria-hidden="true" />
+            <div><h3>Account security</h3><p className="metadata">Authentication uses secure server-managed session cookies. Password reset links are sent to your registered email.</p></div>
+          </section>
           <div className="account-danger-zone">
-            <h3>Delete account</h3>
-            <p className="metadata">This disables your account and ends all active sessions.</p>
+            <SectionHeader title="Delete account" description="This soft-deletes your account and ends all active sessions. This action is intentionally separated from normal account controls." />
             {!showDelete ? (
-              <button type="button" className="danger-button" onClick={() => setShowDelete(true)}>
-                Delete Account
-              </button>
+              <Button type="button" variant="danger" icon={Trash2} onClick={() => setShowDelete(true)}>Delete Account</Button>
             ) : (
               <div className="auth-delete-confirmation">
+                <AlertBanner tone="danger">Enter your current password to confirm account deletion.</AlertBanner>
                 <label>
                   Current Password
                   <input
@@ -150,10 +160,8 @@ export function AuthForm({ onAuthChange }: { onAuthChange?: (user: CurrentUser |
                   />
                 </label>
                 <div className="button-row">
-                  <button type="button" className="danger-button" disabled={!deletePassword || isSubmitting} onClick={removeAccount}>
-                    Confirm Delete
-                  </button>
-                  <button type="button" className="secondary-button" onClick={() => setShowDelete(false)}>Cancel</button>
+                  <Button type="button" variant="danger" icon={Trash2} loading={isSubmitting} disabled={!deletePassword} onClick={removeAccount}>Confirm Delete</Button>
+                  <Button type="button" variant="ghost" onClick={() => setShowDelete(false)}>Cancel</Button>
                 </div>
               </div>
             )}
@@ -161,12 +169,16 @@ export function AuthForm({ onAuthChange }: { onAuthChange?: (user: CurrentUser |
         </div>
       ) : (
         <form className="profile-card auth-form" onSubmit={submit}>
-          {mode !== "reset" ? (
-            <div className="segmented-control" role="tablist" aria-label="Authentication mode">
-              <button type="button" className={mode === "login" ? "active" : ""} onClick={() => setMode("login")}>Login</button>
-              <button type="button" className={mode === "register" ? "active" : ""} onClick={() => setMode("register")}>Register</button>
+          <SectionHeader
+            title={mode === "register" ? "Create your account" : mode === "forgot" ? "Reset your password" : mode === "reset" ? "Choose a new password" : "Sign in to DaliJob"}
+            description={mode === "register" ? "Register once, verify your email, and keep your career workspace private." : mode === "forgot" ? "We will send a reset link to the email registered to your account." : mode === "reset" ? "Use at least eight characters for your new password." : "Access your saved jobs, applications, documents, and AI workflows."}
+          />
+          {mode === "login" || mode === "register" ? (
+            <div className="segmented-control" role="group" aria-label="Authentication mode">
+              <button type="button" aria-pressed={mode === "login"} className={mode === "login" ? "active" : ""} onClick={() => setMode("login")}>Login</button>
+              <button type="button" aria-pressed={mode === "register"} className={mode === "register" ? "active" : ""} onClick={() => setMode("register")}>Register</button>
             </div>
-          ) : <h2>Reset Password</h2>}
+          ) : null}
 
           {mode !== "reset" ? (
             <label>
@@ -196,9 +208,9 @@ export function AuthForm({ onAuthChange }: { onAuthChange?: (user: CurrentUser |
             </label>
           ) : null}
 
-          <button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Working..." : mode === "register" ? "Create Account" : mode === "forgot" ? "Send Reset Link" : mode === "reset" ? "Reset Password" : "Login"}
-          </button>
+          <Button type="submit" icon={mode === "register" ? UserPlus : LogIn} loading={isSubmitting}>
+            {mode === "register" ? "Create Account" : mode === "forgot" ? "Send Reset Link" : mode === "reset" ? "Reset Password" : "Login"}
+          </Button>
 
           {mode === "login" ? <button type="button" className="text-button" onClick={() => setMode("forgot")}>Forgot password?</button> : null}
           {mode === "forgot" ? <button type="button" className="text-button" onClick={() => setMode("login")}>Back to login</button> : null}

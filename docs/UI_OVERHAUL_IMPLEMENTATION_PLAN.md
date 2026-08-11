@@ -1,6 +1,6 @@
 # DaliJob UI Overhaul Implementation Plan
 
-Status: proposed. This is a frontend redesign and does not require a database migration or intentional API behavior changes.
+Status: in progress. Phases 1-8 were implemented on 2026-08-06. Phase 9 implementation and automated hardening are complete, but full desktop/tablet/mobile screenshots and hands-on visual regression remain open because the development servers were intentionally not started. The Phase 0 inventory is complete with the same screenshot exception. This frontend redesign does not require a database migration or intentional API behavior changes.
 
 ## Purpose
 
@@ -266,7 +266,7 @@ Component rules:
 - Make the selected resume unmistakable through blue selection treatment.
 - Render the right side like a readable professional resume when not editing.
 - Separate view and edit modes so form fields do not dominate normal viewing.
-- Keep Import Master Resume as a separate, compact action section above the workspace.
+- Keep Import Resume as a separate, compact action section above the workspace.
 
 ### Saved Jobs
 
@@ -279,6 +279,7 @@ Component rules:
   - `8-10`: strong compatibility.
 - Highlight the selected job with a blue edge, background, and `aria-selected` state.
 - Keep Match as the primary row action; move less-used actions into a menu where practical.
+- Keep the stored source description viewable without requiring AI analysis; reserve Analyze for generating the structured job profile.
 - Give the sticky detail pane a clear header and section navigation for long job profiles.
 - Keep archived mode visually distinct and explicit.
 
@@ -501,93 +502,122 @@ Components should remain narrowly scoped. Do not create one universal component 
 ### Phase 0: Baseline and inventory
 
 - [ ] Capture current screenshots for all major pages at desktop and mobile sizes.
-- [ ] Inventory repeated controls, cards, badges, alerts, empty states, and layouts.
-- [ ] Record existing page-specific interaction behavior that must not regress.
-- [ ] Identify CSS selectors that can be retired only after their consuming pages migrate.
-- [ ] Define screenshot and accessibility review fixtures with representative data.
+- [x] Inventory repeated controls, cards, badges, alerts, empty states, and layouts.
+- [x] Record existing page-specific interaction behavior that must not regress.
+- [x] Identify CSS selectors that can be retired only after their consuming pages migrate.
+- [x] Define screenshot and accessibility review fixtures with representative data.
+
+Phase 0 inventory is recorded in `docs/UI_OVERHAUL_BASELINE.md`. Screenshot routes, states, viewports, and accessibility checks are defined there. Actual baseline capture remains open because the client and server were not started during this implementation.
 
 ### Phase 1: Design foundations
 
-- [ ] Add color, typography, spacing, radius, shadow, and motion tokens.
-- [ ] Add the blue-led Dalifin palette and semantic status tokens.
-- [ ] Add `lucide-react`.
-- [ ] Implement shared Button, IconButton, Badge, Alert, Field, EmptyState, Skeleton, and Toast primitives.
-- [ ] Implement PageHeader, Toolbar, SectionHeader, and WorkspaceSplitPane.
-- [ ] Add shared focus, hover, disabled, loading, and reduced-motion behavior.
-- [ ] Begin splitting `styles.css` without changing unrelated page behavior.
+- [x] Add color, typography, spacing, radius, shadow, and motion tokens.
+- [x] Add the blue-led Dalifin palette and semantic status tokens.
+- [x] Add `lucide-react`.
+- [x] Implement shared Button, IconButton, Badge, Alert, Field, EmptyState, Skeleton, and Toast primitives.
+- [x] Implement PageHeader, Toolbar, SectionHeader, and WorkspaceSplitPane.
+- [x] Add shared focus, hover, disabled, loading, and reduced-motion behavior.
+- [x] Begin splitting `styles.css` without changing unrelated page behavior.
+
+Phase 1 introduced `client/app/styles/tokens.css`, `client/app/styles/overhaul.css`, and shared primitives under `client/components/ui/`. The legacy stylesheet remains in place for pages scheduled in Phases 5-8 and can be retired incrementally.
 
 ### Phase 2: Application shell and navigation
 
-- [ ] Redesign the desktop sidebar.
-- [ ] Add icons, section labels, active-route styling, and `aria-current`.
-- [ ] Replace the corrupted application-expansion glyph.
-- [ ] Keep Account, Admin, and Sign Out in a bottom utility area.
-- [ ] Redesign the Ask Scout launcher.
-- [ ] Implement the mobile header and accessible navigation drawer.
-- [ ] Apply the shared content width and page-header layout.
+- [x] Redesign the desktop sidebar.
+- [x] Add icons, section labels, active-route styling, and `aria-current`.
+- [x] Replace the corrupted application-expansion glyph.
+- [x] Keep Account, Admin, and Sign Out in a bottom utility area.
+- [x] Redesign the Ask Scout launcher.
+- [x] Implement the mobile header and accessible navigation drawer.
+- [x] Apply the shared content width and page-header layout.
+
+Phase 2 added grouped Career, Pipeline, and Workspace navigation, Lucide icons, route-aware selection, a full-width Ask Scout action, a bottom utility region, and a mobile drawer with Escape handling, focus containment, scrim dismissal, and focus restoration.
 
 ### Phase 3: Home and system feedback
 
-- [ ] Redesign Recommended Next Step as the strongest dashboard action.
-- [ ] Redesign setup alerts as compact supporting items.
-- [ ] Redesign application actions, best matches, and recently saved jobs.
-- [ ] Add shared skeleton loading and empty states.
-- [ ] Add the toast region and migrate dashboard feedback.
-- [ ] Verify signed-in and public home experiences.
+- [x] Redesign Recommended Next Step as the strongest dashboard action.
+- [x] Redesign setup alerts as compact supporting items.
+- [x] Redesign application actions, best matches, and recently saved jobs.
+- [x] Add shared skeleton loading and empty states.
+- [x] Add the toast region and migrate dashboard feedback.
+- [x] Verify signed-in and public home experiences.
+
+Phase 3 preserves both authenticated and public branches, promotes Recommended Next Step through a semantic amber band, removes unnecessary section cards, and uses shared score badges, empty states, skeletons, and refresh confirmation.
 
 ### Phase 4: Jobs and search workflows
 
-- [ ] Redesign Saved Jobs list, toolbar, selected state, and detail pane.
-- [ ] Redesign match-score and job-status badges.
-- [ ] Redesign archive and bulk-selection modes.
-- [ ] Redesign Job Search form, results, detail pane, selection, and pagination.
-- [ ] Redesign single URL import, list import, and manual job entry.
-- [ ] Preserve extraction warnings, manual fallback, and protected preview states.
+- [x] Redesign Saved Jobs list, toolbar, selected state, and detail pane.
+- [x] Redesign match-score and job-status badges.
+- [x] Redesign archive and bulk-selection modes.
+- [x] Redesign Job Search form, results, detail pane, selection, and pagination.
+- [x] Redesign single URL import, list import, and manual job entry.
+- [x] Preserve extraction warnings, manual fallback, and protected preview states.
+
+Phase 4 preserves the existing APIs and behavior while applying shared page headers, semantic match bands, selection treatments, toolbars, responsive result tables, sticky detail panes, loading feedback, warnings, and protected signed-out previews.
+
+Saved source descriptions are available in a dedicated read-only detail view before analysis. Structured Profile and Match Data views remain separate so viewing source text never triggers OpenAI usage.
+
+Phases 1-4 verification on 2026-08-06: `npm run lint`, all nine client tests, and `npm run build` passed. No development server was started, so final browser screenshots and visual interaction review remain part of the open Phase 0 and Phase 9 work.
 
 ### Phase 5: Applications and interviews
 
-- [ ] Redesign the Applications list/detail workspace.
-- [ ] Redesign application status, stage, priority, and next-action presentation.
-- [ ] Redesign the full application detail and edit page.
-- [ ] Redesign collapsed materials, tasks, notes, interviews, and timeline sections.
-- [ ] Redesign Interviews list, detail pane, preparation guides, and journal notes.
-- [ ] Evaluate List/Board mode after the default List view is stable.
+- [x] Redesign the Applications list/detail workspace.
+- [x] Redesign application status, stage, priority, and next-action presentation.
+- [x] Redesign the full application detail and edit page.
+- [x] Redesign collapsed materials, tasks, notes, interviews, and timeline sections.
+- [x] Redesign Interviews list, detail pane, preparation guides, and journal notes.
+- [x] Evaluate List/Board mode after the default List view is stable.
+
+Phase 5 applies semantic status and priority badges, compact filters, selected-row treatments, shared loading and empty states, clearer read-only previews, and redesigned collapsible detail sections. Board mode was evaluated and deferred: the current number of workflow states and the existing detail-heavy interaction favor the more accessible list/detail view until drag-and-drop stage management becomes a demonstrated user need.
 
 ### Phase 6: Resume profiles and matching
 
-- [ ] Redesign resume import and parse-review states.
-- [ ] Redesign resume profile list, default marker, and selection state.
-- [ ] Add readable resume view mode and separate edit mode.
-- [ ] Redesign Match source controls and single/bulk matching progress.
-- [ ] Redesign score, evidence, missing requirements, and recommendations.
-- [ ] Verify low-score save decisions and existing token-saving guards.
+- [x] Redesign resume import and parse-review states.
+- [x] Redesign resume profile list, default marker, and selection state.
+- [x] Add readable resume view mode and separate edit mode.
+- [x] Redesign Match source controls and single/bulk matching progress.
+- [x] Redesign score, evidence, missing requirements, and recommendations.
+- [x] Verify low-score save decisions and existing token-saving guards.
+
+Phase 6 adds a professional read-only resume presentation with explicit Edit mode, keeps default and selected profiles visually distinct, and separates match-source configuration from evidence results. The no-resume guard still blocks provider calls, and matches below 5 still require an explicit save decision.
 
 ### Phase 7: Documents, materials, and analytics
 
-- [ ] Redesign the document library as a structured file list or table.
-- [ ] Redesign document version actions and preview behavior.
-- [ ] Redesign application material history, editor, and provenance display.
-- [ ] Redesign analytics filters, KPI band, charts, definitions, and tables.
-- [ ] Verify exact values remain available independently of color or charts.
+- [x] Redesign the document library as a structured file list or table.
+- [x] Redesign document version actions and preview behavior.
+- [x] Redesign application material history, editor, and provenance display.
+- [x] Redesign analytics filters, KPI band, charts, definitions, and tables.
+- [x] Verify exact values remain available independently of color or charts.
+
+Phase 7 presents document name, latest version, type, and actions in stable columns; preserves extracted-text preview and version replacement; and makes material provenance and history explicit. Analytics retains exact counts, percentages, sample sizes, average and median durations, and accessible trend labels independently of visual color or bar length.
+
+Phases 5-7 verification on 2026-08-06: `npm run lint`, all twelve client tests, CSS token validation, `git diff --check`, and `npm run build` passed. No development server was started, so final browser screenshots and hands-on interaction review remain part of Phases 0 and 9.
 
 ### Phase 8: Ask Scout, account, admin, and public previews
 
-- [ ] Redesign Ask Scout while preserving passive advisory behavior.
-- [ ] Redesign authentication and account security sections.
-- [ ] Redesign account deletion danger controls.
-- [ ] Redesign administrator reports and diagnostic links.
-- [ ] Apply the visual system consistently to public preview pages.
-- [ ] Verify protected actions remain disabled and provider calls remain blocked when signed out.
+- [x] Redesign Ask Scout while preserving passive advisory behavior.
+- [x] Redesign authentication and account security sections.
+- [x] Redesign account deletion danger controls.
+- [x] Redesign administrator reports and diagnostic links.
+- [x] Apply the visual system consistently to public preview pages.
+- [x] Verify protected actions remain disabled and provider calls remain blocked when signed out.
+
+Phase 8 gives Ask Scout a focused advisory workspace, makes its passive role explicit, and uses semantic result badges without enabling direct actions. Authentication now separates session, security, and destructive controls; account reports and administrator diagnostics use the shared hierarchy and feedback components; and signed-out pages retain clearly disabled previews. Static regression coverage verifies that protected page guards return preview or login guidance before authenticated implementations are rendered.
 
 ### Phase 9: Responsive and accessibility hardening
 
 - [ ] Complete desktop, tablet, and mobile screenshot verification.
-- [ ] Complete keyboard and focus-order review.
-- [ ] Verify contrast and status redundancy.
-- [ ] Verify reduced motion.
-- [ ] Verify long text and localization-resistant layouts.
-- [ ] Remove obsolete selectors and duplicate color literals.
-- [ ] Run lint, tests, production build, and final visual regression review.
+- [x] Complete keyboard and focus-order review.
+- [x] Verify contrast and status redundancy.
+- [x] Verify reduced motion.
+- [x] Verify long text and localization-resistant layouts.
+- [x] Remove obsolete selectors and duplicate color literals.
+- [x] Run lint, tests, CSS token validation, and the production build.
+- [ ] Complete final hands-on browser visual regression review.
+
+Phase 9 adds responsive account, Scout, admin, operation, and diagnostic layouts; global long-content wrapping; resilient preformatted-text handling; keyboard-visible focus; a focus-trapped mobile drawer; and reduced-motion overrides. Repeated neutral, disabled, focus, skeleton, and text-on-brand colors now use design tokens, while obsolete component-specific status selectors were removed. Automated contrast checks cover the core page text, muted text, and primary action combinations, and status remains communicated with text rather than color alone.
+
+Phases 8-9 automated verification on 2026-08-06: `npm run lint`, all sixteen client tests, CSS token validation, `git diff --check`, and `npm run build` passed. The build compiled all 22 routes. No development server was started, so viewport screenshots and final hands-on visual regression remain the only open Phase 9 verification tasks.
 
 ## Acceptance Criteria
 

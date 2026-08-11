@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { CalendarPlus, ChevronDown, MessageSquareText, RefreshCw } from "lucide-react";
 import {
   addInterviewNote,
   createInterview,
@@ -20,6 +21,7 @@ import {
   TrackedApplication,
   updateInterview,
 } from "../lib/api";
+import { AlertBanner, Badge, Button, EmptyState, SectionHeader, SkeletonRows, ToastRegion } from "./ui";
 
 const interviewTypes: InterviewType[] = [
   "recruiter_screen", "phone", "technical", "behavioral", "hiring_manager", "panel", "final", "other",
@@ -43,6 +45,12 @@ function dateTimeInputValue(value: string | null): string {
 
 function jobLabel(application: TrackedApplication): string {
   return `${application.job?.title || "Untitled application"} - ${application.job?.company || "Unknown company"}`;
+}
+
+function interviewStatusTone(status: InterviewStatus): "info" | "success" | "danger" {
+  if (status === "completed") return "success";
+  if (status === "cancelled") return "danger";
+  return "info";
 }
 
 export function InterviewManager() {
@@ -213,10 +221,10 @@ function AuthenticatedInterviewManager() {
 
   return (
     <div className="interviews-manager">
-      {error ? <p className="error">{error}</p> : null}
-      {message ? <p className="success">{message}</p> : null}
-      <form className="interview-create-form" onSubmit={handleCreate}>
-        <div className="section-heading"><div><h2>Add Interview Preparation</h2><p className="metadata">Link the interview to an existing application.</p></div></div>
+      {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
+      <ToastRegion message={message} onDismiss={() => setMessage(null)} />
+      <form className="interview-create-form profile-card" onSubmit={handleCreate}>
+        <SectionHeader title="Add interview preparation" description="Link an interview to an existing application and keep its preparation together." />
         <div className="form-grid">
           <label>Application<select value={applicationId} onChange={(event) => setApplicationId(event.target.value)} required><option value="">Select application</option>{activeApplications.map((application) => <option key={application.id} value={application.id}>{jobLabel(application)}</option>)}</select></label>
           <label>Type<select value={interviewType} onChange={(event) => setInterviewType(event.target.value as InterviewType)}>{interviewTypes.map((value) => <option key={value} value={value}>{labelize(value)}</option>)}</select></label>
@@ -226,20 +234,21 @@ function AuthenticatedInterviewManager() {
           <label>Location or meeting URL<input value={location} onChange={(event) => setLocation(event.target.value)} /></label>
         </div>
         <label>Private notes<textarea rows={3} value={privateNotes} onChange={(event) => setPrivateNotes(event.target.value)} /></label>
-        <button disabled={busy || !applicationId}>Add Interview Preparation</button>
+        <Button type="submit" icon={CalendarPlus} loading={busy} disabled={!applicationId}>Add Interview Preparation</Button>
       </form>
 
       <div className="interviews-workspace">
-        <section className="interviews-list-card">
-          <div className="section-heading"><h2>Interviews</h2><button type="button" className="secondary" onClick={() => void loadWorkspace()}>Refresh</button></div>
+        <section className="interviews-list-card profile-card">
+          <div className="profile-card-header"><SectionHeader title="Interviews" description={`${interviews.length} interview${interviews.length === 1 ? "" : "s"}`} /><Button type="button" variant="secondary" size="compact" icon={RefreshCw} onClick={() => void loadWorkspace()}>Refresh</Button></div>
+          {!workspaceLoaded ? <SkeletonRows count={3} /> : null}
           <div className="application-list">
             {interviews.map((interview) => (
-              <button key={interview.id} type="button" className={`application-row ${selected?.id === interview.id ? "selected" : ""}`} onClick={() => void openInterview(interview.id)}>
-                <span className={`status-pill status-${interview.status}`}>{labelize(interview.status)}</span>
+              <button key={interview.id} type="button" className={`application-row ${selected?.id === interview.id ? "selected" : ""}`} aria-pressed={selected?.id === interview.id} onClick={() => void openInterview(interview.id)}>
+                <Badge tone={interviewStatusTone(interview.status)}>{labelize(interview.status)}</Badge>
                 <span><strong>{interview.job?.title || "Untitled application"}</strong><span className="metadata">{interview.job?.company || "Unknown company"} | {labelize(interview.interview_type)}</span><span className="metadata">{interview.scheduled_at ? new Date(interview.scheduled_at).toLocaleString() : "Time not scheduled"}</span></span>
               </button>
             ))}
-            {!interviews.length ? <p className="empty">No interviews scheduled.</p> : null}
+            {workspaceLoaded && !interviews.length ? <EmptyState icon={MessageSquareText} title="No interviews" description="Add interview preparation after an application reaches the interview stage." /> : null}
           </div>
         </section>
 
@@ -276,7 +285,7 @@ function AuthenticatedInterviewManager() {
                 <div className="prep-guide-list">{selected.prep_guides.map((guide, index) => <PrepGuideView key={guide.id} guide={guide} title={`Guide ${selected.prep_guides.length - index}`} />)}{!selected.prep_guides.length ? <p className="empty">No preparation guide generated.</p> : null}</div>
               </section>
             </>
-          ) : <section className="interview-detail-section"><p className="empty">Select an interview to review details and preparation.</p></section>}
+          ) : <EmptyState icon={MessageSquareText} title="Interview details" description="Select an interview to review its schedule, journal, and preparation guide." />}
         </aside>
       </div>
     </div>
@@ -288,7 +297,7 @@ function PrepGuideView({ guide, title }: { guide: InterviewDetail["prep_guides"]
   const [expanded, setExpanded] = useState(true);
   return (
     <article className="prep-guide">
-      <button type="button" className="prep-guide-toggle" onClick={() => setExpanded((current) => !current)}><strong>{title}</strong><span className="metadata">{new Date(guide.created_at).toLocaleString()}</span></button>
+      <button type="button" className="prep-guide-toggle" aria-expanded={expanded} onClick={() => setExpanded((current) => !current)}><span><strong>{title}</strong><span className="metadata">{new Date(guide.created_at).toLocaleString()}</span></span><ChevronDown className="prep-guide-chevron" size={18} aria-hidden="true" /></button>
       {expanded && output ? <div className="prep-guide-content">
         <p>{output.overview}</p>
         {output.warnings.length ? <div className="warning"><strong>Evidence warnings</strong><ul>{output.warnings.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}

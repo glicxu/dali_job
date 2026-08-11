@@ -6,6 +6,7 @@ dist/
 build/
 node_modules/
 .next/
+*.tsbuildinfo
 .env
 server/config.ini
 server/*.local.ini

@@ -2,7 +2,9 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { ArrowLeft, Compass, LockKeyhole, Send } from "lucide-react";
 import { askScout, AskScoutResult, getAuthToken } from "../lib/api";
+import { AlertBanner, Badge, Button, EmptyState, PageHeader, SectionHeader } from "./ui";
 
 const knownPaths = new Set([
   "/", "/profile", "/match", "/jobs", "/jobs/import-url", "/jobs/manual", "/jobs/import",
@@ -41,6 +43,13 @@ function statusLabel(status: AskScoutResult["status"]): string {
   return "Guidance";
 }
 
+function statusTone(status: AskScoutResult["status"]): "info" | "warning" | "danger" | "neutral" {
+  if (status === "navigate") return "info";
+  if (status === "needs_context") return "warning";
+  if (status === "unsupported") return "danger";
+  return "neutral";
+}
+
 export function AskScoutPage() {
   const searchParams = useSearchParams();
   const returnPath = useMemo(() => safeReturnPath(searchParams.get("from")), [searchParams]);
@@ -52,17 +61,19 @@ export function AskScoutPage() {
   if (!getAuthToken()) {
     return (
       <>
-        <a className="back-link" href={returnPath}><span aria-hidden="true">&larr;</span> Back</a>
-        <div>
-          <p className="eyebrow">Ask Scout</p>
-          <h1>Find your next step</h1>
-          <p className="lede">Ask Scout guides you to the right DaliJob workflow without performing actions for you.</p>
-        </div>
-        <section className="card ask-scout-login-card">
-          <h2>Login required</h2>
-          <p>Login or register to ask Scout for personalized navigation help.</p>
-          <a className="button-link" href="/auth">Login / Register</a>
-        </section>
+        <PageHeader
+          eyebrow="Ask Scout"
+          title="Find your next step"
+          description="Ask Scout guides you to the right DaliJob workflow without performing actions for you."
+          icon={Compass}
+          actions={<a className="button-link secondary-button action-with-icon" href={returnPath}><ArrowLeft size={17} aria-hidden="true" /> Back</a>}
+        />
+        <EmptyState
+          icon={LockKeyhole}
+          title="Login required"
+          description="Login or register to ask Scout for personalized navigation help."
+          action={<a className="button-link" href="/auth">Login / Register</a>}
+        />
       </>
     );
   }
@@ -89,14 +100,17 @@ export function AskScoutPage() {
 
   return (
     <>
-      <a className="back-link" href={returnPath}><span aria-hidden="true">&larr;</span> Back</a>
-      <div>
-        <p className="eyebrow">Ask Scout</p>
-        <h1>What would you like to do?</h1>
-        <p className="lede">Describe your goal. Scout will explain the workflow and guide you to the right page.</p>
-      </div>
+      <PageHeader
+        eyebrow="Ask Scout"
+        title="What would you like to do?"
+        description="Describe your goal. Scout will explain the workflow and guide you to the right page."
+        icon={Compass}
+        actions={<a className="button-link secondary-button action-with-icon" href={returnPath}><ArrowLeft size={17} aria-hidden="true" /> Back</a>}
+      />
+      <AlertBanner tone="info">Scout provides navigation guidance only. You review and perform every action yourself.</AlertBanner>
 
-      <form className="card ask-scout-form" onSubmit={submit}>
+      <form className="profile-card ask-scout-form" onSubmit={submit}>
+        <SectionHeader title="Ask a question" description="Include the outcome you want and any relevant job URL or application context." />
         <label>
           Question
           <textarea
@@ -109,19 +123,17 @@ export function AskScoutPage() {
         </label>
         <div className="ask-scout-form-footer">
           <span className="metadata">{question.length}/1000</span>
-          <button type="submit" disabled={question.trim().length < 3 || isAsking}>
-            {isAsking ? "Asking Scout..." : "Ask Scout"}
-          </button>
+          <Button type="submit" icon={Send} loading={isAsking} disabled={question.trim().length < 3}>Ask Scout</Button>
         </div>
       </form>
 
-      {error ? <p className="error">{error}</p> : null}
+      {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
       {answers.length ? (
         <section className="ask-scout-answers" aria-live="polite">
-          <h2>Guidance</h2>
+          <SectionHeader title="Guidance" description="Most recent guidance appears first." />
           {answers.map((result, index) => (
-            <article className="card ask-scout-answer" key={`${index}-${result.answer}`}>
-              <p className={`ask-scout-status ${result.status}`}>{statusLabel(result.status)}</p>
+            <article className="profile-card ask-scout-answer" key={`${index}-${result.answer}`}>
+              <Badge tone={statusTone(result.status)}>{statusLabel(result.status)}</Badge>
               <p>{result.answer}</p>
               {result.limitations.length ? (
                 <ul>{result.limitations.map((item) => <li key={item}>{item}</li>)}</ul>
@@ -137,7 +149,7 @@ export function AskScoutPage() {
             </article>
           ))}
         </section>
-      ) : null}
+      ) : <EmptyState compact icon={Compass} title="No guidance yet" description="Ask how to complete a DaliJob workflow and Scout will suggest the appropriate page." />}
     </>
   );
 }

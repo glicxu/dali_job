@@ -14,6 +14,7 @@ DaliJob is designed as a long-term career operating system, not a job board and 
 - [ASK_SCOUT_IMPLEMENTATION_PLAN.md](ASK_SCOUT_IMPLEMENTATION_PLAN.md) - passive AI navigation assistant design, capability catalog, API contract, security boundaries, phased implementation, and tests.
 - [JOB_SCRAPER_GENERALIZATION_PLAN.md](JOB_SCRAPER_GENERALIZATION_PLAN.md) - quality-aware job URL extraction, structured-data and DOM strategies, rendered fallback, ATS adapters, security constraints, and phased implementation.
 - [UI_OVERHAUL_IMPLEMENTATION_PLAN.md](UI_OVERHAUL_IMPLEMENTATION_PLAN.md) - blue-led Dalifin visual system, shared UI components, application-shell redesign, page-by-page requirements, responsive behavior, accessibility, and phased implementation.
+- [UI_OVERHAUL_BASELINE.md](UI_OVERHAUL_BASELINE.md) - preserved interaction inventory, selector migration notes, and the desktop/mobile screenshot and accessibility review matrix for the UI overhaul.
 - [DATA_LIFECYCLE.md](DATA_LIFECYCLE.md) - archive/delete semantics, immutable match history, retention, export, and account cleanup contract.
 - [API_SPEC.md](API_SPEC.md) - versioned REST API specification for the client, workers, and integrations.
 - [ER_DIAGRAM.md](ER_DIAGRAM.md) - Mermaid ER diagram and relationship notes.

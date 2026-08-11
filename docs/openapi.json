@@ -26,6 +26,27 @@
         }
       }
     },
+    "/api/v1/me/tutorial/complete": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Complete Tutorial",
+        "operationId": "complete_tutorial_api_v1_me_tutorial_complete_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentUserResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/register": {
       "post": {
         "tags": [
@@ -6655,6 +6676,10 @@
           "role": {
             "type": "string",
             "title": "Role"
+          },
+          "tutorial_completed": {
+            "type": "boolean",
+            "title": "Tutorial Completed"
           }
         },
         "type": "object",
@@ -6664,7 +6689,8 @@
           "email",
           "display_name",
           "provider",
-          "role"
+          "role",
+          "tutorial_completed"
         ],
         "title": "CurrentUserResponse"
       },

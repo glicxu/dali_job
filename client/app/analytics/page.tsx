@@ -1,13 +1,16 @@
 import { AnalyticsDashboard } from "../../components/AnalyticsDashboard";
+import { PageHeader } from "../../components/ui";
+import { ChartNoAxesCombined } from "lucide-react";
 
 export default function AnalyticsPage() {
   return (
     <section className="panel analytics-page">
-      <div>
-        <p className="eyebrow">Outcome Analytics</p>
-        <h1>Application Outcomes</h1>
-        <p className="lede">Review descriptive application outcomes, response timing, sources, and exact resume versions.</p>
-      </div>
+      <PageHeader
+        eyebrow="Outcome Analytics"
+        title="Application outcomes"
+        description="Review application outcomes, response timing, sources, and exact resume versions."
+        icon={ChartNoAxesCombined}
+      />
       <AnalyticsDashboard />
     </section>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Bug, HeartPulse, Inbox, Save } from "lucide-react";
 import {
   AdminReport,
   getCurrentUser,
@@ -8,8 +9,16 @@ import {
   updateAdminReport,
   UserReportStatus,
 } from "../lib/api";
+import { AlertBanner, Badge, Button, EmptyState, SectionHeader, SkeletonRows } from "./ui";
 
 const STATUSES: UserReportStatus[] = ["new", "in_review", "resolved", "closed"];
+
+function reportStatusTone(status: UserReportStatus): "neutral" | "info" | "success" | "warning" {
+  if (status === "resolved") return "success";
+  if (status === "in_review") return "warning";
+  if (status === "new") return "info";
+  return "neutral";
+}
 
 export function AdminReports() {
   const [reports, setReports] = useState<AdminReport[]>([]);
@@ -65,24 +74,18 @@ export function AdminReports() {
 
   return (
     <>
-      {error ? <p className="error-banner">{error}</p> : null}
-      <section className="admin-diagnostics" aria-labelledby="admin-diagnostics-heading">
-        <div>
-          <p className="eyebrow">Diagnostics</p>
-          <h2 id="admin-diagnostics-heading">System tools</h2>
-        </div>
-        <div className="button-row">
-          <a className="button-link secondary-button" href="/health">System Health</a>
-          <a className="button-link secondary-button" href="/job-url-debug">URL Debug</a>
+      {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
+      <section className="admin-diagnostics" aria-label="System tools">
+        <SectionHeader title="System tools" description="Restricted diagnostic views for validating the client/server boundary and scraper output." />
+        <div className="admin-diagnostic-links">
+          <a className="admin-diagnostic-link" href="/health"><HeartPulse size={20} aria-hidden="true" /><span><strong>System health</strong><small>Review the configured API boundary.</small></span></a>
+          <a className="admin-diagnostic-link" href="/job-url-debug"><Bug size={20} aria-hidden="true" /><span><strong>URL Debug</strong><small>Inspect extracted job posting text.</small></span></a>
         </div>
       </section>
 
-      <section className="admin-report-section" aria-labelledby="admin-reports-heading">
+      <section className="admin-report-section" aria-label="Submitted reports">
         <div className="section-heading-row">
-          <div>
-            <p className="eyebrow">Support queue</p>
-            <h2 id="admin-reports-heading">Submitted reports</h2>
-          </div>
+          <SectionHeader title="Submitted reports" description={`${visibleReports.length} report${visibleReports.length === 1 ? "" : "s"} in this view`} />
           <label className="compact-label">
             Status
             <select value={filter} onChange={(event) => setFilter(event.target.value as UserReportStatus | "all")}>
@@ -92,8 +95,8 @@ export function AdminReports() {
           </label>
         </div>
 
-        {loading ? <p className="empty">Loading report queue.</p> : null}
-        {!loading && visibleReports.length === 0 ? <p className="empty">No reports match this filter.</p> : null}
+        {loading ? <SkeletonRows count={4} /> : null}
+        {!loading && visibleReports.length === 0 ? <EmptyState icon={Inbox} title="No matching reports" description="No submitted support reports match this status filter." /> : null}
         {visibleReports.length > 0 ? (
           <div className="admin-report-workspace">
             <div className="admin-report-list" aria-label="Submitted reports">
@@ -101,12 +104,13 @@ export function AdminReports() {
                 <button
                   type="button"
                   className={selectedId === report.id ? "selected" : ""}
+                  aria-pressed={selectedId === report.id}
                   key={report.id}
                   onClick={() => selectReport(report)}
                 >
-                  <span className={`report-status ${report.status}`}>{report.status.replace("_", " ")}</span>
+                  <Badge tone={reportStatusTone(report.status)}>{report.status.replace("_", " ")}</Badge>
                   <strong>{report.title}</strong>
-                  <small>{report.reporter_display_name} · {new Date(report.created_at).toLocaleDateString()}</small>
+                  <small>{report.reporter_display_name} | {new Date(report.created_at).toLocaleDateString()}</small>
                 </button>
               ))}
             </div>
@@ -117,7 +121,7 @@ export function AdminReports() {
                   <div>
                     <p className="eyebrow">{selected.category}</p>
                     <h2>{selected.title}</h2>
-                    <p className="metadata">{selected.reporter_display_name} · {selected.reporter_email}</p>
+                    <p className="metadata">{selected.reporter_display_name} | {selected.reporter_email}</p>
                   </div>
                   <p className="report-description">{selected.description}</p>
                   <label>
@@ -131,10 +135,10 @@ export function AdminReports() {
                     <textarea value={notes} onChange={(event) => setNotes(event.target.value)} />
                   </label>
                   <div className="button-row">
-                    <button type="button" disabled={saving} onClick={saveReport}>{saving ? "Saving..." : "Save changes"}</button>
+                    <Button type="button" icon={Save} loading={saving} onClick={saveReport}>Save changes</Button>
                   </div>
                 </>
-              ) : <p className="empty">Select a report to review it.</p>}
+              ) : <EmptyState compact icon={Inbox} title="Report details" description="Select a report to review its description and update its status." />}
             </div>
           </div>
         ) : null}

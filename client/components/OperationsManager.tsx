@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Activity, RefreshCw, RotateCcw, XCircle } from "lucide-react";
 import {
   cancelManagedOperation,
   getAuthToken,
@@ -10,6 +11,7 @@ import {
   ManagedOperationSummary,
   retryManagedOperation,
 } from "../lib/api";
+import { AlertBanner, Badge, Button, EmptyState, SectionHeader, SkeletonRows } from "./ui";
 
 function operationLabel(value: string): string {
   return value
@@ -25,14 +27,17 @@ function progressLabel(operation: ManagedOperation): string {
   return operation.progress_message || operation.status;
 }
 
+function operationTone(status: ManagedOperation["status"]): "info" | "success" | "danger" | "warning" {
+  if (status === "succeeded") return "success";
+  if (status === "failed" || status === "cancelled") return "danger";
+  if (status === "running") return "info";
+  return "warning";
+}
+
 export function OperationsManager() {
   if (!getAuthToken()) {
     return (
-      <section className="profile-card">
-        <h2>Login required</h2>
-        <p className="metadata">Log in to run provider-backed work and review its progress.</p>
-        <a className="primary-link" href="/auth">Login / Register</a>
-      </section>
+      <EmptyState icon={Activity} title="Login required" description="Log in to run provider-backed work and review its progress." action={<a className="button-link" href="/auth">Login / Register</a>} />
     );
   }
 
@@ -44,6 +49,7 @@ function AuthenticatedOperationsManager() {
   const [summary, setSummary] = useState<ManagedOperationSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -56,6 +62,8 @@ function AuthenticatedOperationsManager() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Operations could not be loaded.");
+    } finally {
+      setLoaded(true);
     }
   }, []);
 
@@ -91,7 +99,7 @@ function AuthenticatedOperationsManager() {
 
   return (
     <div className="operations-manager">
-      {error ? <div className="error-banner">{error}</div> : null}
+      {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
       {summary ? (
         <dl className="operation-summary">
           <div><dt>Queued</dt><dd>{summary.queued}</dd></div>
@@ -103,46 +111,47 @@ function AuthenticatedOperationsManager() {
 
       <section className="profile-card">
         <div className="profile-card-header">
-          <div>
-            <h2>Recent Operations</h2>
-            <p className="metadata">Searches, imports, parsing, and matching continue here if you leave their page.</p>
-          </div>
-          <button type="button" className="secondary-button" onClick={() => void refresh()}>Refresh</button>
+          <SectionHeader title="Recent operations" description="Searches, imports, parsing, and matching continue here if you leave their page." />
+          <Button type="button" variant="secondary" size="compact" icon={RefreshCw} onClick={() => void refresh()}>Refresh</Button>
         </div>
-        {operations.length ? (
+        {!loaded ? <SkeletonRows count={4} /> : operations.length ? (
           <ul className="operation-list">
             {operations.map((operation) => (
               <li key={operation.id}>
                 <div className="operation-main">
                   <div className="operation-title-row">
                     <strong>{operationLabel(operation.operation_type)}</strong>
-                    <span className={`operation-status status-${operation.status}`}>{operation.status}</span>
+                    <Badge tone={operationTone(operation.status)}>{operation.status}</Badge>
                   </div>
-                  <span className="metadata">{progressLabel(operation)} · Attempt {operation.attempt_count} of {operation.max_attempts}</span>
+                  <span className="metadata">{progressLabel(operation)} | Attempt {operation.attempt_count} of {operation.max_attempts}</span>
                   {operation.error_message ? <p className="operation-error">{operation.error_message}</p> : null}
                   {operation.provider ? <span className="metadata">Provider: {operation.provider}</span> : null}
                 </div>
                 <div className="button-row operation-actions">
                   {operation.status === "queued" || operation.status === "running" ? (
-                    <button
+                    <Button
                       type="button"
-                      className="secondary-button"
+                      variant="secondary"
+                      size="compact"
+                      icon={XCircle}
                       disabled={busyId === operation.id}
                       onClick={() => void cancel(operation.id)}
-                    >Cancel</button>
+                    >Cancel</Button>
                   ) : null}
                   {(operation.status === "failed" || operation.status === "cancelled") && operation.attempt_count < operation.max_attempts ? (
-                    <button
+                    <Button
                       type="button"
+                      size="compact"
+                      icon={RotateCcw}
                       disabled={busyId === operation.id}
                       onClick={() => void retry(operation.id)}
-                    >Retry</button>
+                    >Retry</Button>
                   ) : null}
                 </div>
               </li>
             ))}
           </ul>
-        ) : <p className="empty">No managed operations have run yet.</p>}
+        ) : <EmptyState icon={Activity} title="No managed operations" description="Provider-backed searches, imports, parsing, and matching will appear here." />}
       </section>
     </div>
   );

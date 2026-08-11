@@ -1,13 +1,16 @@
 import { ApplicationMaterialsManager } from "../../components/ApplicationMaterialsManager";
+import { PageHeader } from "../../components/ui";
+import { FileCheck2 } from "lucide-react";
 
 export default function MaterialsPage() {
   return (
     <section className="panel materials-page">
-      <div>
-        <p className="eyebrow">Application Materials</p>
-        <h1>Tailored resumes and cover letters</h1>
-        <p className="lede">Generate, review, and revise materials from an exact saved job and resume version.</p>
-      </div>
+      <PageHeader
+        eyebrow="Application Materials"
+        title="Tailored resumes and cover letters"
+        description="Generate, review, and revise materials from an exact saved job and resume version."
+        icon={FileCheck2}
+      />
       <ApplicationMaterialsManager />
     </section>
   );

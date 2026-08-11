@@ -371,6 +371,7 @@ export type CurrentUser = {
   display_name: string;
   provider: string;
   role: "user" | "admin";
+  tutorial_completed: boolean;
 };
 
 export type UserReportCategory = "bug" | "feedback" | "account" | "other";
@@ -1009,6 +1010,10 @@ export function getCurrentUser(): Promise<CurrentUser> {
     await refreshCsrfToken();
     return user;
   });
+}
+
+export function completeTutorial(): Promise<CurrentUser> {
+  return requestJson<CurrentUser>("/me/tutorial/complete", { method: "POST" });
 }
 
 export function createUserReport(payload: {

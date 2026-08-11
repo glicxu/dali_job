@@ -27,6 +27,8 @@ This prevents user-specific notes and future application tracking from changing 
 
 Represents a DaliJob account.
 
+The nullable `tutorial_completed_at` field controls first-login onboarding. Existing accounts are backfilled as complete, and replaying the tutorial does not modify this value or any career data.
+
 Owns or relates to:
 
 - `workspaces`

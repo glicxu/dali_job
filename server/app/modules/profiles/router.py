@@ -63,7 +63,7 @@ def _parse_resume_or_fallback(parser: ResumeProfileParser, resume_text: str) -> 
         if exc.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
             warning = str(exc.detail)
         else:
-            warning = "Resume parsing is temporarily unavailable. Retry parsing or create the profile manually."
+            warning = "Resume analysis is temporarily unavailable. Retry the analysis or create the profile manually."
         return ResumeData(), warning
 
 

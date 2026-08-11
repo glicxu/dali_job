@@ -64,6 +64,7 @@ class CurrentUserResponse(BaseModel):
     display_name: str
     provider: str
     role: str
+    tutorial_completed: bool
 
 
 class AuthResponse(BaseModel):
@@ -94,6 +95,7 @@ def _public_user(request: Request, identity: AuthenticatedIdentity) -> CurrentUs
         display_name=identity.display_name,
         provider=identity.provider,
         role=identity.role,
+        tutorial_completed=identity.tutorial_completed,
     )
 
 
@@ -105,6 +107,7 @@ def _identity(user: User) -> AuthenticatedIdentity:
         timezone=user.timezone,
         provider=user.auth_provider,
         role=user.role,
+        tutorial_completed=user.tutorial_completed_at is not None,
     )
 
 
@@ -272,3 +275,16 @@ def delete_account(
 @router.get("/me", response_model=CurrentUserResponse)
 def get_me(request: Request, identity: AuthenticatedIdentity = Depends(get_current_identity)) -> CurrentUserResponse:
     return _public_user(request, identity)
+
+
+@router.post("/me/tutorial/complete", response_model=CurrentUserResponse)
+def complete_tutorial(
+    request: Request,
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+    db: Session = Depends(get_db_session),
+) -> CurrentUserResponse:
+    user, _workspace = ensure_account_for_identity(db, identity)
+    if user.tutorial_completed_at is None:
+        user.tutorial_completed_at = datetime.now(timezone.utc)
+        db.flush()
+    return _public_user(request, _identity(user))

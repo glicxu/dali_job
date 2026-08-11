@@ -1,4 +1,6 @@
 import { ApplicationTracker } from "../../../components/ApplicationTracker";
+import { PageHeader } from "../../../components/ui";
+import { ArrowLeft, ClipboardPenLine } from "lucide-react";
 import Link from "next/link";
 
 type ApplicationDetailPageProps = {
@@ -11,14 +13,13 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
 
   return (
     <section className="panel applications-page">
-      <Link className="back-link" href="/applications">
-        <span aria-hidden="true">&larr;</span> Back to Applications
-      </Link>
-      <div>
-        <p className="eyebrow">Application Tracking</p>
-        <h1>Application Details</h1>
-        <p className="lede">Review and update this application, its submitted documents, tasks, notes, and timeline.</p>
-      </div>
+      <PageHeader
+        eyebrow="Application Tracking"
+        title="Application Details"
+        description="Review and update this application, its submitted documents, tasks, notes, and timeline."
+        icon={ClipboardPenLine}
+        actions={<Link className="button-link secondary-button action-with-icon" href="/applications"><ArrowLeft size={17} aria-hidden="true" /> Applications</Link>}
+      />
       {Number.isInteger(applicationId) && applicationId > 0 ? (
         <ApplicationTracker applicationId={applicationId} />
       ) : (

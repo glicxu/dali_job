@@ -19,6 +19,7 @@ class AuthenticatedIdentity:
     timezone: str = "America/New_York"
     provider: str = "dev"
     role: str = "user"
+    tutorial_completed: bool = True
 
 
 def get_dev_identity() -> AuthenticatedIdentity:
@@ -68,6 +69,7 @@ def get_current_identity(
         timezone=user.timezone,
         provider=user.auth_provider,
         role=user.role,
+        tutorial_completed=user.tutorial_completed_at is not None,
     )
 
 

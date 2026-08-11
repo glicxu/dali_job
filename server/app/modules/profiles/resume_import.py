@@ -255,12 +255,12 @@ class OpenAIResumeProfileParser:
         )
         content = response.choices[0].message.content
         if content is None:
-            raise HTTPException(status_code=502, detail="OpenAI returned an empty resume parse response.")
+            raise HTTPException(status_code=502, detail="OpenAI returned an empty resume analysis response.")
         try:
             payload = json.loads(content)
             return ResumeData.model_validate(payload)
         except (json.JSONDecodeError, ValidationError) as exc:
             raise HTTPException(
                 status_code=502,
-                detail="The resume parser returned an invalid response. Retry or create the profile manually.",
+                detail="The resume analysis service returned an invalid response. Retry or create the profile manually.",
             ) from exc

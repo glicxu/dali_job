@@ -1,7 +1,9 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { Bug, SearchCheck } from "lucide-react";
 import { extractJobUrl, getAuthToken, JobUrlExtractResponse } from "../lib/api";
+import { AlertBanner, Button, EmptyState, SectionHeader } from "./ui";
 
 export function JobUrlDebugTool() {
   if (!getAuthToken()) {
@@ -35,6 +37,7 @@ function AuthenticatedJobUrlDebugTool() {
   return (
     <div className="debug-tool">
       <form className="profile-card" onSubmit={submit}>
+        <SectionHeader title="Inspect a job URL" description="This diagnostic extracts text only and does not save or analyze the posting." />
         <label>
           Job Description URL
           <input
@@ -45,21 +48,14 @@ function AuthenticatedJobUrlDebugTool() {
             required
           />
         </label>
-        <button type="submit" disabled={isLoading || !jobUrl.trim()}>
-          {isLoading ? "Scraping..." : "Scrape URL"}
-        </button>
+        <Button type="submit" icon={SearchCheck} loading={isLoading} disabled={!jobUrl.trim()}>Scrape URL</Button>
       </form>
 
-      {error ? <div className="error-banner">{error}</div> : null}
+      {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
 
       {result ? (
         <section className="profile-card">
-          <div>
-            <h2>Scraped Text</h2>
-            <p className="metadata">
-              {result.character_count.toLocaleString()} characters from {result.job_url}
-            </p>
-          </div>
+          <SectionHeader title="Scraped text" description={`${result.character_count.toLocaleString()} characters from ${result.job_url}`} />
           <pre className="text-preview large-preview">{result.extracted_text}</pre>
         </section>
       ) : null}
@@ -70,9 +66,7 @@ function AuthenticatedJobUrlDebugTool() {
 function JobUrlDebugPreview() {
   return (
     <div className="debug-tool">
-      <div className="warning-banner">
-        Login is required to scrape and debug job URLs.
-      </div>
+      <AlertBanner tone="warning">Login is required to scrape and debug job URLs.</AlertBanner>
       <form className="profile-card">
         <label>
           Job Description URL
@@ -92,9 +86,7 @@ function JobUrlDebugPreview() {
           after login.
         </pre>
       </section>
-      <a className="button-link" href="/auth">
-        Login / Register to Debug URLs
-      </a>
+      <EmptyState compact icon={Bug} title="Diagnostic preview" description="Login to run the scraper against a public job URL." action={<a className="button-link" href="/auth">Login / Register</a>} />
     </div>
   );
 }

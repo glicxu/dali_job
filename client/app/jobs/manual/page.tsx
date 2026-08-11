@@ -1,16 +1,19 @@
 import { JobsManager } from "../../../components/JobsManager";
+import { ArrowLeft, FilePenLine } from "lucide-react";
+import { PageHeader } from "../../../components/ui";
 
 export default function ManualJobPage() {
   return (
     <section className="panel jobs-panel job-creation-page">
       <a className="back-link" href="/jobs">
-        <span aria-hidden="true">&larr;</span> Back to Saved Jobs
+        <ArrowLeft size={18} aria-hidden="true" /> Back to Saved Jobs
       </a>
-      <div>
-        <p className="eyebrow">Job Creation</p>
-        <h1>Create Manual Job</h1>
-        <p className="lede">Enter a job description and structured details without importing from another website.</p>
-      </div>
+      <PageHeader
+        eyebrow="Job Creation"
+        title="Create Manual Job"
+        description="Enter a job description and structured details without importing from another website."
+        icon={FilePenLine}
+      />
       <JobsManager creationMode="manual" />
     </section>
   );

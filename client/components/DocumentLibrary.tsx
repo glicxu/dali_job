@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { Download, Eye, FileText, RefreshCw, Trash2, Upload, UploadCloud, X } from "lucide-react";
 import {
   deleteDocument,
   getDocumentDependencies,
@@ -12,6 +13,7 @@ import {
   uploadDocument,
   uploadDocumentVersion,
 } from "../lib/api";
+import { AlertBanner, Badge, Button, EmptyState, SectionHeader, SkeletonRows, ToastRegion } from "./ui";
 
 function formatBytes(value: number): string {
   if (value < 1024) return `${value} B`;
@@ -143,49 +145,44 @@ function AuthenticatedDocumentLibrary() {
 
   return (
     <div className="document-library">
-      {error ? <div className="error-banner">{error}</div> : null}
-      {status ? <div className="status-banner">{status}</div> : null}
+      {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
+      <ToastRegion message={status} onDismiss={() => setStatus(null)} />
 
-      <section className="profile-card">
-        <div>
-          <h2>Upload Document</h2>
-          <p className="metadata">
-            PDF and plain text files are stored locally. Extracted text is redacted before it is saved for reuse.
-          </p>
-        </div>
+      <section className="profile-card document-upload-card">
+        <SectionHeader title="Upload document" description="Add a PDF or text document. Extracted text is redacted before storage and each replacement creates a preserved version." />
         <form className="document-upload-form" onSubmit={submitUpload}>
           <input name="title" placeholder="Document title" />
           <input name="document" type="file" accept="application/pdf,text/plain" required />
-          <button type="submit" disabled={isUploading}>
-            {isUploading ? "Uploading..." : "Upload"}
-          </button>
+          <Button type="submit" icon={Upload} loading={isUploading}>Upload</Button>
         </form>
       </section>
 
-      <section className="profile-card">
+      <section className="profile-card document-library-card">
         <div className="profile-card-header">
-          <h2>Document Library</h2>
-          <button type="button" className="secondary-button" onClick={() => void loadDocuments()}>
-            Refresh
-          </button>
+          <SectionHeader title="Document library" description={`${documents.length} document${documents.length === 1 ? "" : "s"} with preserved version history`} />
+          <Button type="button" variant="secondary" size="compact" icon={RefreshCw} onClick={() => void loadDocuments()}>Refresh</Button>
         </div>
 
-        {isLoading ? <p className="empty">Loading documents.</p> : null}
-        {!isLoading && !documents.length ? <p className="empty">No documents uploaded.</p> : null}
-        <div className="document-list">
+        {isLoading ? <SkeletonRows count={4} /> : null}
+        {!isLoading && !documents.length ? <EmptyState icon={FileText} title="No documents" description="Upload a resume or supporting document to begin your versioned library." /> : null}
+        {documents.length ? <div className="document-table-header" aria-hidden="true"><span>Document</span><span>Version</span><span>Type</span><span>Actions</span></div> : null}
+        <div className="document-list structured-document-list">
           {documents.map((document) => (
             <article className="document-row" key={document.id}>
-              <div>
+              <div className="document-primary-cell">
                 <h2>{document.title}</h2>
                 <p className="metadata">
-                  {document.latest_version?.file_name ?? "No file"} ·{" "}
-                  {document.latest_version ? formatBytes(document.latest_version.size_bytes) : "0 B"} ·{" "}
-                  {document.document_type}
+                  {document.latest_version?.file_name ?? "No file"} | {document.latest_version ? formatBytes(document.latest_version.size_bytes) : "0 B"}
                 </p>
               </div>
-              <div className="button-row">
-                <label className="secondary-button document-version-button">
-                  New Version
+              <div className="document-version-cell">
+                <strong>v{document.latest_version?.version_number ?? 0}</strong>
+                <span className="metadata">{document.versions.length} saved</span>
+              </div>
+              <div><Badge tone={document.document_type === "resume" ? "info" : "neutral"}>{document.document_type}</Badge></div>
+              <div className="button-row document-actions">
+                <label className="secondary-button document-version-button action-with-icon" title="Upload a new version">
+                  <UploadCloud size={16} aria-hidden="true" /> New Version
                   <input
                     type="file"
                     accept="application/pdf,text/plain"
@@ -196,20 +193,18 @@ function AuthenticatedDocumentLibrary() {
                     }}
                   />
                 </label>
-                <button
+                <Button
                   type="button"
-                  className="secondary-button"
+                  variant="secondary"
+                  size="compact"
+                  icon={Eye}
                   disabled={!document.latest_version?.extracted_text_available}
                   onClick={() => void previewText(document)}
                 >
                   Text
-                </button>
-                <button type="button" className="secondary-button" onClick={() => void downloadDocument(document)}>
-                  Download
-                </button>
-                <button type="button" className="secondary-button" onClick={() => void removeDocument(document)}>
-                  Delete
-                </button>
+                </Button>
+                <Button type="button" variant="secondary" size="compact" icon={Download} onClick={() => void downloadDocument(document)}>Download</Button>
+                <Button type="button" variant="danger" size="compact" icon={Trash2} onClick={() => void removeDocument(document)}>Delete</Button>
               </div>
             </article>
           ))}
@@ -217,12 +212,10 @@ function AuthenticatedDocumentLibrary() {
       </section>
 
       {textPreview ? (
-        <section className="profile-card">
+        <section className="profile-card document-text-preview">
           <div className="profile-card-header">
-            <h2>{textPreviewTitle}</h2>
-            <button type="button" className="secondary-button" onClick={() => setTextPreview(null)}>
-              Close
-            </button>
+            <SectionHeader title={textPreviewTitle || "Extracted text"} description="Redacted text saved for matching and profile workflows." />
+            <Button type="button" variant="secondary" size="compact" icon={X} onClick={() => setTextPreview(null)}>Close</Button>
           </div>
           <pre className="text-preview">{textPreview}</pre>
         </section>

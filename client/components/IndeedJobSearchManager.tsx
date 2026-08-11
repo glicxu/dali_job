@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { BriefcaseBusiness, Check, Eye, Search, X } from "lucide-react";
 import {
   getAuthToken,
   importIndeedSearchResults,
@@ -11,6 +12,18 @@ import {
   ResumeProfile,
   searchIndeedJobs,
 } from "../lib/api";
+import {
+  AlertBanner,
+  Badge,
+  Button,
+  EmptyState,
+  Field,
+  IconButton,
+  MatchScoreBadge,
+  SectionHeader,
+  ToastRegion,
+  Toolbar,
+} from "./ui";
 
 const RESULTS_PER_PAGE = 2;
 
@@ -138,20 +151,14 @@ function AuthenticatedIndeedJobSearchManager() {
 
   return (
     <div className="jobs-manager">
-      {error ? <div className="error-banner">{error}</div> : null}
-      {status ? <div className="status-banner">{status}</div> : null}
+      {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
+      <ToastRegion message={status} onDismiss={() => setStatus(null)} />
 
-      <section className="profile-card">
-        <div className="profile-card-header">
-          <div>
-            <h2>Job Search</h2>
-            <p className="metadata">Search jobs, review results, and import selected postings.</p>
-          </div>
-        </div>
+      <section className="profile-card job-search-form-section">
+        <SectionHeader title="Search criteria" description="Enter a role and location to find up to ten current postings." />
 
         <form className="inline-form" onSubmit={search}>
-          <label>
-            Keyword
+          <Field label="Keyword">
             <input
               type="text"
               value={keyword}
@@ -159,9 +166,8 @@ function AuthenticatedIndeedJobSearchManager() {
               placeholder="software engineer"
               required
             />
-          </label>
-          <label>
-            Location
+          </Field>
+          <Field label="Location">
             <input
               type="text"
               value={location}
@@ -169,10 +175,8 @@ function AuthenticatedIndeedJobSearchManager() {
               placeholder="Maryland"
               required
             />
-          </label>
-          <button type="submit" disabled={isSearching}>
-            {isSearching ? "Searching..." : "Search"}
-          </button>
+          </Field>
+          <Button type="submit" icon={Search} loading={isSearching}>Search</Button>
         </form>
       </section>
 
@@ -180,29 +184,22 @@ function AuthenticatedIndeedJobSearchManager() {
         <section className="job-search-workspace">
           <section className="profile-card">
             <div className="profile-card-header">
-              <div>
-                <h2>Search Results</h2>
-                <p className="metadata">
-                  {selectedResults.length} of {results.length} selected.
-                </p>
-              </div>
-              <div className="button-row">
-                <button type="button" className="secondary-button" onClick={() => setSelectedKeys(new Set())}>
-                  Clear
-                </button>
-                <button type="button" className="secondary-button" onClick={() => setAllResults(results)}>
-                  Select All
-                </button>
-              </div>
+              <SectionHeader title="Search Results" description={`${selectedResults.length} of ${results.length} selected`} />
+              <Toolbar label="Search result selection">
+                <Button type="button" variant="ghost" icon={X} onClick={() => setSelectedKeys(new Set())}>Clear</Button>
+                <Button type="button" variant="secondary" icon={Check} onClick={() => setAllResults(results)}>Select All</Button>
+              </Toolbar>
             </div>
 
             {result.warnings.length ? (
-              <div className="warning-banner">
+              <AlertBanner tone="warning">
                 {result.warnings.map((warning) => (
-                  <span key={warning}>{warning}</span>
+                  <p key={warning}>{warning}</p>
                 ))}
-              </div>
+              </AlertBanner>
             ) : null}
+
+            {!results.length ? <EmptyState icon={BriefcaseBusiness} title="No jobs found" description="Try a broader keyword or another location." /> : null}
 
             <div className="bulk-import-table">
               <div className="bulk-import-row bulk-import-header indeed-search-row">
@@ -216,6 +213,7 @@ function AuthenticatedIndeedJobSearchManager() {
                 const isActive = activeResult ? resultKey(activeResult) === key : false;
                 return (
                   <div className={`bulk-import-row indeed-search-row${isActive ? " selected" : ""}`} key={key}>
+                    {isActive ? <span className="sr-only">Viewed job</span> : null}
                     <span>
                       <input
                         type="checkbox"
@@ -230,11 +228,9 @@ function AuthenticatedIndeedJobSearchManager() {
                       </span>
                       <span className="metadata">{item.source_url || "No source URL returned"}</span>
                     </span>
-                    <span className="score-badge">{item.status.replace("_", " ")}</span>
+                    <Badge tone={item.status === "new" ? "info" : "neutral"}>{item.status.replace("_", " ")}</Badge>
                     <span>
-                      <button type="button" className="secondary-button" onClick={() => setActiveResult(item)}>
-                        View
-                      </button>
+                      <Button type="button" size="compact" variant="secondary" icon={Eye} onClick={() => setActiveResult(item)}>View</Button>
                     </span>
                   </div>
                 );
@@ -284,19 +280,16 @@ function AuthenticatedIndeedJobSearchManager() {
               ) : null}
             </div>
 
-            <button type="button" disabled={!canImport || isImporting} onClick={() => void importSelected()}>
-              {isImporting ? "Importing..." : `Import ${selectedResults.length} Selected`}
-            </button>
+            <Button type="button" icon={BriefcaseBusiness} loading={isImporting} disabled={!canImport || isImporting} onClick={() => void importSelected()}>
+              Import {selectedResults.length} Selected
+            </Button>
           </section>
 
           <div className="job-search-detail-pane">
             {activeResult ? (
               <JobSearchResultDetail result={activeResult} onClose={() => setActiveResult(null)} />
             ) : (
-              <section className="saved-jobs-empty-detail">
-                <h2>Job Description</h2>
-                <p className="empty">Select View from a search result to open the job description here.</p>
-              </section>
+              <EmptyState icon={Eye} title="Job Description" description="Select View from a search result to open the full description here." />
             )}
           </div>
         </section>
@@ -310,7 +303,7 @@ function AuthenticatedIndeedJobSearchManager() {
               {importResult.imported.map((item) => (
                 <article className="job-row" key={`${item.user_job_id}-${item.source_url}`}>
                   <div className="job-score-cell">
-                    <span className="score-badge">{item.match_score === null ? "N/A" : `${item.match_score}/10`}</span>
+                    <MatchScoreBadge score={item.match_score} />
                   </div>
                   <div>
                     <h2>{item.title || "Untitled Job"}</h2>
@@ -358,9 +351,7 @@ function JobSearchResultDetail({
             {result.company || "Unknown company"} {result.location ? `| ${result.location}` : ""}
           </p>
         </div>
-        <button type="button" className="secondary-button" onClick={onClose}>
-          Close
-        </button>
+        <IconButton icon={X} label="Close job description" variant="secondary" onClick={onClose} />
       </div>
       {result.source_url ? <p className="metadata">{result.source_url}</p> : null}
       {result.summary ? <p className="summary">{result.summary}</p> : null}

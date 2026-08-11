@@ -224,6 +224,7 @@ def soft_delete_resume_profile(db: Session, resume_profile: ResumeProfile) -> No
     resume_profile.deleted_at = utc_now()
     resume_profile.is_default = False
     db.flush()
+    _ensure_one_default_profile(db, resume_profile.workspace_id, resume_profile.user_id)
 
 
 def resume_profile_dependencies(db: Session, resume_profile: ResumeProfile) -> list[dict]:

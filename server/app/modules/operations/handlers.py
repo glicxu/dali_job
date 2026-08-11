@@ -191,14 +191,14 @@ def build_operation_handlers(app: Any) -> dict[str, OperationHandler]:
 
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Resume document does not have extracted text available for parsing.",
+                detail="Resume document does not have extracted text available for analysis.",
             )
-        context.update(0, total=1, message="Parsing resume")
+        context.update(0, total=1, message="Analyzing resume")
         suggestions = OpenAIResumeProfileParser(model=runtime.openai_model).parse(version.extracted_text)
         context.update(
             1,
             total=1,
-            message="Resume parsed",
+            message="Resume analyzed",
             usage={"input_characters": len(version.extracted_text)},
         )
         return jsonable_encoder(

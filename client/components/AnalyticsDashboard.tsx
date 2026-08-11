@@ -1,12 +1,14 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { BarChart3, CalendarRange } from "lucide-react";
 import {
   AnalyticsPerformanceGroup,
   AnalyticsSummary,
   getAnalyticsSummary,
   getAuthToken,
 } from "../lib/api";
+import { AlertBanner, Badge, Button, EmptyState, SectionHeader, SkeletonRows } from "./ui";
 
 function labelize(value: string): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -74,29 +76,26 @@ function AuthenticatedAnalyticsDashboard() {
     [summary],
   );
 
-  if (loading && !summary) return <div className="analytics-dashboard"><p className="empty">Loading analytics.</p></div>;
+  if (loading && !summary) return <div className="analytics-dashboard"><SkeletonRows count={5} /></div>;
 
   return (
     <div className="analytics-dashboard">
-      {error ? <p className="error">{error}</p> : null}
+      {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
       <form className="analytics-filter" onSubmit={applyRange}>
-        <div>
-          <h2>Date Range</h2>
-          <p className="metadata">Dates use your account timezone.</p>
-        </div>
+        <SectionHeader title="Date range" description="Dates use your account timezone." />
         <label>Start<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label>
         <label>End<input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label>
-        <button disabled={loading}>Apply</button>
+        <Button type="submit" icon={CalendarRange} loading={loading}>Apply</Button>
         <div className="button-row analytics-presets">
-          <button type="button" className="secondary" onClick={() => applyPreset(30)}>30 Days</button>
-          <button type="button" className="secondary" onClick={() => applyPreset(90)}>90 Days</button>
-          <button type="button" className="secondary" onClick={() => applyPreset(null)}>All Time</button>
+          <Button type="button" variant="secondary" size="compact" onClick={() => applyPreset(30)}>30 Days</Button>
+          <Button type="button" variant="secondary" size="compact" onClick={() => applyPreset(90)}>90 Days</Button>
+          <Button type="button" variant="secondary" size="compact" onClick={() => applyPreset(null)}>All Time</Button>
         </div>
       </form>
 
       {summary ? (
         <>
-          {summary.data_quality.warnings.length ? <section className="analytics-warning-band"><h2>Data Notes</h2><ul>{summary.data_quality.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></section> : null}
+          {summary.data_quality.warnings.length ? <AlertBanner tone="warning"><div><strong>Data notes</strong><ul>{summary.data_quality.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div></AlertBanner> : null}
 
           <section className="analytics-kpis" aria-label="Outcome rates">
             <div><span>Applications</span><strong>{summary.application_count}</strong></div>
@@ -106,15 +105,15 @@ function AuthenticatedAnalyticsDashboard() {
 
           <div className="analytics-overview-grid">
             <section className="analytics-section">
-              <h2>Current Status</h2>
-              <div className="analytics-status-list">{summary.status_counts.map((item) => <div key={item.status}><span>{labelize(item.status)}</span><strong>{item.count}</strong></div>)}</div>
+              <SectionHeader title="Current status" description="Exact application counts by current state." />
+              <div className="analytics-status-list">{summary.status_counts.map((item) => <div key={item.status}><Badge tone="neutral">{labelize(item.status)}</Badge><strong>{item.count}</strong></div>)}</div>
             </section>
             <section className="analytics-section">
-              <h2>Application Trend</h2>
-              {summary.application_trend.length ? <div className="analytics-trend">{summary.application_trend.map((item) => <div key={item.period}><span>{item.period}</span><div><i style={{ width: `${Math.max(4, item.count * 100 / maxTrendCount)}%` }} /></div><strong>{item.count}</strong></div>)}</div> : <p className="empty">No applications in this range.</p>}
+              <SectionHeader title="Application trend" description="Applications added in each reporting period." />
+              {summary.application_trend.length ? <div className="analytics-trend">{summary.application_trend.map((item) => <div key={item.period}><span>{item.period}</span><div role="img" aria-label={`${item.count} applications in ${item.period}`}><i style={{ width: `${Math.max(4, item.count * 100 / maxTrendCount)}%` }} /></div><strong>{item.count}</strong></div>)}</div> : <EmptyState compact icon={BarChart3} title="No application trend" description="No applications fall within this date range." />}
             </section>
             <section className="analytics-section">
-              <h2>Response Timing</h2>
+              <SectionHeader title="Response timing" description="Average, median, and sample size are shown together." />
               <div className="analytics-timing">{summary.durations.map((item) => <div key={item.metric}><strong>{labelize(item.metric)}</strong><span>Average: {hours(item.average_hours)}</span><span>Median: {hours(item.median_hours)}</span><span>Sample: {item.sample_size}</span></div>)}</div>
             </section>
           </div>
@@ -123,7 +122,7 @@ function AuthenticatedAnalyticsDashboard() {
           <PerformanceTable title="Resume-Version Performance" groups={summary.resume_version_performance} empty="Attach exact resume versions to submitted applications to see this comparison." />
 
           <section className="analytics-section">
-            <div className="section-heading"><div><h2>Metric Definitions</h2><p className="metadata">Formula version {summary.metric_version} | {summary.timezone}</p></div></div>
+            <SectionHeader title="Metric definitions" description={`Formula version ${summary.metric_version} | ${summary.timezone}`} />
             <div className="analytics-definitions">{summary.definitions.map((item) => <article key={item.metric}><strong>{item.metric}</strong><p>{item.definition}</p><p className="metadata">Denominator: {item.denominator}</p></article>)}</div>
           </section>
         </>
@@ -135,8 +134,8 @@ function AuthenticatedAnalyticsDashboard() {
 function PerformanceTable({ title, groups, empty }: { title: string; groups: AnalyticsPerformanceGroup[]; empty: string }) {
   return (
     <section className="analytics-section">
-      <h2>{title}</h2>
-      {groups.length ? <div className="analytics-table-wrap"><table className="analytics-table"><thead><tr><th>Group</th><th>Sample</th><th>Response</th><th>Interview</th><th>Offer</th><th>Rejected</th><th>Withdrawn</th></tr></thead><tbody>{groups.map((group) => <tr key={group.key}><td><strong>{group.label}</strong>{group.small_sample ? <span className="small-sample">Small sample</span> : null}</td><td>{group.sample_size}</td><td>{percentage(group.response_rate)}</td><td>{percentage(group.interview_rate)}</td><td>{percentage(group.offer_rate)}</td><td>{percentage(group.rejection_rate)}</td><td>{percentage(group.withdrawal_rate)}</td></tr>)}</tbody></table></div> : <p className="empty">{empty}</p>}
+      <SectionHeader title={title} description="Rates include exact percentages and sample sizes." />
+      {groups.length ? <div className="analytics-table-wrap"><table className="analytics-table"><thead><tr><th>Group</th><th>Sample</th><th>Response</th><th>Interview</th><th>Offer</th><th>Rejected</th><th>Withdrawn</th></tr></thead><tbody>{groups.map((group) => <tr key={group.key}><td><strong>{group.label}</strong>{group.small_sample ? <Badge tone="warning">Small sample</Badge> : null}</td><td>{group.sample_size}</td><td>{percentage(group.response_rate)}</td><td>{percentage(group.interview_rate)}</td><td>{percentage(group.offer_rate)}</td><td>{percentage(group.rejection_rate)}</td><td>{percentage(group.withdrawal_rate)}</td></tr>)}</tbody></table></div> : <EmptyState compact icon={BarChart3} title={`No ${title.toLowerCase()}`} description={empty} />}
     </section>
   );
 }

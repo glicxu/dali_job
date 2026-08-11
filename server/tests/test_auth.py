@@ -140,6 +140,7 @@ def test_registration_requires_email_verification(tmp_path: Path) -> None:
     assert verify.status_code == 200
     assert verify.json()["user"]["email"] == "user@example.com"
     assert verify.json()["user"]["role"] == "user"
+    assert verify.json()["user"]["tutorial_completed"] is False
     assert "access_token" not in verify.json()
     assert client.cookies.get("dalijob_session")
     assert client.cookies.get("dalijob_csrf")
@@ -147,6 +148,11 @@ def test_registration_requires_email_verification(tmp_path: Path) -> None:
     csrf = client.get("/api/v1/auth/csrf")
     assert csrf.status_code == 200
     assert csrf.json()["csrf_token"] == client.cookies.get("dalijob_csrf")
+
+    completed = client.post("/api/v1/me/tutorial/complete", headers=_csrf_headers(client))
+    assert completed.status_code == 200
+    assert completed.json()["tutorial_completed"] is True
+    assert client.get("/api/v1/me").json()["tutorial_completed"] is True
 
 
 def test_user_reports_and_admin_boundary_are_enforced_and_audited(tmp_path: Path) -> None:

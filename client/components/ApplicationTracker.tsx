@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { BriefcaseBusiness, ChevronDown, ClipboardPlus, RefreshCw } from "lucide-react";
 import {
   addApplicationNote,
   addApplicationTask,
@@ -33,6 +34,7 @@ import {
   updateApplication,
   updateApplicationTask,
 } from "../lib/api";
+import { AlertBanner, Badge, Button, EmptyState, SectionHeader, SkeletonRows, ToastRegion, Toolbar } from "./ui";
 
 const statusOptions: ApplicationStatus[] = [
   "interested",
@@ -101,6 +103,20 @@ function applicationTitle(application: TrackedApplication | ApplicationDetail): 
 
 function applicationCompany(application: TrackedApplication | ApplicationDetail): string {
   return application.job?.company || "Unknown company";
+}
+
+function applicationStatusTone(status: ApplicationStatus): "neutral" | "info" | "success" | "warning" | "danger" {
+  if (status === "accepted" || status === "offer") return "success";
+  if (status === "rejected" || status === "withdrawn") return "danger";
+  if (status === "interviewing") return "info";
+  if (status === "applied") return "warning";
+  return "neutral";
+}
+
+function applicationPriorityTone(priority: ApplicationPriority): "neutral" | "info" | "danger" {
+  if (priority === "high") return "danger";
+  if (priority === "normal") return "info";
+  return "neutral";
 }
 
 type ApplicationTrackerProps = {
@@ -488,16 +504,11 @@ function AuthenticatedApplicationTracker({ applicationId }: ApplicationTrackerPr
 
   return (
     <div className="applications-manager">
-      {error ? <div className="error-banner">{error}</div> : null}
-      {statusMessage ? <div className="status-banner">{statusMessage}</div> : null}
+      {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
+      <ToastRegion message={statusMessage} onDismiss={() => setStatusMessage(null)} />
 
-      {!isDetailPage ? <section className="profile-card">
-        <div className="profile-card-header">
-          <div>
-            <h2>Create Application</h2>
-            <p className="metadata">Start tracking from a saved job.</p>
-          </div>
-        </div>
+      {!isDetailPage ? <section className="profile-card application-create-card">
+        <SectionHeader title="Create application" description="Start tracking from one of your saved jobs." />
         <form className="inline-form" onSubmit={createNewApplication}>
           <label>
             Saved Job
@@ -510,21 +521,17 @@ function AuthenticatedApplicationTracker({ applicationId }: ApplicationTrackerPr
               ))}
             </select>
           </label>
-          <button type="submit" disabled={isSaving || !selectedJobId}>
-            {isSaving ? "Creating..." : "Create Application"}
-          </button>
+          <Button type="submit" icon={ClipboardPlus} loading={isSaving} disabled={!selectedJobId}>Create Application</Button>
         </form>
       </section> : null}
 
       <section className={isDetailPage ? "application-detail-page" : "applications-workspace"}>
         {!isDetailPage ? <section className="profile-card applications-list-card">
           <div className="profile-card-header">
-            <h2>Applications</h2>
-            <button type="button" className="secondary-button" onClick={() => void loadApplications()}>
-              Refresh
-            </button>
+            <SectionHeader title="Applications" description={`${applications.length} tracked application${applications.length === 1 ? "" : "s"}`} />
+            <Button type="button" variant="secondary" size="compact" icon={RefreshCw} onClick={() => void loadApplications()}>Refresh</Button>
           </div>
-          <div className="inline-form">
+          <Toolbar label="Application filters" className="application-filter-bar">
             <label>
               Status
               <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as ApplicationStatus | "")}>
@@ -551,27 +558,30 @@ function AuthenticatedApplicationTracker({ applicationId }: ApplicationTrackerPr
               />
               <span>Show archived</span>
             </label>
-          </div>
-          {isLoading ? <p className="empty">Loading applications.</p> : null}
-          {!isLoading && !applications.length ? <p className="empty">No applications yet.</p> : null}
+          </Toolbar>
+          {isLoading ? <SkeletonRows count={4} /> : null}
+          {!isLoading && !applications.length ? <EmptyState icon={BriefcaseBusiness} title="No applications yet" description="Create an application from a saved job to begin tracking its progress." /> : null}
           <div className="application-list">
             {applications.map((application) => (
               <button
                 type="button"
                 key={application.id}
                 className={`application-row${selectedApplication?.id === application.id ? " selected" : ""}`}
+                aria-pressed={selectedApplication?.id === application.id}
                 onClick={() => toggleApplication(application.id)}
               >
-                <span className={`status-pill status-${application.status}`}>{labelize(application.status)}</span>
+                <Badge tone={applicationStatusTone(application.status)}>{labelize(application.status)}</Badge>
                 <span>
-                  <strong>
-                    {applicationTitle(application)}{application.archived_at ? " (Archived)" : ""}
-                  </strong>
-                  <span className="metadata">
-                    {applicationCompany(application)} | Priority {application.priority}
-                    {application.stage ? ` | Stage: ${labelize(application.stage)}` : ""}
-                    {application.next_action_label ? ` | Next: ${application.next_action_label}` : ""}
+                  <span className="application-row-heading">
+                    <strong>{applicationTitle(application)}</strong>
+                    <Badge tone={applicationPriorityTone(application.priority)}>{labelize(application.priority)} priority</Badge>
+                    {application.archived_at ? <Badge tone="neutral">Archived</Badge> : null}
                   </span>
+                  <span className="metadata">
+                    {applicationCompany(application)}
+                    {application.stage ? ` | Stage: ${labelize(application.stage)}` : ""}
+                  </span>
+                  {application.next_action_label ? <span className="application-next-action">Next: {application.next_action_label}</span> : null}
                 </span>
               </button>
             ))}
@@ -1107,14 +1117,11 @@ function AuthenticatedApplicationTracker({ applicationId }: ApplicationTrackerPr
               />
             )
           ) : (
-            <section className="profile-card">
-              <h2>Application Detail</h2>
-              <p className="empty">
-                {isDetailPage
-                  ? "Loading application details."
-                  : "Select an application to view its summary and attached documents."}
-              </p>
-            </section>
+            <EmptyState
+              icon={BriefcaseBusiness}
+              title="Application details"
+              description={isDetailPage ? "Loading application details." : "Select an application to review its status, tasks, interviews, notes, and documents."}
+            />
           )}
         </div>
       </section>
@@ -1283,7 +1290,7 @@ function CollapsibleApplicationSection({
           <strong>{title}</strong>
           <span className="metadata">{description}</span>
         </span>
-        <span>{expanded ? "Hide" : "Show"}</span>
+        <ChevronDown className="application-toggle-chevron" size={18} aria-hidden="true" />
       </button>
       {expanded ? <div className="application-editor-collapsible-content">{children}</div> : null}
     </section>
@@ -1293,7 +1300,7 @@ function CollapsibleApplicationSection({
 function ApplicationTrackerPreview() {
   return (
     <div className="applications-manager">
-      <div className="warning-banner">Login is required to create, update, and track applications.</div>
+      <AlertBanner tone="warning">Login is required to create, update, and track applications.</AlertBanner>
       <section className="profile-card">
         <h2>Create Application</h2>
         <p className="metadata">Start tracking from a saved job after login.</p>

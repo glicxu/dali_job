@@ -20,6 +20,7 @@ def test_health_endpoint_is_in_openapi_contract() -> None:
     assert "/api/v1/operations/cover-letter" in schema["paths"]
     assert "/api/v1/reports" in schema["paths"]
     assert "/api/v1/admin/reports" in schema["paths"]
+    assert "/api/v1/me/tutorial/complete" in schema["paths"]
 
 
 def test_health_endpoint_returns_ok() -> None:
@@ -44,3 +45,4 @@ def test_me_endpoint_returns_dev_identity_by_default() -> None:
     assert body["provider"] == "dev"
     assert body["email"] == "local.user@dalijob.dev"
     assert body["role"] == "admin"
+    assert body["tutorial_completed"] is True

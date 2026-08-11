@@ -1,13 +1,16 @@
 import { InterviewManager } from "../../components/InterviewManager";
+import { PageHeader } from "../../components/ui";
+import { MessagesSquare } from "lucide-react";
 
 export default function InterviewsPage() {
   return (
     <section className="panel interviews-page">
-      <div>
-        <p className="eyebrow">Interview Preparation</p>
-        <h1>Interviews</h1>
-        <p className="lede">Add scheduled interviews, keep private notes, and build evidence-based preparation guides.</p>
-      </div>
+      <PageHeader
+        eyebrow="Interview Preparation"
+        title="Interviews"
+        description="Add scheduled interviews, keep private notes, and build evidence-based preparation guides."
+        icon={MessagesSquare}
+      />
       <InterviewManager />
     </section>
   );

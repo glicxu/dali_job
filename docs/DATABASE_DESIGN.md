@@ -140,6 +140,7 @@ Resume/document readiness and interview stage are separate from lifecycle status
 | updated_at | timestamptz | Required |
 | email_verified_at | timestamptz | Nullable until the registration email is verified; existing pre-verification accounts are backfilled during migration |
 | password_changed_at | timestamptz | Nullable; set when password recovery changes credentials |
+| tutorial_completed_at | timestamptz | Nullable for new accounts until first-run onboarding is completed or skipped; replay does not clear it |
 | deleted_at | timestamptz | Nullable |
 
 ### auth_sessions

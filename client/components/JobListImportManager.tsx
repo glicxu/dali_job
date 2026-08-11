@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { BriefcaseBusiness, Check, ListPlus, Plus, SearchCheck, X } from "lucide-react";
 import {
   discoverJobList,
   getAuthToken,
@@ -11,6 +12,16 @@ import {
   listResumeProfiles,
   ResumeProfile,
 } from "../lib/api";
+import {
+  AlertBanner,
+  Badge,
+  Button,
+  EmptyState,
+  MatchScoreBadge,
+  SectionHeader,
+  ToastRegion,
+  Toolbar,
+} from "./ui";
 
 export function JobListImportManager() {
   if (!getAuthToken()) {
@@ -158,19 +169,14 @@ function AuthenticatedJobListImportManager() {
   }
 
   return (
-    <div className="jobs-manager">
-      {error ? <div className="error-banner">{error}</div> : null}
-      {status ? <div className="status-banner">{status}</div> : null}
+    <div className="jobs-manager job-creation-manager">
+      {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
+      <ToastRegion message={status} onDismiss={() => setStatus(null)} />
 
-      <section className="profile-card">
-        <div className="profile-card-header">
-          <div>
-            <h2>Discover Jobs From List URL</h2>
-            <p className="metadata">Paste a public job search or listing page. Review discovered jobs before import.</p>
-          </div>
-        </div>
+      <section className="profile-card job-creation-card">
+        <SectionHeader title="Import from a job list URL" description="Paste a public job search or listing page, then review every discovered posting before import." />
 
-        <form className="inline-form resume-upload-form" onSubmit={discover}>
+        <form className="stack-form" onSubmit={discover}>
           <label>
             Job list URL
             <input
@@ -181,38 +187,29 @@ function AuthenticatedJobListImportManager() {
               required
             />
           </label>
-          <button type="submit" disabled={isDiscovering}>
-            {isDiscovering ? "Discovering..." : "Discover Jobs"}
-          </button>
+          <Button type="submit" icon={SearchCheck} loading={isDiscovering}>Discover Jobs</Button>
         </form>
       </section>
 
       {result ? (
         <section className="profile-card">
           <div className="profile-card-header">
-            <div>
-              <h2>Review Discovered Jobs</h2>
-              <p className="metadata">
-                {selectedCount} of {candidates.length} selected.
-              </p>
-            </div>
-            <div className="button-row">
-              <button type="button" className="secondary-button" onClick={() => setSelectedUrls(new Set())}>
-                Clear
-              </button>
-              <button type="button" className="secondary-button" onClick={() => setAllCandidates(candidates)}>
-                Select All
-              </button>
-            </div>
+            <SectionHeader title="Review Discovered Jobs" description={`${selectedCount} of ${candidates.length} selected`} />
+            <Toolbar label="Discovered job selection">
+              <Button type="button" variant="ghost" icon={X} onClick={() => setSelectedUrls(new Set())}>Clear</Button>
+              <Button type="button" variant="secondary" icon={Check} onClick={() => setAllCandidates(candidates)}>Select All</Button>
+            </Toolbar>
           </div>
 
           {result.warnings.length ? (
-            <div className="warning-banner">
+            <AlertBanner tone="warning">
               {result.warnings.map((warning) => (
-                <span key={warning}>{warning}</span>
+                <p key={warning}>{warning}</p>
               ))}
-            </div>
+            </AlertBanner>
           ) : null}
+
+          {!candidates.length ? <EmptyState icon={BriefcaseBusiness} title="No postings discovered" description="Try another list page or import one job URL directly." /> : null}
 
           <div className="bulk-import-table">
             <div className="bulk-import-row bulk-import-header">
@@ -233,7 +230,7 @@ function AuthenticatedJobListImportManager() {
                   <strong>{candidate.title || "Untitled job"}</strong>
                   <span className="metadata">{candidate.company || candidate.source_url}</span>
                 </span>
-                <span className="score-badge">{candidate.status.replace("_", " ")}</span>
+                <Badge tone={candidate.status === "new" ? "info" : "neutral"}>{candidate.status.replace("_", " ")}</Badge>
               </label>
             ))}
           </div>
@@ -260,18 +257,20 @@ function AuthenticatedJobListImportManager() {
           </div>
 
           {result.next_page_url ? (
-            <button
+            <Button
               type="button"
-              className="secondary-button"
+              variant="secondary"
+              icon={Plus}
+              loading={isLoadingMore}
               disabled={isLoadingMore}
               onClick={() => void loadMore()}
             >
-              {isLoadingMore ? "Loading..." : "Load More"}
-            </button>
+              Load More
+            </Button>
           ) : null}
-          <button type="button" disabled={!canImport || isImporting} onClick={() => void importSelected()}>
-            {isImporting ? "Importing..." : `Import ${selectedCount} Selected`}
-          </button>
+          <Button type="button" icon={ListPlus} loading={isImporting} disabled={!canImport || isImporting} onClick={() => void importSelected()}>
+            Import {selectedCount} Selected
+          </Button>
         </section>
       ) : null}
 
@@ -283,7 +282,7 @@ function AuthenticatedJobListImportManager() {
               {importResult.imported.map((item) => (
                 <article className="job-row" key={`${item.user_job_id}-${item.source_url}`}>
                   <div className="job-score-cell">
-                    <span className="score-badge">{item.match_score === null ? "N/A" : `${item.match_score}/10`}</span>
+                    <MatchScoreBadge score={item.match_score} />
                   </div>
                   <div>
                     <h2>{item.title || "Untitled Job"}</h2>
@@ -313,18 +312,18 @@ function AuthenticatedJobListImportManager() {
 
 function JobListImportPreview() {
   return (
-    <div className="jobs-manager">
+    <div className="jobs-manager job-creation-manager">
       <div className="warning-banner">
         Login is required to discover, scrape, import, and match jobs from a list URL.
       </div>
-      <section className="profile-card">
+      <section className="profile-card job-creation-card">
         <div className="profile-card-header">
           <div>
             <h2>Discover Jobs From List URL</h2>
             <p className="metadata">Paste a job search page after login and review discovered postings.</p>
           </div>
         </div>
-        <form className="inline-form resume-upload-form">
+        <form className="stack-form">
           <label>
             Job list URL
             <input value="https://company.com/careers/search" readOnly />

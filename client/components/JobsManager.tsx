@@ -2,6 +2,21 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  Archive,
+  BriefcaseBusiness,
+  ChevronDown,
+  ExternalLink,
+  FilePenLine,
+  Link2,
+  ListChecks,
+  ListPlus,
+  RotateCcw,
+  SearchCheck,
+  Target,
+  Trash2,
+  X,
+} from "lucide-react";
+import {
   analyzeJob,
   archiveJob,
   bulkDeleteJobs,
@@ -23,9 +38,20 @@ import {
   StoredDocument,
   updateJob,
 } from "../lib/api";
+import {
+  AlertBanner,
+  Badge,
+  Button,
+  EmptyState,
+  MatchScoreBadge,
+  SectionHeader,
+  SkeletonRows,
+  ToastRegion,
+  Toolbar,
+} from "./ui";
 
 type ImportMode = "url" | "manual";
-type BulkMode = "match" | "remove" | null;
+type JobDetailTab = "details" | "match";
 type ArrayField =
   | "responsibilities"
   | "required_skills"
@@ -48,6 +74,7 @@ type JobEditorState = {
   showSaveButton: boolean;
   hasUserEdits: boolean;
   isEditing: boolean;
+  hasStructuredData: boolean;
   archived_at: string | null;
 };
 
@@ -119,6 +146,7 @@ function emptyEditorState(): JobEditorState {
     showSaveButton: true,
     hasUserEdits: true,
     isEditing: true,
+    hasStructuredData: true,
     archived_at: null,
   };
 }
@@ -139,6 +167,7 @@ function editorFromJob(job: StoredJob, showSaveButton = true): JobEditorState {
     showSaveButton,
     hasUserEdits: false,
     isEditing: false,
+    hasStructuredData: Boolean(job.job_data),
     archived_at: job.archived_at,
   };
 }
@@ -261,6 +290,13 @@ function notePreviewLines(notes: string | null): string[] {
   return preview;
 }
 
+function descriptionParagraphs(value: string): string[] {
+  return value
+    .split(/\n{2,}|\r?\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+}
+
 export function JobsManager({ creationMode = null }: { creationMode?: ImportMode | null } = {}) {
   if (!getAuthToken()) {
     return creationMode ? <JobCreationPreview mode={creationMode} /> : <JobsManagerPreview />;
@@ -279,15 +315,19 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
   );
   const [matchDataJob, setMatchDataJob] = useState<StoredJob | null>(null);
   const [matchHistory, setMatchHistory] = useState<JobResumeMatchHistory[]>([]);
+  const [detailTab, setDetailTab] = useState<JobDetailTab>("details");
+  const [isMatchHistoryLoading, setIsMatchHistoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isParsing, setIsParsing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [analyzingJobId, setAnalyzingJobId] = useState<number | null>(null);
-  const [bulkMode, setBulkMode] = useState<BulkMode>(null);
+  const [isAnalyzingAll, setIsAnalyzingAll] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
   const [selectedBulkJobIds, setSelectedBulkJobIds] = useState<number[]>([]);
   const [isBulkRemoving, setIsBulkRemoving] = useState(false);
+  const [isBulkArchiving, setIsBulkArchiving] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
@@ -297,6 +337,8 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
   }, [creationMode]);
 
   const sortedJobs = useMemo(() => jobs, [jobs]);
+  const unanalyzedJobs = useMemo(() => jobs.filter((job) => !job.job_data), [jobs]);
+  const isSelectionActionPending = isBulkRemoving || isBulkArchiving;
 
   async function loadJobs() {
     setError(null);
@@ -337,6 +379,7 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
       } else {
         setEditor(editorFromJob(requestedJob));
         setMatchDataJob(null);
+        setDetailTab(requestedView === "match" ? "match" : "details");
       }
     }
   }, [jobs]);
@@ -347,19 +390,20 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
     );
   }
 
-  function startBulkMatch() {
-    setBulkMode("match");
+  function startSelectionMode() {
+    setSelectionMode(true);
     setSelectedBulkJobIds([]);
   }
 
-  function startBulkRemove() {
-    setBulkMode("remove");
+  function cancelSelectionMode() {
+    setSelectionMode(false);
     setSelectedBulkJobIds([]);
   }
 
-  function cancelBulkMode() {
-    setBulkMode(null);
-    setSelectedBulkJobIds([]);
+  function toggleSelectAllJobs() {
+    setSelectedBulkJobIds((current) =>
+      current.length === sortedJobs.length ? [] : sortedJobs.map((job) => job.id),
+    );
   }
 
   function matchSelectedJobs() {
@@ -371,6 +415,7 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
 
   async function removeSelectedJobs() {
     if (!selectedBulkJobIds.length) return;
+    if (!window.confirm(`Remove ${selectedBulkJobIds.length} selected saved job${selectedBulkJobIds.length === 1 ? "" : "s"}?`)) return;
     setError(null);
     setStatus(null);
     setIsBulkRemoving(true);
@@ -388,11 +433,51 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
         ? ` ${result.blocked_jobs.map((item) => item.message).join(" ")}`
         : "";
       setStatus(`${removedMessage}${blockedMessage}`);
-      cancelBulkMode();
+      if (result.blocked_jobs.length) {
+        setSelectedBulkJobIds(result.blocked_jobs.flatMap((item) => item.record_id ? [item.record_id] : []));
+      } else {
+        cancelSelectionMode();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Bulk remove failed.");
     } finally {
       setIsBulkRemoving(false);
+    }
+  }
+
+  async function updateSelectedArchiveState() {
+    if (!selectedBulkJobIds.length) return;
+    setError(null);
+    setStatus(null);
+    setIsBulkArchiving(true);
+    try {
+      const results = await Promise.all(
+        selectedBulkJobIds.map(async (jobId) => {
+          try {
+            if (showArchived) await restoreJob(jobId);
+            else await archiveJob(jobId);
+            return { jobId, succeeded: true };
+          } catch {
+            return { jobId, succeeded: false };
+          }
+        }),
+      );
+      const completedIds = results.filter((result) => result.succeeded).map((result) => result.jobId);
+      const failedIds = results.filter((result) => !result.succeeded).map((result) => result.jobId);
+      setJobs((current) => current.filter((job) => !completedIds.includes(job.id)));
+      if (editor?.id && completedIds.includes(editor.id)) setEditor(null);
+      if (matchDataJob?.id && completedIds.includes(matchDataJob.id)) setMatchDataJob(null);
+
+      const action = showArchived ? "restored" : "archived";
+      setStatus(`${completedIds.length} saved job${completedIds.length === 1 ? "" : "s"} ${action}.`);
+      if (failedIds.length) {
+        setSelectedBulkJobIds(failedIds);
+        setError(`${failedIds.length} selected job${failedIds.length === 1 ? "" : "s"} could not be ${action}.`);
+      } else {
+        cancelSelectionMode();
+      }
+    } finally {
+      setIsBulkArchiving(false);
     }
   }
 
@@ -414,6 +499,7 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
         showSaveButton: true,
         hasUserEdits: false,
         isEditing: true,
+        hasStructuredData: true,
         archived_at: null,
       });
       setStatus("Review and edit the parsed job before saving.");
@@ -481,6 +567,9 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
         return;
       }
       setEditor(null);
+      setMatchDataJob(null);
+      setMatchHistory([]);
+      setDetailTab("details");
       setStatus(editor.id ? "Job updated." : "Job saved.");
       await loadJobs();
     } catch (err) {
@@ -497,6 +586,9 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
     try {
       const analyzed = await analyzeJob(job.id);
       setJobs((current) => current.map((item) => (item.id === analyzed.id ? analyzed : item)));
+      if (editor?.id === analyzed.id) {
+        setEditor(editorFromJob(analyzed));
+      }
       setStatus("Job analysis completed.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Job analysis failed.");
@@ -505,16 +597,57 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
     }
   }
 
+  async function analyzeAllJobs() {
+    if (!unanalyzedJobs.length || isAnalyzingAll) return;
+    setError(null);
+    setStatus(null);
+    setIsAnalyzingAll(true);
+    let completed = 0;
+    let failed = 0;
+
+    try {
+      for (const job of unanalyzedJobs) {
+        try {
+          const analyzed = await analyzeJob(job.id);
+          setJobs((current) => current.map((item) => (item.id === analyzed.id ? analyzed : item)));
+          setEditor((current) => current?.id === analyzed.id ? editorFromJob(analyzed) : current);
+          completed += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+
+      setStatus(`${completed} job${completed === 1 ? "" : "s"} analyzed.`);
+      if (failed) {
+        setError(`${failed} job${failed === 1 ? "" : "s"} could not be analyzed. You can retry them individually.`);
+      }
+    } finally {
+      setIsAnalyzingAll(false);
+    }
+  }
+
   async function openMatchHistory(job: StoredJob) {
     setError(null);
+    setDetailTab("match");
+    setEditor((current) => current?.id === job.id ? current : editorFromJob(job));
+    setMatchDataJob(null);
+    setIsMatchHistoryLoading(true);
     try {
       const payload = await listJobMatches(job.id);
       setMatchHistory(payload.matches);
       setMatchDataJob(job);
-      setEditor(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Match history failed to load.");
+    } finally {
+      setIsMatchHistoryLoading(false);
     }
+  }
+
+  function closeSelectedJob() {
+    setEditor(null);
+    setMatchDataJob(null);
+    setMatchHistory([]);
+    setDetailTab("details");
   }
 
   async function archiveSavedJob(jobId: number) {
@@ -535,6 +668,9 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
     try {
       await restoreJob(jobId);
       setEditor(null);
+      setMatchDataJob(null);
+      setMatchHistory([]);
+      setDetailTab("details");
       setStatus("Saved job restored.");
       await loadJobs();
     } catch (err) {
@@ -559,15 +695,12 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
   if (creationMode) {
     return (
       <div className="jobs-manager job-creation-manager">
-        {error ? <div className="error-banner">{error}</div> : null}
-        {status ? <div className="status-banner">{status}</div> : null}
+        {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
+        <ToastRegion message={status} onDismiss={() => setStatus(null)} />
 
         {creationMode === "url" && !editor ? (
           <section className="profile-card job-creation-card">
-            <div>
-              <h2>Import from a job URL</h2>
-              <p className="metadata">Paste one job posting URL to extract a reviewable job profile.</p>
-            </div>
+            <SectionHeader title="Import from a job URL" description="Paste one public job posting URL to extract a reviewable job profile." />
             <form className="stack-form" onSubmit={parseDraft}>
               <label>
                 Job URL
@@ -579,9 +712,7 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
                   required
                 />
               </label>
-              <button type="submit" disabled={isParsing}>
-                {isParsing ? "Parsing..." : "Create Job Profile"}
-              </button>
+              <Button type="submit" icon={SearchCheck} loading={isParsing}>Create Job Profile</Button>
             </form>
           </section>
         ) : null}
@@ -606,106 +737,156 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
     );
   }
 
+  const selectedDetailJob = editor?.id
+    ? jobs.find((job) => job.id === editor.id) ?? matchDataJob
+    : matchDataJob;
+
   return (
     <div className="jobs-manager">
-      {error ? <div className="error-banner">{error}</div> : null}
-      {status ? <div className="status-banner">{status}</div> : null}
+      {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
+      <ToastRegion message={status} onDismiss={() => setStatus(null)} />
 
       <section className="profile-card job-add-card">
-        <div>
-          <h2>Add a Job</h2>
-          <p className="metadata">Import one job description, multiple jobs from a search list, or add one manually.</p>
-        </div>
+        <SectionHeader title="Add a Job" description="Import one posting, discover a list, or create a private manual entry." />
         <div className="job-create-actions" aria-label="Create a saved job">
-          <a className="button-link" href="/jobs/import-url">Import Job</a>
-          <a className="button-link secondary-button" href="/jobs/import">Import Job List</a>
-          <a className="button-link secondary-button" href="/jobs/manual">Create Manual Job</a>
+          <a className="button-link action-with-icon" href="/jobs/import-url"><Link2 size={17} aria-hidden="true" /> Import Job</a>
+          <a className="button-link secondary-button action-with-icon" href="/jobs/import"><ListPlus size={17} aria-hidden="true" /> Import Job List</a>
+          <a className="button-link secondary-button action-with-icon" href="/jobs/manual"><FilePenLine size={17} aria-hidden="true" /> Create Manual Job</a>
         </div>
       </section>
 
       <section className="saved-jobs-workspace">
         <section className="profile-card saved-jobs-list-card">
           <div className="profile-card-header">
-            <h2>Saved Jobs</h2>
-            <div className="button-row">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={showArchived}
-                  onChange={(event) => setShowArchived(event.target.checked)}
-                />{" "}
-                Show archived
-              </label>
-              {bulkMode ? (
+            <SectionHeader title="Saved Jobs" description={`${sortedJobs.length} ${showArchived ? "archived" : "active"} job${sortedJobs.length === 1 ? "" : "s"}`} />
+            <Toolbar label="Saved job actions" className="saved-jobs-toolbar">
+              {!selectionMode ? (
+                <label className="checkbox-row compact-toggle">
+                  <input
+                    type="checkbox"
+                    checked={showArchived}
+                    onChange={(event) => setShowArchived(event.target.checked)}
+                  />
+                  <span>Archived</span>
+                </label>
+              ) : null}
+              {selectionMode ? (
                 <>
-                  <button type="button" className="secondary-button" onClick={cancelBulkMode}>
-                    Cancel
-                  </button>
-                  {bulkMode === "match" ? (
-                    <button type="button" disabled={!selectedBulkJobIds.length} onClick={matchSelectedJobs}>
-                      Match with Selected
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={!selectedBulkJobIds.length || isBulkRemoving}
-                      onClick={() => void removeSelectedJobs()}
-                    >
-                      {isBulkRemoving ? "Removing..." : "Remove Selected"}
-                    </button>
-                  )}
+                  <span className="selection-count" aria-live="polite">{selectedBulkJobIds.length} selected</span>
+                  <Button type="button" variant="secondary" icon={ListChecks} disabled={isSelectionActionPending} onClick={toggleSelectAllJobs}>
+                    {selectedBulkJobIds.length === sortedJobs.length && sortedJobs.length > 0 ? "Clear All" : "Select All"}
+                  </Button>
+                  <Button type="button" icon={Target} disabled={!selectedBulkJobIds.length || isSelectionActionPending} onClick={matchSelectedJobs}>Match</Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    icon={showArchived ? RotateCcw : Archive}
+                    loading={isBulkArchiving}
+                    disabled={!selectedBulkJobIds.length || isSelectionActionPending}
+                    onClick={() => void updateSelectedArchiveState()}
+                  >
+                    {showArchived ? "Restore" : "Archive"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    icon={Trash2}
+                    loading={isBulkRemoving}
+                    disabled={!selectedBulkJobIds.length || isSelectionActionPending}
+                    onClick={() => void removeSelectedJobs()}
+                  >
+                    Remove
+                  </Button>
+                  <Button type="button" variant="ghost" icon={X} disabled={isSelectionActionPending} onClick={cancelSelectionMode}>Cancel</Button>
                 </>
               ) : (
                 <>
-                  <button type="button" onClick={startBulkMatch}>
-                    Bulk Match
-                  </button>
-                  <button type="button" className="secondary-button" onClick={startBulkRemove}>
-                    Bulk Remove
-                  </button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    icon={SearchCheck}
+                    loading={isAnalyzingAll}
+                    disabled={!unanalyzedJobs.length || analyzingJobId !== null}
+                    onClick={() => void analyzeAllJobs()}
+                  >
+                    Analyze All
+                  </Button>
+                  <Button type="button" icon={ListChecks} disabled={!sortedJobs.length || isAnalyzingAll} onClick={startSelectionMode}>Select Jobs</Button>
                 </>
               )}
-              <button type="button" className="secondary-button" onClick={() => void loadJobs()}>
-                Refresh
-              </button>
-            </div>
+            </Toolbar>
           </div>
-          {bulkMode ? (
+          {selectionMode ? (
             <p className="metadata">
-              {bulkMode === "match"
-                ? "Select saved jobs to compare against one resume on the Match page."
-                : "Select saved jobs to remove from your saved jobs list."}
+              Select jobs, then choose Match, {showArchived ? "Restore" : "Archive"}, or Remove.
             </p>
           ) : null}
-          {isLoading ? <p className="empty">Loading jobs.</p> : null}
-          {!isLoading && !sortedJobs.length ? <p className="empty">No saved jobs.</p> : null}
+          {isLoading ? <SkeletonRows count={4} /> : null}
+          {!isLoading && !sortedJobs.length ? (
+            <EmptyState icon={BriefcaseBusiness} title={showArchived ? "No archived jobs" : "No saved jobs"} description={showArchived ? "Archived jobs will appear here." : "Import a posting or search for a role to start your saved list."} />
+          ) : null}
           <div className="job-list">
             {sortedJobs.map((job) => {
               const jobData = jobDataOrEmpty(job);
-              const hasJobData = Boolean(job.job_data);
               const isSelected = editor?.id === job.id || matchDataJob?.id === job.id;
+              const isSelectedForAction = selectedBulkJobIds.includes(job.id);
               return (
                 <article
-                  className={`job-row${bulkMode ? " job-row-bulk" : ""}${isSelected ? " selected" : ""}`}
+                  className={`job-row${selectionMode ? " job-row-bulk" : ""}${isSelectedForAction ? " selected-for-action" : ""}${isSelected ? " selected" : ""}`}
                   key={job.id}
+                  role={selectionMode ? "checkbox" : "button"}
+                  aria-label={selectionMode ? `Select ${job.title || "Untitled Job"}` : `View ${job.title || "Untitled Job"}`}
+                  aria-checked={selectionMode ? isSelectedForAction : undefined}
+                  aria-disabled={selectionMode ? isSelectionActionPending : undefined}
+                  tabIndex={!selectionMode || !isSelectionActionPending ? 0 : undefined}
+                  onClick={() => {
+                    if (selectionMode) {
+                      if (!isSelectionActionPending) toggleBulkJob(job.id);
+                      return;
+                    }
+                    setEditor(editorFromJob(job));
+                    setMatchDataJob(null);
+                    setMatchHistory([]);
+                    setDetailTab("details");
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.target !== event.currentTarget) return;
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      if (selectionMode) {
+                        if (!isSelectionActionPending) toggleBulkJob(job.id);
+                        return;
+                      }
+                      setEditor(editorFromJob(job));
+                      setMatchDataJob(null);
+                      setMatchHistory([]);
+                      setDetailTab("details");
+                    }
+                  }}
                 >
-                  {bulkMode ? (
-                    <label className="bulk-job-checkbox" aria-label={`Select ${job.title || "Untitled Job"}`}>
+                  {isSelected ? <span className="sr-only">Selected job</span> : null}
+                  {selectionMode ? (
+                    <label
+                      className="bulk-job-checkbox"
+                      aria-label={`Select ${job.title || "Untitled Job"}`}
+                      onClick={(event) => event.stopPropagation()}
+                    >
                       <input
                         type="checkbox"
-                        checked={selectedBulkJobIds.includes(job.id)}
+                        checked={isSelectedForAction}
+                        disabled={isSelectionActionPending}
                         onChange={() => toggleBulkJob(job.id)}
                       />
                     </label>
                   ) : null}
                   <div className="job-score-cell">
-                    <span className="score-badge">{job.match_score === null ? "N/A" : `${job.match_score}/10`}</span>
+                    <MatchScoreBadge score={job.match_score} />
                   </div>
                   <div>
-                    <h2>
-                      {job.title || "Untitled Job"}
-                      {job.archived_at ? " (Archived)" : ""}
-                    </h2>
+                    <div className="job-row-title-line">
+                      <h2>{job.title || "Untitled Job"}</h2>
+                      {job.archived_at ? <Badge tone="neutral">Archived</Badge> : null}
+                    </div>
                     <p className="metadata">
                       {job.company || "Unknown company"} | {jobData.work_location || "Location not set"} |{" "}
                       {jobData.application_deadline || "Deadline Unavailable"}
@@ -713,48 +894,24 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
                     <p className="summary">{jobData.summary || "No structured summary saved yet."}</p>
                     <JobNotesPreview notes={job.notes} />
                   </div>
-                  <div className="button-row job-row-actions">
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() => {
-                        window.location.href = matchPageHref(job);
-                      }}
-                    >
-                      Match
-                    </button>
-                    {!hasJobData ? (
-                      <button
+                  {!selectionMode && !job.job_data ? (
+                    <div className="button-row job-row-actions">
+                      <Button
                         type="button"
-                        className="secondary-button"
-                        disabled={analyzingJobId === job.id}
-                        onClick={() => void analyzeSavedJob(job)}
+                        size="compact"
+                        variant="secondary"
+                        icon={SearchCheck}
+                        loading={analyzingJobId === job.id}
+                        disabled={isAnalyzingAll || analyzingJobId !== null}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void analyzeSavedJob(job);
+                        }}
                       >
-                        {analyzingJobId === job.id ? "Analyzing..." : "Analyze"}
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          disabled={!job.match_data}
-                          onClick={() => void openMatchHistory(job)}
-                        >
-                          Match Data
-                        </button>
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          onClick={() => {
-                            setEditor(editorFromJob(job));
-                            setMatchDataJob(null);
-                          }}
-                        >
-                          View
-                        </button>
-                      </>
-                    )}
-                  </div>
+                        Analyze
+                      </Button>
+                    </div>
+                  ) : null}
                 </article>
               );
             })}
@@ -762,34 +919,82 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
         </section>
 
         <div className="saved-jobs-detail-pane">
-          {editor?.id ? (
+          {selectedDetailJob ? (
+            <JobDetailTabs
+              activeTab={detailTab}
+              job={selectedDetailJob}
+              onDetails={() => setDetailTab("details")}
+              onMatch={() => {
+                if (selectedDetailJob.match_data) {
+                  if (matchDataJob?.id === selectedDetailJob.id && matchHistory.length) {
+                    setDetailTab("match");
+                  } else {
+                    void openMatchHistory(selectedDetailJob);
+                  }
+                } else {
+                  setDetailTab("match");
+                }
+              }}
+            />
+          ) : null}
+
+          {detailTab === "details" && editor?.id ? (
             <JobEditor
               editor={editor}
               isSaving={isSaving}
               onSave={saveJob}
               onChange={setEditor}
               onJobDataChange={setJobDataField}
-              onClose={() => setEditor(null)}
+              onClose={closeSelectedJob}
               onArchive={archiveSavedJob}
               onRestore={restoreSavedJob}
               onDelete={permanentlyRemoveSavedJob}
+              isAnalyzing={analyzingJobId === editor.id}
+              onAnalyze={async () => {
+                const selectedJob = jobs.find((job) => job.id === editor.id);
+                if (selectedJob) await analyzeSavedJob(selectedJob);
+              }}
             />
           ) : null}
 
-          {matchDataJob ? (
+          {detailTab === "match" && selectedDetailJob && !selectedDetailJob.match_data ? (
+            <EmptyState
+              icon={Target}
+              title="Match this job with a resume"
+              description="Compare this job with one of your resume profiles to see matched skills, missing qualifications, and recommended updates."
+              action={<Button type="button" icon={Target} onClick={() => { window.location.href = matchPageHref(selectedDetailJob); }}>Choose Resume and Match</Button>}
+            />
+          ) : null}
+
+          {detailTab === "match" && selectedDetailJob?.match_data && isMatchHistoryLoading ? (
+            <section className="profile-card"><SkeletonRows count={5} /></section>
+          ) : null}
+
+          {detailTab === "match" && matchDataJob && !isMatchHistoryLoading ? (
             <MatchDataViewer
+              key={matchDataJob.id}
               job={matchDataJob}
               resumeLabel={resumeReferenceLabel(matchDataJob, resumeProfiles, documents)}
               matches={matchHistory}
-              onClose={() => setMatchDataJob(null)}
+              onClose={closeSelectedJob}
             />
           ) : null}
 
-          {!editor?.id && !matchDataJob ? (
-            <section className="saved-jobs-empty-detail">
-              <h2>Job Details</h2>
-              <p className="empty">Select View or Match Data from a saved job to open details here.</p>
-            </section>
+          {detailTab === "match" && selectedDetailJob?.match_data && !matchDataJob && !isMatchHistoryLoading ? (
+            <EmptyState
+              icon={Target}
+              title="Match analysis unavailable"
+              description="The saved match could not be loaded. Retry loading the analysis or run a new match."
+              action={<Button type="button" variant="secondary" onClick={() => void openMatchHistory(selectedDetailJob)}>Retry</Button>}
+            />
+          ) : null}
+
+          {!selectedDetailJob ? (
+            <EmptyState
+              icon={BriefcaseBusiness}
+              title="Job Details"
+              description="Select a saved job to open its details and resume match analysis here."
+            />
           ) : null}
         </div>
       </section>
@@ -840,13 +1045,7 @@ function JobsManagerPreview() {
             <h2>Saved Jobs</h2>
             <div className="button-row">
               <button type="button" disabled>
-                Bulk Match
-              </button>
-              <button type="button" className="secondary-button" disabled>
-                Bulk Remove
-              </button>
-              <button type="button" className="secondary-button" disabled>
-                Refresh
+                Select Jobs
               </button>
             </div>
           </div>
@@ -863,24 +1062,13 @@ function JobsManagerPreview() {
                   </p>
                   <p className="summary">{job.summary}</p>
                 </div>
-                <div className="button-row job-row-actions">
-                  <button type="button" className="secondary-button" disabled>
-                    Match
-                  </button>
-                  <button type="button" className="secondary-button" disabled>
-                    Match Data
-                  </button>
-                  <button type="button" className="secondary-button" disabled>
-                    View
-                  </button>
-                </div>
               </article>
             ))}
           </div>
         </section>
         <section className="saved-jobs-empty-detail">
           <h2>Job Details</h2>
-          <p className="empty">Login to open saved job details, notes, and match data here.</p>
+          <p className="empty">Login to open saved job details, notes, and match analysis here.</p>
           <a className="button-link" href="/auth">
             Login / Register
           </a>
@@ -903,6 +1091,44 @@ function JobCreationPreview({ mode }: { mode: ImportMode }) {
         </p>
         <a className="button-link" href="/auth">Login / Register</a>
       </section>
+    </div>
+  );
+}
+
+function JobDetailTabs({
+  activeTab,
+  job,
+  onDetails,
+  onMatch,
+}: {
+  activeTab: JobDetailTab;
+  job: StoredJob;
+  onDetails: () => void;
+  onMatch: () => void;
+}) {
+  const hasMatch = Boolean(job.match_data);
+
+  return (
+    <div className="job-detail-tabs" role="tablist" aria-label="Saved job views">
+      <button
+        type="button"
+        className={`job-detail-tab${activeTab === "details" ? " active" : ""}`}
+        role="tab"
+        aria-selected={activeTab === "details"}
+        onClick={onDetails}
+      >
+        Job Details
+      </button>
+      <button
+        type="button"
+        className={`job-detail-tab${activeTab === "match" ? " active" : ""}`}
+        role="tab"
+        aria-selected={activeTab === "match"}
+        onClick={onMatch}
+      >
+        <span>{hasMatch ? "Match Analysis" : "Match Resume"}</span>
+        {hasMatch ? <span className="job-detail-tab-score">{job.match_score === null ? "N/A" : `${job.match_score}/10`}</span> : null}
+      </button>
     </div>
   );
 }
@@ -934,15 +1160,20 @@ function MatchDataViewer({
     <section className="profile-card">
       <div className="profile-card-header">
         <div>
-          <h2>Match Data</h2>
+          <h2>Match Analysis</h2>
           <p className="metadata">
             {job.title || "Untitled Job"} | {job.company || "Unknown company"}
           </p>
           <p className="metadata">Compared resume: {selectedResumeLabel}</p>
         </div>
-        <button type="button" className="secondary-button" onClick={onClose}>
-          Close
-        </button>
+        <div className="button-row">
+          <Button type="button" icon={Target} onClick={() => { window.location.href = matchPageHref(job); }}>
+            Re-match
+          </Button>
+          <button type="button" className="secondary-button" onClick={onClose}>
+            Close
+          </button>
+        </div>
       </div>
       {matches.length > 1 ? (
         <div className="button-row" aria-label="Match history">
@@ -1062,7 +1293,10 @@ function JobNotesPreview({ notes }: { notes: string | null }) {
     <button
       type="button"
       className={`job-notes-preview${isExpanded ? " job-notes-preview-expanded" : ""}`}
-      onClick={() => setIsExpanded((current) => !current)}
+      onClick={(event) => {
+        event.stopPropagation();
+        setIsExpanded((current) => !current);
+      }}
       aria-expanded={isExpanded}
     >
       {isExpanded ? (
@@ -1088,6 +1322,8 @@ function JobEditor({
   onArchive,
   onRestore,
   onDelete,
+  isAnalyzing = false,
+  onAnalyze,
 }: {
   editor: JobEditorState;
   isSaving: boolean;
@@ -1098,6 +1334,8 @@ function JobEditor({
   onArchive: (jobId: number) => Promise<void>;
   onRestore: (jobId: number) => Promise<void>;
   onDelete: (jobId: number) => Promise<void>;
+  isAnalyzing?: boolean;
+  onAnalyze?: () => Promise<void>;
 }) {
   const isSavedJob = Boolean(editor.id);
   const canEdit = !isSavedJob || editor.isEditing;
@@ -1106,6 +1344,7 @@ function JobEditor({
       ? "Changes save only to your saved job copy."
       : "Click Edit before changing this saved job."
     : undefined;
+  const description = descriptionParagraphs(editor.raw_description_text);
   const updateDetail = (patch: Partial<JobEditorState>) => onChange({ ...editor, ...patch, hasUserEdits: true });
 
   return (
@@ -1127,6 +1366,16 @@ function JobEditor({
           </p>
         </div>
         <div className="button-row">
+          {editor.source_url ? (
+            <a
+              className="button-link secondary-button action-with-icon"
+              href={editor.source_url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <ExternalLink size={16} aria-hidden="true" /> Source
+            </a>
+          ) : null}
           {editor.id ? (
             editor.archived_at ? (
               <button type="button" className="secondary-button" onClick={() => void onRestore(editor.id!)}>
@@ -1143,9 +1392,6 @@ function JobEditor({
               Delete
             </button>
           ) : null}
-          <button type="button" className="secondary-button" onClick={onClose}>
-            Close
-          </button>
           {isSavedJob && !editor.isEditing ? (
             <button
               type="button"
@@ -1162,18 +1408,82 @@ function JobEditor({
               {isSaving ? "Saving..." : isSavedJob ? "Save changes" : "Save Job"}
             </button>
           ) : null}
+          <button type="button" className="secondary-button" onClick={onClose}>
+            Close
+          </button>
         </div>
       </div>
 
-      <label>
-        Notes
-        <textarea
-          value={editor.notes}
-          readOnly={!canEdit}
-          onChange={(event) => onChange({ ...editor, notes: event.target.value })}
-        />
-      </label>
+      <details className="job-description-details">
+        <summary className="job-description-toggle">
+          <span className="job-description-toggle-copy">
+            <strong>Job Description</strong>
+            <span>View the original description saved with this job.</span>
+          </span>
+          <ChevronDown className="job-description-chevron" size={20} aria-hidden="true" />
+        </summary>
+        <div className="job-description-content">
+          {canEdit ? (
+            <label className="details-field">
+              <span className="sr-only">Job Description</span>
+              <textarea
+                value={editor.raw_description_text}
+                onChange={(event) => updateDetail({ raw_description_text: event.target.value })}
+                required
+                title={detailFieldHint}
+              />
+            </label>
+          ) : (
+            <div className="job-description-text details-field">
+              {description.length ? (
+                description.map((paragraph, index) => (
+                  <p key={`${index}-${paragraph.slice(0, 40)}`}>{paragraph}</p>
+                ))
+              ) : (
+                <p className="empty">No source description was saved for this job.</p>
+              )}
+            </div>
+          )}
+        </div>
+      </details>
 
+      <section className="job-editor-section job-notes-section">
+        <h3>Notes</h3>
+        {canEdit ? (
+          <label>
+            <span className="sr-only">Notes</span>
+            <textarea
+              value={editor.notes}
+              placeholder="No notes saved for this job."
+              onChange={(event) => onChange({ ...editor, notes: event.target.value })}
+            />
+          </label>
+        ) : (
+          <p className={`job-notes-readonly${editor.notes.trim() ? "" : " empty"}`}>
+            {editor.notes.trim() || "No notes saved for this job."}
+          </p>
+        )}
+      </section>
+
+      <section className="job-editor-section job-profile-section">
+        <div className="job-editor-section-heading">
+          <h3>Job Profile</h3>
+          <p className="metadata">Structured details extracted from the saved job description.</p>
+        </div>
+        {!editor.hasStructuredData && !canEdit ? (
+          <EmptyState
+            compact
+            icon={SearchCheck}
+            title="Job profile not analyzed"
+            description="The original job description is available at the top of this view. Analyze this job to create structured details."
+            action={editor.id && onAnalyze ? (
+              <Button type="button" icon={SearchCheck} loading={isAnalyzing} onClick={() => void onAnalyze()}>
+                Analyze
+              </Button>
+            ) : undefined}
+          />
+        ) : canEdit ? (
+          <>
       <div className="profile-grid">
         <label>
           Title
@@ -1291,23 +1601,77 @@ function JobEditor({
       </label>
 
       <details>
-        <summary>Raw Job Description</summary>
-        <label className="details-field">
-          Raw Job Description
-          <textarea
-            value={editor.raw_description_text}
-            readOnly={!canEdit}
-            onChange={(event) => updateDetail({ raw_description_text: event.target.value })}
-            required
-            title={detailFieldHint}
-          />
-        </label>
-      </details>
-
-      <details>
         <summary>Job JSON preview</summary>
         <pre className="text-preview">{JSON.stringify({ ...editor.job_data, title: editor.title, company: editor.company }, null, 2)}</pre>
       </details>
+          </>
+        ) : (
+          <ReadableJobProfile editor={editor} />
+        )}
+      </section>
+
     </form>
+  );
+}
+
+function ReadableJobProfile({ editor }: { editor: JobEditorState }) {
+  const data = editor.job_data;
+  const facts = [
+    ["Title", editor.title || "Not provided"],
+    ["Company", editor.company || "Not provided"],
+    ["Deadline", data.application_deadline || "Deadline Unavailable"],
+    ["Location", data.work_location || "Not provided"],
+    ["Salary", data.salary_range || "Not provided"],
+    ["Employment Type", data.employment_type || "Not provided"],
+    ["Seniority", data.seniority_level || "Not provided"],
+    ["Security Clearance", data.security_clearance || "Not provided"],
+  ] as const;
+  const populatedSections = arrayFields.filter((field) => data[field].length > 0);
+
+  return (
+    <div className="readable-job-profile">
+      <dl className="job-facts-grid">
+        {facts.map(([label, value]) => (
+          <div className="job-fact" key={label}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+        <div className="job-fact job-source-fact">
+          <dt>Source</dt>
+          <dd>
+            {editor.source_url ? (
+              <a href={editor.source_url} target="_blank" rel="noreferrer">{editor.source_url}</a>
+            ) : (
+              "Not provided"
+            )}
+          </dd>
+        </div>
+      </dl>
+
+      {data.summary ? (
+        <section className="readable-job-section">
+          <h4>Summary</h4>
+          <p>{data.summary}</p>
+        </section>
+      ) : null}
+
+      {populatedSections.map((field) => (
+        <section className="readable-job-section" key={field}>
+          <h4>{arrayFieldLabels[field]}</h4>
+          {field === "required_skills" || field === "preferred_skills" || field === "keywords" ? (
+            <div className="resume-chip-row">
+              {data[field].map((item) => <span className="resume-chip" key={item}>{item}</span>)}
+            </div>
+          ) : (
+            <ul>{data[field].map((item) => <li key={item}>{item}</li>)}</ul>
+          )}
+        </section>
+      ))}
+
+      {!data.summary && !populatedSections.length ? (
+        <p className="empty">No additional structured job details were found.</p>
+      ) : null}
+    </div>
   );
 }

@@ -23,7 +23,7 @@ ACTION_CATALOG: dict[str, ScoutActionDefinition] = {
     item.action_id: item
     for item in (
         ScoutActionDefinition("open_home", "Open Home", "/", "Review setup alerts, recent jobs, and best matches."),
-        ScoutActionDefinition("open_resume_profiles", "Open Resume Profiles", "/profile", "Upload, parse, and manage resume profiles."),
+        ScoutActionDefinition("open_resume_profiles", "Open Resumes", "/profile", "Upload, analyze, and manage resumes."),
         ScoutActionDefinition("open_match", "Open Match", "/match", "Compare a resume profile with one or more jobs.", ("job_url", "job_ids", "resume_profile_id")),
         ScoutActionDefinition("open_saved_jobs", "Open Saved Jobs", "/jobs", "Review saved jobs and their match data.", ("job_id", "view")),
         ScoutActionDefinition("open_job_import", "Open Import Job", "/jobs/import-url", "Import one job posting from a URL.", ("job_url",)),
@@ -149,4 +149,3 @@ def prompt_catalog() -> list[dict[str, Any]]:
         }
         for item in ACTION_CATALOG.values()
     ]
-

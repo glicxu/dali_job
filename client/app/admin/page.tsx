@@ -1,13 +1,11 @@
 import { AdminReports } from "../../components/AdminReports";
+import { PageHeader } from "../../components/ui";
+import { ShieldCheck } from "lucide-react";
 
 export default function AdminPage() {
   return (
     <main className="panel admin-page">
-      <div>
-        <p className="eyebrow">Administration</p>
-        <h1>Admin</h1>
-        <p className="lede">Review user reports and access operational diagnostics.</p>
-      </div>
+      <PageHeader eyebrow="Administration" title="Admin workspace" description="Review user reports and access restricted operational diagnostics." icon={ShieldCheck} />
       <AdminReports />
     </main>
   );

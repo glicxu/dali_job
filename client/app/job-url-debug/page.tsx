@@ -1,15 +1,11 @@
 import { JobUrlDebugTool } from "../../components/JobUrlDebugTool";
+import { PageHeader } from "../../components/ui";
+import { Bug } from "lucide-react";
 
 export default function JobUrlDebugPage() {
   return (
     <section className="panel">
-      <div>
-        <p className="eyebrow">Temporary Debug</p>
-        <h1>Job URL scraper preview</h1>
-        <p className="lede">
-          Paste a job description URL to see the exact text DaliJob extracts before matching.
-        </p>
-      </div>
+      <PageHeader eyebrow="Diagnostic Tool" title="Job URL scraper preview" description="Inspect the exact text DaliJob extracts from a job posting before analysis or matching." icon={Bug} />
       <JobUrlDebugTool />
     </section>
   );

@@ -69,6 +69,7 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "updated_at",
         "email_verified_at",
         "password_changed_at",
+        "tutorial_completed_at",
         "deleted_at",
     }.issubset(user_columns)
     assert {
@@ -263,7 +264,7 @@ def test_alembic_has_initial_schema_revision() -> None:
     config.set_main_option("script_location", str(server_dir / "app" / "db" / "migrations"))
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == EXPECTED_ALEMBIC_HEAD == "20260804_0027"
+    assert script.get_current_head() == EXPECTED_ALEMBIC_HEAD == "20260810_0028"
 
 
 def test_phase3_migration_does_not_recreate_existing_document_version_constraint() -> None:
@@ -361,6 +362,28 @@ def test_resume_profiles_allow_one_default_profile() -> None:
         assert profiles[0].is_default is True
         assert profiles[1].is_default is False
         assert {profile.id for profile in profiles} == {first.id, second.id}
+
+
+def test_deleting_default_resume_profile_promotes_remaining_profile() -> None:
+    engine = create_engine("sqlite:///:memory:", future=True)
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+    with session_factory() as session:
+        first = repository.create_resume_profile(
+            session,
+            ResumeProfileCreateRequest(title="First Resume", resume_data=ResumeData()),
+        )
+        second = repository.create_resume_profile(
+            session,
+            ResumeProfileCreateRequest(title="Second Resume", resume_data=ResumeData()),
+        )
+
+        repository.soft_delete_resume_profile(session, first)
+
+        profiles = repository.list_resume_profiles(session)
+        assert [profile.id for profile in profiles] == [second.id]
+        assert profiles[0].is_default is True
 
 
 def test_profile_repository_maps_sso_identity_to_private_workspace() -> None:

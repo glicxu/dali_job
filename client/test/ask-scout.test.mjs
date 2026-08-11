@@ -8,8 +8,8 @@ const jobsManager = readFileSync(new URL("../components/JobsManager.tsx", import
 const listImport = readFileSync(new URL("../components/JobListImportManager.tsx", import.meta.url), "utf8");
 const jobSearch = readFileSync(new URL("../components/IndeedJobSearchManager.tsx", import.meta.url), "utf8");
 
-test("authenticated shell exposes the persistent Ask Scout launcher with page context", () => {
-  assert.match(appShell, /className="ask-scout-launcher"/);
+test("authenticated shell exposes the persistent Ask Scout sidebar action with page context", () => {
+  assert.match(appShell, /className="sidebar-scout-action"/);
   assert.match(appShell, /\/ask-scout\?from=/);
   assert.match(appShell, /aria-label="Open Ask Scout"/);
 });

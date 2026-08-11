@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ScanSearch } from "lucide-react";
 import {
   BulkSavedJobMatchResponse,
   compareResumeToSavedJobs,
@@ -14,6 +15,7 @@ import {
   savePendingMatchedJob,
   StoredJob,
 } from "../lib/api";
+import { AlertBanner, Badge, Button, MatchScoreBadge, SectionHeader, ToastRegion } from "./ui";
 
 type ResumeSourceMode = "profile" | "paste";
 type JobSourceMode = "url" | "paste";
@@ -49,7 +51,7 @@ function AuthenticatedResumeJobMatchForm() {
   const hasJobSource = isBulkSavedJobMode || (jobSourceMode === "url" ? Boolean(jobUrl.trim()) : Boolean(jobText.trim()));
   const resumeWarning =
     !isLoadingDocuments && !hasResumeSource
-      ? "Add a saved resume profile, uploaded resume, or pasted resume text before matching."
+      ? "Choose a saved resume profile or paste resume text before matching."
       : null;
 
   useEffect(() => {
@@ -110,7 +112,7 @@ function AuthenticatedResumeJobMatchForm() {
     setPendingLowMatchJob(null);
 
     if (!hasResumeSource) {
-      setError("Add a saved resume profile, uploaded resume, or pasted resume text before matching.");
+      setError("Choose a saved resume profile or paste resume text before matching.");
       return;
     }
     if (!hasJobSource) {
@@ -195,12 +197,14 @@ function AuthenticatedResumeJobMatchForm() {
   }
 
   return (
-    <form className="match-form" onSubmit={handleSubmit}>
-      {error ? <div className="error-banner">{error}</div> : null}
-      {status ? <div className="status-banner">{status}</div> : null}
-      {resumeWarning ? <div className="status-banner">{resumeWarning}</div> : null}
+    <form className="match-form match-workbench" onSubmit={handleSubmit}>
+      {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
+      <ToastRegion message={status} onDismiss={() => setStatus(null)} />
+      {resumeWarning ? <AlertBanner tone="warning">{resumeWarning}</AlertBanner> : null}
 
-      <section className="match-source-grid">
+      <section className="profile-card match-source-card">
+        <SectionHeader title="Match sources" description="Choose one structured resume profile or paste text, then select the job source to compare." />
+        <div className="match-source-grid">
         <label>
         Resume source
         <select
@@ -255,9 +259,10 @@ function AuthenticatedResumeJobMatchForm() {
             </select>
           </label>
         ) : null}
+        </div>
       </section>
 
-      <section className={isBulkSavedJobMode ? "input-grid single-column" : "input-grid"}>
+      <section className={`profile-card match-input-card ${isBulkSavedJobMode ? "input-grid single-column" : "input-grid"}`}>
         <div>
           {resumeSourceMode === "paste" ? (
             <label>
@@ -305,8 +310,9 @@ function AuthenticatedResumeJobMatchForm() {
                 <article className="compact-job-card" key={job.id}>
                   <strong>{job.title || "Untitled Job"}</strong>
                   <span className="metadata">
-                    {job.company || "Unknown company"} | {job.job_data ? "Analyzed" : "Needs analysis"}
+                    {job.company || "Unknown company"}
                   </span>
+                  <Badge tone={job.job_data ? "success" : "warning"}>{job.job_data ? "Analyzed" : "Needs analysis"}</Badge>
                 </article>
               ))}
             </div>
@@ -318,12 +324,12 @@ function AuthenticatedResumeJobMatchForm() {
         </section>
       ) : null}
 
-      <button type="submit" disabled={isLoading || !hasResumeSource || !hasJobSource}>
-        {isLoading ? "Comparing..." : isBulkSavedJobMode ? "Match Selected Jobs" : "Match"}
-      </button>
+      <Button type="submit" icon={ScanSearch} loading={isLoading} disabled={!hasResumeSource || !hasJobSource}>
+        {isBulkSavedJobMode ? "Match Selected Jobs" : "Match"}
+      </Button>
 
       {pendingLowMatchJob ? (
-        <section className="warning-banner">
+        <AlertBanner tone="warning">
           <div>
             <strong>Low compatibility</strong>
             <p className="summary">
@@ -338,7 +344,7 @@ function AuthenticatedResumeJobMatchForm() {
               Save Job
             </button>
           </div>
-        </section>
+        </AlertBanner>
       ) : null}
       {result ? <MatchResult result={result} /> : null}
       {bulkResult ? <BulkMatchResult result={bulkResult} /> : null}
@@ -404,7 +410,7 @@ function BulkMatchResult({ result }: { result: BulkSavedJobMatchResponse }) {
         <div className="dashboard-card-list">
           {result.matched.map((item) => (
             <article className="bulk-match-result-card" key={item.saved_match_id}>
-              <div className="score">{item.match.match_score}</div>
+              <MatchScoreBadge score={item.match.match_score} />
               <div>
                 <h2>{item.title || "Untitled Job"}</h2>
                 <p className="metadata">{item.company || "Unknown company"}</p>
@@ -467,7 +473,7 @@ function MatchDataDetails({ result }: { result: ResumeJobMatchResponse }) {
   return (
     <section className="result-panel">
       <div className="score-row">
-        <div className="score">{result.match_score}</div>
+        <MatchScoreBadge score={result.match_score} />
         <div>
           <p className="score-label">Match score</p>
           <p className="summary">{result.summary}</p>
@@ -524,7 +530,7 @@ function MatchResult({ result }: { result: ResumeJobMatchResponse }) {
   return (
     <section className="result-panel" aria-live="polite">
       <div className="score-row">
-        <div className="score">{result.match_score}</div>
+        <MatchScoreBadge score={result.match_score} />
         <div>
           <p className="score-label">Match score</p>
           <p className="summary">{result.summary}</p>

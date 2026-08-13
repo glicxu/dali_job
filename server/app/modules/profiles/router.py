@@ -138,13 +138,17 @@ def apply_resume_import(
     db: Session = Depends(get_db_session),
     identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> ResumeProfileResponse:
-    return repository.apply_resume_suggestions(
+    resume_profile = repository.apply_resume_suggestions(
         db,
         payload.resume_data,
         identity,
         source_document_id=payload.source_document_id,
         source_document_version_id=payload.source_document_version_id,
     )
+    from app.modules.job_search.criteria_repository import ensure_generated_criterion
+
+    ensure_generated_criterion(db, identity, resume_profile)
+    return resume_profile
 
 
 @resume_profiles_router.get("", response_model=ResumeProfileListResponse)

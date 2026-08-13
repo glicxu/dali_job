@@ -220,9 +220,15 @@ def update_resume_profile(
 
 def soft_delete_resume_profile(db: Session, resume_profile: ResumeProfile) -> None:
     from app.modules.profiles.models import utc_now
+    from app.modules.job_search.models import JobSearchCriterion
 
     resume_profile.deleted_at = utc_now()
     resume_profile.is_default = False
+    db.execute(
+        update(JobSearchCriterion)
+        .where(JobSearchCriterion.resume_profile_id == resume_profile.id)
+        .values(resume_profile_id=None)
+    )
     db.flush()
     _ensure_one_default_profile(db, resume_profile.workspace_id, resume_profile.user_id)
 

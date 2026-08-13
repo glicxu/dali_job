@@ -7,7 +7,7 @@ export default function JobsPage() {
     <section className="panel jobs-panel">
       <PageHeader
         eyebrow="Saved Jobs"
-        title="Jobs"
+        title="Saved Jobs"
         description="Review saved opportunities, notes, analysis, and resume match history."
         icon={BriefcaseBusiness}
       />

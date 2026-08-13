@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
@@ -101,6 +102,7 @@ class IndeedJobSearchRequest(BaseModel):
     keyword: str = Field(..., min_length=1, max_length=255)
     location: str = Field(..., min_length=1, max_length=255)
     max_results: int = Field(default=10, ge=1, le=10)
+    search_criterion_id: int | None = Field(default=None, gt=0)
 
 
 class IndeedJobSearchResult(BaseModel):
@@ -124,6 +126,86 @@ class IndeedJobSearchResponse(BaseModel):
     location: str
     results: list[IndeedJobSearchResult]
     warnings: list[str] = Field(default_factory=list)
+
+
+class QuickFindRequest(BaseModel):
+    resume_profile_id: int = Field(..., gt=0)
+    search_criterion_id: int | None = Field(default=None, gt=0)
+    location: str = Field(..., min_length=1, max_length=255)
+    keyword: str | None = Field(default=None, max_length=255)
+    max_results: int = Field(default=5, ge=1, le=5)
+
+
+class QuickFindCandidate(BaseModel):
+    jobs_cache_id: int
+    source_url: str
+    title: str
+    company: str
+    location: str = ""
+    summary: str = ""
+    match_score: int = Field(..., ge=0, le=10)
+    match_data: dict[str, Any] = Field(default_factory=dict)
+    resume_data_snapshot: dict[str, Any] = Field(default_factory=dict)
+    job_data_snapshot: dict[str, Any] = Field(default_factory=dict)
+    model_name: str | None = None
+    provider_execution_reference: str | None = None
+
+
+class QuickFindResponse(BaseModel):
+    operation_id: int
+    resume_profile_id: int
+    search_criterion_id: int | None = None
+    resume_title: str
+    keyword: str
+    location: str
+    candidates: list[QuickFindCandidate] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class QuickFindSaveRequest(BaseModel):
+    operation_id: int = Field(..., gt=0)
+    jobs_cache_ids: list[int] = Field(..., min_length=1, max_length=5)
+
+    @model_validator(mode="after")
+    def require_unique_cache_ids(self) -> QuickFindSaveRequest:
+        if len(set(self.jobs_cache_ids)) != len(self.jobs_cache_ids):
+            raise ValueError("jobs_cache_ids must be unique.")
+        return self
+
+
+class JobSearchCriterionCreateRequest(BaseModel):
+    resume_profile_id: int | None = Field(default=None, gt=0)
+    keyword: str = Field(..., min_length=1, max_length=255)
+    location: str = Field(..., min_length=1, max_length=255)
+
+
+class JobSearchCriterionUpdateRequest(BaseModel):
+    keyword: str | None = Field(default=None, min_length=1, max_length=255)
+    location: str | None = Field(default=None, max_length=255)
+
+    @model_validator(mode="after")
+    def require_change(self) -> JobSearchCriterionUpdateRequest:
+        if self.keyword is None and self.location is None:
+            raise ValueError("keyword or location is required.")
+        return self
+
+
+class JobSearchCriterionResponse(BaseModel):
+    id: int
+    workspace_id: int
+    user_id: int
+    resume_profile_id: int | None = None
+    keyword: str
+    location: str | None = None
+    source: str
+    is_complete: bool
+    last_used_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class JobSearchCriterionListResponse(BaseModel):
+    criteria: list[JobSearchCriterionResponse] = Field(default_factory=list)
 
 
 class IndeedJobSearchImportRequest(BaseModel):

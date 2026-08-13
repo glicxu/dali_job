@@ -1776,6 +1776,151 @@
         }
       }
     },
+    "/api/v1/job-search/criteria": {
+      "get": {
+        "tags": [
+          "job-search"
+        ],
+        "summary": "List Search Criteria",
+        "operationId": "list_search_criteria_api_v1_job_search_criteria_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobSearchCriterionListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "job-search"
+        ],
+        "summary": "Create Search Criterion",
+        "operationId": "create_search_criterion_api_v1_job_search_criteria_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobSearchCriterionCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobSearchCriterionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/job-search/criteria/{criterion_id}": {
+      "patch": {
+        "tags": [
+          "job-search"
+        ],
+        "summary": "Update Search Criterion",
+        "operationId": "update_search_criterion_api_v1_job_search_criteria__criterion_id__patch",
+        "parameters": [
+          {
+            "name": "criterion_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Criterion Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobSearchCriterionUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobSearchCriterionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "job-search"
+        ],
+        "summary": "Delete Search Criterion",
+        "operationId": "delete_search_criterion_api_v1_job_search_criteria__criterion_id__delete",
+        "parameters": [
+          {
+            "name": "criterion_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Criterion Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/job-search/indeed": {
       "post": {
         "tags": [
@@ -1829,6 +1974,47 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/IndeedJobSearchImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobListImportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/job-search/quick-find/save": {
+      "post": {
+        "tags": [
+          "job-search"
+        ],
+        "summary": "Save Quick Find Recommendations",
+        "operationId": "save_quick_find_recommendations_api_v1_job_search_quick_find_save_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuickFindSaveRequest"
               }
             }
           },
@@ -2882,6 +3068,65 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/IndeedJobSearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedOperationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/operations/quick-find-jobs": {
+      "post": {
+        "tags": [
+          "operations"
+        ],
+        "summary": "Enqueue Quick Find Jobs",
+        "operationId": "enqueue_quick_find_jobs_api_v1_operations_quick_find_jobs_post",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuickFindRequest"
               }
             }
           }
@@ -7306,6 +7551,18 @@
             "minimum": 1.0,
             "title": "Max Results",
             "default": 10
+          },
+          "search_criterion_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Criterion Id"
           }
         },
         "type": "object",
@@ -9138,6 +9395,168 @@
         ],
         "title": "JobSaveRequest"
       },
+      "JobSearchCriterionCreateRequest": {
+        "properties": {
+          "resume_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Profile Id"
+          },
+          "keyword": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Keyword"
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Location"
+          }
+        },
+        "type": "object",
+        "required": [
+          "keyword",
+          "location"
+        ],
+        "title": "JobSearchCriterionCreateRequest"
+      },
+      "JobSearchCriterionListResponse": {
+        "properties": {
+          "criteria": {
+            "items": {
+              "$ref": "#/components/schemas/JobSearchCriterionResponse"
+            },
+            "type": "array",
+            "title": "Criteria"
+          }
+        },
+        "type": "object",
+        "title": "JobSearchCriterionListResponse"
+      },
+      "JobSearchCriterionResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "workspace_id": {
+            "type": "integer",
+            "title": "Workspace Id"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "resume_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Profile Id"
+          },
+          "keyword": {
+            "type": "string",
+            "title": "Keyword"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "is_complete": {
+            "type": "boolean",
+            "title": "Is Complete"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "workspace_id",
+          "user_id",
+          "keyword",
+          "source",
+          "is_complete",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "JobSearchCriterionResponse"
+      },
+      "JobSearchCriterionUpdateRequest": {
+        "properties": {
+          "keyword": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keyword"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          }
+        },
+        "type": "object",
+        "title": "JobSearchCriterionUpdateRequest"
+      },
       "JobUpdateRequest": {
         "properties": {
           "title": {
@@ -10029,6 +10448,82 @@
           "resume_evidence"
         ],
         "title": "PrepTalkingPoint"
+      },
+      "QuickFindRequest": {
+        "properties": {
+          "resume_profile_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Resume Profile Id"
+          },
+          "search_criterion_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Criterion Id"
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Location"
+          },
+          "keyword": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keyword"
+          },
+          "max_results": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Max Results",
+            "default": 5
+          }
+        },
+        "type": "object",
+        "required": [
+          "resume_profile_id",
+          "location"
+        ],
+        "title": "QuickFindRequest"
+      },
+      "QuickFindSaveRequest": {
+        "properties": {
+          "operation_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Operation Id"
+          },
+          "jobs_cache_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "Jobs Cache Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "operation_id",
+          "jobs_cache_ids"
+        ],
+        "title": "QuickFindSaveRequest"
       },
       "RecordDependency": {
         "properties": {

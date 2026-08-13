@@ -10,8 +10,24 @@ from app.db.base import Base
 from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.job_search.apify_indeed import get_apify_indeed_client, normalize_indeed_item
-from app.modules.job_search.router import get_job_search_description_parser, get_job_search_resume_matcher
-from app.modules.jobs.schemas import IndeedJobSearchResult, JobDescriptionData
+from app.modules.job_search import criteria_repository
+from app.modules.auth.dependencies import AuthenticatedIdentity
+from app.modules.job_search.router import (
+    build_quick_find_recommendations,
+    get_job_search_description_parser,
+    get_job_search_resume_matcher,
+    save_quick_find_recommendations,
+)
+from app.modules.jobs.models import JobCache, UserSavedJob
+from app.modules.jobs.schemas import (
+    IndeedJobSearchResult,
+    JobDescriptionData,
+    QuickFindRequest,
+    QuickFindSaveRequest,
+)
+from app.modules.operations.models import ManagedOperation
+from app.modules.profiles import repository as profile_repository
+from app.modules.profiles.schemas import ResumeProfileCreateRequest
 from app.modules.resume_job_match.schemas import ResumeJobMatchRequest, ResumeJobMatchResponse
 
 
@@ -40,6 +56,24 @@ class FailingApifyIndeedClient:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="APIFY_API_TOKEN is not configured for the server process.",
         )
+
+
+class FakeQuickFindProvider:
+    def search(self, *, keyword: str, location: str, max_results: int = 5) -> list[IndeedJobSearchResult]:
+        assert keyword == "Backend Engineer"
+        assert location == "Maryland"
+        assert max_results == 5
+        return [
+            IndeedJobSearchResult(
+                external_id="quick123",
+                title="Backend Engineer",
+                company="Example Systems",
+                location="Maryland",
+                source_url="https://www.indeed.com/viewjob?jk=quick123",
+                summary="Build APIs using Python and PostgreSQL.",
+                raw_description_text="Build APIs using Python and PostgreSQL for customer workflows.",
+            )
+        ]
 
 
 class FakeJobDescriptionParser:
@@ -154,6 +188,30 @@ def test_indeed_search_returns_results() -> None:
     assert payload["results"][0]["status"] == "new"
 
 
+def test_indeed_search_uses_and_marks_selected_saved_criterion() -> None:
+    client = create_test_client()
+    created = client.post(
+        "/api/v1/job-search/criteria",
+        json={"keyword": "software engineer", "location": "Maryland"},
+    )
+    assert created.status_code == 200
+
+    response = client.post(
+        "/api/v1/job-search/indeed",
+        json={
+            "keyword": "ignored keyword",
+            "location": "ignored location",
+            "search_criterion_id": created.json()["id"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["keyword"] == "software engineer"
+    assert response.json()["location"] == "Maryland"
+    criteria = client.get("/api/v1/job-search/criteria").json()["criteria"]
+    assert criteria[0]["last_used_at"] is not None
+
+
 def test_indeed_search_reports_provider_errors() -> None:
     client = create_test_client()
     client.app.dependency_overrides[get_apify_indeed_client] = lambda: FailingApifyIndeedClient()
@@ -253,3 +311,151 @@ def test_indeed_search_import_can_match_selected_resume_profile() -> None:
     assert payload["imported"][0]["match_score"] == 8
     jobs = client.get("/api/v1/jobs").json()
     assert jobs[0]["match_data"]["summary"] == "Strong backend match."
+
+
+def test_quick_find_caches_matches_then_saves_only_selected_job() -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool, future=True)
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    identity = AuthenticatedIdentity(
+        external_user_id="quick-find-user",
+        email="quick-find@example.com",
+        display_name="Quick Find User",
+        timezone="UTC",
+        provider="local",
+    )
+
+    with session_factory() as db:
+        resume = profile_repository.create_resume_profile(
+            db,
+            ResumeProfileCreateRequest(
+                title="Backend Resume",
+                resume_data={
+                    "headline": "Backend Engineer",
+                    "summary": "Builds APIs.",
+                    "experience": ["Built FastAPI services with Python."],
+                    "skills": ["Python", "FastAPI"],
+                    "target_roles": ["Backend Engineer"],
+                },
+                is_default=True,
+            ),
+            identity,
+        )
+        response = build_quick_find_recommendations(
+            QuickFindRequest(resume_profile_id=resume.id, location="Maryland"),
+            operation_id=77,
+            provider=FakeQuickFindProvider(),
+            parser=FakeJobDescriptionParser(),
+            matcher=FakeMatcher(),
+            db=db,
+            identity=identity,
+        )
+
+        assert response.keyword == "Backend Engineer"
+        assert response.candidates[0].match_score == 8
+        assert db.query(JobCache).count() == 1
+        assert db.query(UserSavedJob).count() == 0
+
+        operation = ManagedOperation(
+            id=77,
+            workspace_id=resume.workspace_id,
+            user_id=resume.user_id,
+            operation_type="quick_find_jobs",
+            idempotency_key="quick-find-operation",
+            status="succeeded",
+            request_payload={},
+            result_payload=response.model_dump(mode="json"),
+        )
+        db.add(operation)
+        db.flush()
+
+        saved = save_quick_find_recommendations(
+            QuickFindSaveRequest(operation_id=77, jobs_cache_ids=[response.candidates[0].jobs_cache_id]),
+            db=db,
+            identity=identity,
+        )
+
+        assert saved.failed == []
+        assert saved.imported[0].match_score == 8
+        assert db.query(UserSavedJob).count() == 1
+
+
+def test_generated_search_criterion_gets_location_on_first_quick_find() -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool, future=True)
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    identity = AuthenticatedIdentity(
+        external_user_id="criteria-user",
+        email="criteria@example.com",
+        display_name="Criteria User",
+        timezone="UTC",
+        provider="local",
+    )
+
+    with session_factory() as db:
+        resume = profile_repository.create_resume_profile(
+            db,
+            ResumeProfileCreateRequest(
+                title="Backend Resume",
+                resume_data={
+                    "headline": "Backend Engineer",
+                    "experience": ["Built FastAPI services with Python."],
+                    "skills": ["Python", "FastAPI"],
+                    "target_roles": ["Backend Engineer"],
+                },
+                is_default=True,
+            ),
+            identity,
+        )
+        criterion = criteria_repository.ensure_generated_criterion(db, identity, resume)
+        assert criterion is not None
+        assert criterion.keyword == "Backend Engineer"
+        assert criterion.location is None
+
+        response = build_quick_find_recommendations(
+            QuickFindRequest(
+                resume_profile_id=resume.id,
+                search_criterion_id=criterion.id,
+                keyword=criterion.keyword,
+                location="Maryland",
+            ),
+            operation_id=91,
+            provider=FakeQuickFindProvider(),
+            parser=FakeJobDescriptionParser(),
+            matcher=FakeMatcher(),
+            db=db,
+            identity=identity,
+        )
+
+        db.refresh(criterion)
+        assert response.search_criterion_id == criterion.id
+        assert criterion.location == "Maryland"
+        assert criterion.last_used_at is not None
+
+
+def test_search_criteria_crud_is_soft_deleted() -> None:
+    client = create_test_client()
+
+    created = client.post(
+        "/api/v1/job-search/criteria",
+        json={"keyword": "Data Engineer", "location": "Virginia"},
+    )
+    assert created.status_code == 200
+    criterion_id = created.json()["id"]
+    assert created.json()["source"] == "custom"
+
+    listed = client.get("/api/v1/job-search/criteria")
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.json()["criteria"]] == [criterion_id]
+
+    updated = client.patch(
+        f"/api/v1/job-search/criteria/{criterion_id}",
+        json={"keyword": "Senior Data Engineer", "location": "Remote"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["keyword"] == "Senior Data Engineer"
+    assert updated.json()["location"] == "Remote"
+
+    deleted = client.delete(f"/api/v1/job-search/criteria/{criterion_id}")
+    assert deleted.status_code == 204
+    assert client.get("/api/v1/job-search/criteria").json()["criteria"] == []

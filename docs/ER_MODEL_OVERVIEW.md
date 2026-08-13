@@ -11,6 +11,7 @@ Shared/cache data and user-specific saved data must stay separate.
 - `user_edited_jobs` stores manual job details and user-specific corrections.
 - `job_resume_matches` stores match results for one user's saved job and resume.
 - `resume_profiles` stores each user-owned structured resume, with one default resume used for ordering.
+- `job_search_criteria` stores reusable private keyword/location searches, including AI-generated resume suggestions.
 - `managed_operations` stores durable progress and normalized results for provider-backed work.
 - `interviews` and `interview_notes` store provider-independent scheduling, outcomes, and private journal entries.
 - `interview_prep_guides` stores append-only preparation inputs, outputs, warnings, and provenance.
@@ -33,6 +34,7 @@ Owns or relates to:
 
 - `workspaces`
 - `resume_profiles`
+- `job_search_criteria`
 - `documents`
 - `user_saved_jobs`
 - `job_resume_matches`
@@ -57,6 +59,7 @@ Represents the user's private job-search space.
 Owns or groups:
 
 - `resume_profiles`
+- `job_search_criteria`
 - `documents`
 - `user_saved_jobs`
 - `job_resume_matches`
@@ -93,6 +96,17 @@ Relationship:
 ```text
 documents 1 -> many document_versions
 ```
+
+### job_search_criteria
+
+Stores owner-scoped keyword/location combinations used by Quick Find.
+
+```text
+users/workspaces 1 -> many job_search_criteria
+resume_profiles 1 -> many job_search_criteria, optional
+```
+
+An AI-imported resume creates one `resume_generated` criterion with a derived keyword and no location. The first successful search fills its location. New or edited combinations are saved only after explicit confirmation. Criteria are soft-deleted and remain separate from managed-operation history and saved jobs.
 
 ### document_versions
 

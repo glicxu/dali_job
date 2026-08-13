@@ -10,6 +10,7 @@ from app.db.base import Base
 from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.documents.models import Document, DocumentVersion
+from app.modules.job_search.models import JobSearchCriterion
 from app.modules.profiles.models import ResumeProfile
 import app.modules.profiles.router as profile_router
 from app.modules.profiles.schemas import ResumeData
@@ -87,6 +88,7 @@ def test_resume_import_preview_does_not_update_profile_until_apply(monkeypatch, 
 
     with session_factory() as session:
         assert session.query(ResumeProfile).count() == 0
+        assert session.query(JobSearchCriterion).count() == 0
         assert session.query(Document).count() == 1
         assert session.query(DocumentVersion).count() == 1
 
@@ -108,6 +110,11 @@ def test_resume_import_preview_does_not_update_profile_until_apply(monkeypatch, 
         assert resume_profiles[0].resume_data["skills"] == ["Parsed Skill"]
         assert resume_profiles[0].source_document_id == preview_payload["document_id"]
         assert resume_profiles[0].source_document_version_id == preview_payload["document_version_id"]
+        criteria = session.query(JobSearchCriterion).all()
+        assert len(criteria) == 1
+        assert criteria[0].keyword == "Parsed Resume"
+        assert criteria[0].location is None
+        assert criteria[0].source == "resume_generated"
 
 
 def test_resume_import_preserves_document_and_can_retry_failed_parse(monkeypatch, tmp_path) -> None:

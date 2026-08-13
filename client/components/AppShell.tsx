@@ -14,6 +14,7 @@ import {
   Home,
   LogIn,
   LogOut,
+  LayoutDashboard,
   Menu,
   MessageSquareText,
   Search,
@@ -24,7 +25,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { AuthForm } from "./AuthForm";
-import { isTutorialActive, TutorialCoachmark } from "./TutorialGuide";
+import { TutorialCoachmark } from "./TutorialGuide";
 import { PageHeader } from "./ui";
 import { clearAuthToken, CurrentUser, getCurrentUser, logoutUser } from "../lib/api";
 
@@ -33,8 +34,9 @@ type NavItem = { href: string; label: string; icon: LucideIcon; exact?: boolean 
 
 const careerItems: NavItem[] = [
   { href: "/", label: "Home", icon: Home, exact: true },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/profile", label: "Resumes", icon: FileText },
-  { href: "/jobs", label: "Jobs", icon: BriefcaseBusiness, exact: true },
+  { href: "/jobs", label: "Saved Jobs", icon: BriefcaseBusiness, exact: true },
   { href: "/jobs/search", label: "Job Search", icon: Search },
   { href: "/match", label: "Match", icon: Target },
 ];
@@ -104,11 +106,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [pathname]);
 
   useEffect(() => {
-    if (authState !== "authenticated" || !user || user.tutorial_completed || pathname === "/tutorial") return;
-    if (!isTutorialActive()) window.location.replace("/tutorial");
-  }, [authState, pathname, user]);
-
-  useEffect(() => {
     if (!mobileNavOpen) return;
     const sidebar = sidebarRef.current;
     const focusable = sidebar?.querySelectorAll<HTMLElement>('a[href], button:not([disabled])');
@@ -162,6 +159,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             onAuthChange={(currentUser) => {
               setUser(currentUser);
               setAuthState(currentUser ? "authenticated" : "anonymous");
+              if (currentUser) {
+                const destination = currentUser.tutorial_completed ? "/dashboard" : "/";
+                window.setTimeout(() => window.location.replace(destination), 0);
+              }
             }}
           />
         </section>
@@ -242,8 +243,6 @@ function Sidebar({
       <nav>
         <NavSection label="Career">
           {careerItems.map((item) => <NavigationLink item={item} pathname={pathname} onNavigate={onClose} key={item.href} />)}
-        </NavSection>
-        <NavSection label="Pipeline">
           <ApplicationNavGroup pathname={pathname} onNavigate={onClose} />
         </NavSection>
         <NavSection label="Workspace">

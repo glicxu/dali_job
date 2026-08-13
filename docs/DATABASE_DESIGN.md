@@ -267,6 +267,26 @@ The old normalized profile-section tables (`skills`, `experiences`, `education`,
 
 The older one-row `profiles.resume_data` design is intentionally removed. If DaliJob later needs account-level career preferences, add a clearly named table such as `career_preferences` instead of reintroducing ambiguous resume storage.
 
+### job_search_criteria
+
+Stores reusable, owner-scoped keyword and location combinations for Job Search. Applying an AI-generated resume import creates one `resume_generated` criterion with a derived keyword and no location. Its location is filled only after the user's first successful search. Custom searches are persisted only after the user explicitly chooses Save Search.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | integer | Primary key |
+| workspace_id | integer | FK to workspaces |
+| user_id | integer | FK to users |
+| resume_profile_id | integer | Nullable FK to the resume used to generate or save the search |
+| keyword | text | Required job title or keyword query |
+| location | text | Nullable until first use of a generated criterion |
+| source | text | `resume_generated` or `custom` |
+| last_used_at | timestamptz | Nullable, updated after successful Job Search use |
+| created_at | timestamptz | Required |
+| updated_at | timestamptz | Required |
+| deleted_at | timestamptz | Nullable soft delete |
+
+Criteria are private to one user/workspace. Deleting a generated criterion must not silently recreate it. Deleting its source resume sets `resume_profile_id` to null while preserving the saved search until the user deletes it.
+
 ### companies
 
 | Field | Type | Notes |

@@ -15,6 +15,10 @@ def test_health_endpoint_is_in_openapi_contract() -> None:
     schema = response.json()
     assert "/api/v1/health" in schema["paths"]
     assert "/api/v1/dashboard" in schema["paths"]
+    assert "/api/v1/operations/quick-find-jobs" in schema["paths"]
+    assert "/api/v1/job-search/quick-find/save" in schema["paths"]
+    assert "/api/v1/job-search/criteria" in schema["paths"]
+    assert "/api/v1/job-search/criteria/{criterion_id}" in schema["paths"]
     assert "/api/v1/application-materials" in schema["paths"]
     assert "/api/v1/operations/tailored-resume" in schema["paths"]
     assert "/api/v1/operations/cover-letter" in schema["paths"]

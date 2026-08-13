@@ -11,7 +11,7 @@ export default function ManualJobPage() {
       <PageHeader
         eyebrow="Job Creation"
         title="Create Manual Job"
-        description="Enter a job description and structured details without importing from another website."
+        description="Enter a title and paste the job description. DaliJob will generate the structured job profile and save it privately to your account."
         icon={FilePenLine}
       />
       <JobsManager creationMode="manual" />

@@ -67,7 +67,7 @@ The ready-now portions of SEC-001, AUTH-001, WEB-001, REL-001, FILE-001, and DEP
 | Client lint and tests | ESLint passed; `2` browser-policy tests passed |
 | Node production dependency audit | No known vulnerabilities after updating Next.js and pinning patched `sharp` and PostCSS versions |
 | Client production build | Next.js 15.5.22 build passed |
-| Migration history | Linear, with one head at `20260810_0028`; deployment remains pending |
+| Migration history | Linear, with one head at `20260812_0029`; deployment remains pending |
 | OpenAPI contract | Regenerated from the current application; CI now fails on future drift |
 
 ## Readiness Gate Summary
@@ -154,7 +154,7 @@ The ready-now portions of SEC-001, AUTH-001, WEB-001, REL-001, FILE-001, and DEP
 - [x] Add a support procedure for lost access and compromised accounts.
 - [ ] Audit recovery and credential-change events without logging secrets or reset tokens.
 
-**Deployment requirement:** Apply migrations through `20260810_0028`, configure production SMTP and the public client URL, then run focused auth, administrator-boundary, tutorial-onboarding, and browser smoke tests. Audit producers currently cover administrator report updates and controlled CLI role changes; broader security-event coverage remains under AUD-001.
+**Deployment requirement:** Apply migrations through `20260812_0029`, configure production SMTP and the public client URL, then run focused auth, administrator-boundary, tutorial-onboarding, and browser smoke tests. Audit producers currently cover administrator report updates and controlled CLI role changes; broader security-event coverage remains under AUD-001.
 
 ### DR-001 - Implement and prove backup and restore
 

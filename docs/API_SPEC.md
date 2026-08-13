@@ -108,11 +108,11 @@ Requires the `admin` role. Lists submitted reports across users for support revi
 
 Requires the `admin` role. Updates report status and internal notes. Every successful update creates an `admin.report.updated` audit event containing status-transition metadata and a boolean indicating whether notes changed. The audit event does not contain report content or administrator note text.
 
-## 2.5 Homepage Dashboard
+## 2.5 Dashboard
 
 ### `GET /dashboard`
 
-Returns the signed-in user's homepage summary. The endpoint should be owner-scoped and should not expose other users' saved jobs, resume profiles, or match data.
+Returns the signed-in user's `/dashboard` summary. The endpoint is owner-scoped and does not expose other users' saved jobs, resume profiles, or match data.
 
 The dashboard response should be compact so the homepage does not need to fetch all jobs, all resume profiles, and all match rows separately.
 
@@ -514,9 +514,12 @@ Body:
 {
   "keyword": "software engineer",
   "location": "Maryland",
-  "max_results": 10
+  "max_results": 10,
+  "search_criterion_id": 3
 }
 ```
+
+`search_criterion_id` is optional. When supplied, the server verifies that the saved criterion belongs to the current user and uses its stored keyword and location. An incomplete generated criterion may use the request location; the server stores that location and updates `last_used_at` only after the provider search succeeds. New or edited searches omit the ID and are not persisted unless the user explicitly calls the criteria create endpoint.
 
 Response:
 
@@ -553,6 +556,53 @@ Result `status` values:
 - `failed`
 
 The server caps `max_results`; the current implementation defaults to 10. Empty Apify datasets, missing `APIFY_API_TOKEN`, actor failures, Apify quota errors, and timeouts return clear structured errors.
+
+### `POST /operations/quick-find-jobs`
+
+Retains the former Quick Find recommendation workflow as a managed operation for possible reuse. It is not the current homepage or Job Search UI. The request identifies the user's default resume profile, visible keyword, location, and optional saved criterion. The server searches for at most five jobs, creates or reuses canonical `jobs_cache` rows with generated `job_data`, and compares every candidate against a resume snapshot. It does not create `user_saved_jobs`.
+
+```json
+{
+  "resume_profile_id": 7,
+  "search_criterion_id": 3,
+  "keyword": "Backend Engineer",
+  "location": "Maryland",
+  "max_results": 5
+}
+```
+
+The completed operation result contains its `operation_id`, the resolved keyword and resume label, warnings, and up to five candidates with `jobs_cache_id`, source metadata, match score, match data, and immutable resume/job snapshots. The operation is owner-scoped and provider-rate-limited.
+
+When `search_criterion_id` identifies an incomplete generated criterion, a successful operation stores the supplied location and marks the criterion used. Edited or entirely new keyword/location combinations omit that ID and are not persisted unless the user later calls the criteria create endpoint.
+
+### `GET /job-search/criteria`
+
+Lists active saved searches owned by the current user. The response includes the optional source resume, keyword, location, source (`resume_generated` or `custom`), completion state, and last-used timestamp. Existing imported resume profiles are lazily backfilled with one generated criterion when needed.
+
+### `POST /job-search/criteria`
+
+Explicitly saves a custom keyword/location combination after a successful search. An optional `resume_profile_id` records which resume was used.
+
+### `PATCH /job-search/criteria/{criterion_id}`
+
+Updates the keyword or location of a current-user-owned saved search.
+
+### `DELETE /job-search/criteria/{criterion_id}`
+
+Soft-deletes a current-user-owned saved search. Deleted generated criteria are not recreated automatically.
+
+### `POST /job-search/quick-find/save`
+
+Saves selected recommendations from a completed, current-user-owned Quick Find operation. The server does not trust candidate data supplied by the browser; it reloads the operation result, validates every selected cache ID, creates or restores the associated `user_saved_jobs` link, and persists its `job_resume_matches` row.
+
+```json
+{
+  "operation_id": 84,
+  "jobs_cache_ids": [12, 15]
+}
+```
+
+The response uses the standard job import response with `imported` and `failed` arrays. Recommending a job may populate reusable `jobs_cache.job_data`, but only this explicit save call makes the job appear in the user's Saved Jobs.
 
 ### `POST /job-search/indeed/import`
 

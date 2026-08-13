@@ -23,6 +23,7 @@ from app.modules.jobs.schemas import (
     JobImportRequest,
     JobListDiscoverRequest,
     JobListImportRequest,
+    QuickFindRequest,
 )
 from app.modules.jobs.service import OpenAIJobDescriptionParser
 from app.modules.operations.service import OperationContext, OperationHandler
@@ -115,6 +116,27 @@ def build_operation_handlers(app: Any) -> dict[str, OperationHandler]:
             total=1,
             message="Search complete",
             usage={"results": len(response.results)},
+        )
+        return jsonable_encoder(response)
+
+    def quick_find_jobs(db, identity: AuthenticatedIdentity, raw: dict, context: OperationContext):
+        payload = QuickFindRequest.model_validate(raw)
+        context.update(0, total=payload.max_results, message="Searching for recommended jobs")
+        response = job_search_router.build_quick_find_recommendations(
+            payload,
+            operation_id=context.operation.id,
+            provider=search_provider,
+            parser=_LazyJobDescriptionParser(model=runtime.openai_model),
+            matcher=_LazyResumeJobMatcher(model=runtime.openai_model),
+            db=db,
+            identity=identity,
+            progress=lambda current, total, message: context.update(current, total=total, message=message),
+        )
+        context.update(
+            len(response.candidates),
+            total=max(len(response.candidates), 1),
+            message="Recommendations ready",
+            usage={"recommendations": len(response.candidates)},
         )
         return jsonable_encoder(response)
 
@@ -355,6 +377,7 @@ def build_operation_handlers(app: Any) -> dict[str, OperationHandler]:
     return {
         "ask_scout": ask_scout,
         "job_search": job_search,
+        "quick_find_jobs": quick_find_jobs,
         "provider_job_import": provider_import,
         "job_list_discover": list_discover,
         "job_list_import": list_import,

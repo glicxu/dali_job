@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ScanSearch } from "lucide-react";
+import { BriefcaseBusiness, FileText, ScanSearch } from "lucide-react";
 import {
   BulkSavedJobMatchResponse,
   compareResumeToSavedJobs,
@@ -15,7 +15,7 @@ import {
   savePendingMatchedJob,
   StoredJob,
 } from "../lib/api";
-import { AlertBanner, Badge, Button, MatchScoreBadge, SectionHeader, ToastRegion } from "./ui";
+import { AlertBanner, Button, MatchScoreBadge, SectionHeader, ToastRegion } from "./ui";
 
 type ResumeSourceMode = "profile" | "paste";
 type JobSourceMode = "url" | "paste";
@@ -31,7 +31,7 @@ export function ResumeJobMatchForm() {
 function AuthenticatedResumeJobMatchForm() {
   const [resumeProfiles, setResumeProfiles] = useState<ResumeProfile[]>([]);
   const [resumeSourceMode, setResumeSourceMode] = useState<ResumeSourceMode>("profile");
-  const [jobSourceMode, setJobSourceMode] = useState<JobSourceMode>("url");
+  const [jobSourceMode, setJobSourceMode] = useState<JobSourceMode>("paste");
   const [selectedResumeProfileId, setSelectedResumeProfileId] = useState("");
   const [resumeText, setResumeText] = useState("");
   const [jobUrl, setJobUrl] = useState("");
@@ -49,6 +49,7 @@ function AuthenticatedResumeJobMatchForm() {
   const hasResumeSource = resumeSourceMode === "profile" ? Boolean(selectedResumeProfileId) : Boolean(resumeText.trim());
   const isBulkSavedJobMode = selectedBulkJobIds.length > 0;
   const hasJobSource = isBulkSavedJobMode || (jobSourceMode === "url" ? Boolean(jobUrl.trim()) : Boolean(jobText.trim()));
+  const selectedResumeProfile = resumeProfiles.find((profile) => String(profile.id) === selectedResumeProfileId) ?? null;
   const resumeWarning =
     !isLoadingDocuments && !hasResumeSource
       ? "Choose a saved resume profile or paste resume text before matching."
@@ -124,14 +125,19 @@ function AuthenticatedResumeJobMatchForm() {
 
     try {
       if (isBulkSavedJobMode) {
-        const bulkMatch = await compareResumeToSavedJobs({
-          user_job_ids: selectedBulkJobIds,
-          resume_profile_id:
-            resumeSourceMode === "profile" && selectedResumeProfileId
-              ? Number(selectedResumeProfileId)
-              : undefined,
-          resume_text: resumeSourceMode === "paste" ? resumeText : undefined,
-        });
+        const bulkMatch: BulkSavedJobMatchResponse = { matched: [], failed: [] };
+        for (let index = 0; index < selectedBulkJobIds.length; index += 25) {
+          const batch = await compareResumeToSavedJobs({
+            user_job_ids: selectedBulkJobIds.slice(index, index + 25),
+            resume_profile_id:
+              resumeSourceMode === "profile" && selectedResumeProfileId
+                ? Number(selectedResumeProfileId)
+                : undefined,
+            resume_text: resumeSourceMode === "paste" ? resumeText : undefined,
+          });
+          bulkMatch.matched.push(...batch.matched);
+          bulkMatch.failed.push(...batch.failed);
+        }
         setBulkResult(bulkMatch);
         const failedCount = bulkMatch.failed.length;
         setStatus(
@@ -204,101 +210,113 @@ function AuthenticatedResumeJobMatchForm() {
 
       <section className="profile-card match-source-card">
         <SectionHeader title="Match sources" description="Choose one structured resume profile or paste text, then select the job source to compare." />
-        <div className="match-source-grid">
-        <label>
-        Resume source
-        <select
-            value={
-              resumeSourceMode === "paste"
-                ? "__paste__"
-                : `profile:${selectedResumeProfileId}`
-            }
-            onChange={(event) => {
-              const value = event.target.value;
-              if (value === "__paste__") {
-                setResumeSourceMode("paste");
-                setSelectedResumeProfileId("");
-              } else if (value.startsWith("profile:")) {
-                setResumeSourceMode("profile");
-                setSelectedResumeProfileId(value.replace("profile:", ""));
-                setResumeText("");
-              }
-            }}
-            disabled={isLoadingDocuments}
-          >
-            <option value="">
-              {isLoadingDocuments ? "Loading resume sources..." : "Choose a resume source"}
-            </option>
-            {resumeProfiles.map((profile) => (
-              <option key={profile.id} value={`profile:${profile.id}`}>
-                {profile.is_default ? "Default - " : ""}
-                {profile.title}
-              </option>
-            ))}
-            <option value="__paste__">Paste resume text</option>
-          </select>
-        </label>
-
-        {!isBulkSavedJobMode ? (
-          <label>
-            Job source
-            <select
-              value={jobSourceMode}
-              onChange={(event) => {
-                const nextMode = event.target.value as JobSourceMode;
-                setJobSourceMode(nextMode);
-                if (nextMode === "url") {
-                  setJobText("");
-                } else {
-                  setJobUrl("");
-                }
-              }}
-            >
-              <option value="url">Paste job URL</option>
-              <option value="paste">Paste job description</option>
-            </select>
-          </label>
-        ) : null}
-        </div>
-      </section>
-
-      <section className={`profile-card match-input-card ${isBulkSavedJobMode ? "input-grid single-column" : "input-grid"}`}>
-        <div>
-          {resumeSourceMode === "paste" ? (
+        <div className={`match-source-workspace${isBulkSavedJobMode ? " single-source" : ""}`}>
+          <section className="match-source-panel">
+            <div className="match-source-panel-heading">
+              <span className="match-source-step" aria-hidden="true">1</span>
+              <FileText size={19} aria-hidden="true" />
+              <div>
+                <h2>Resume</h2>
+                <p>Choose the experience you want to compare.</p>
+              </div>
+            </div>
             <label>
-              Resume text
-              <textarea
-                value={resumeText}
-                onChange={(event) => setResumeText(event.target.value)}
-                placeholder="Paste resume text."
-              />
+              Resume source
+              <select
+                value={resumeSourceMode === "paste" ? "__paste__" : `profile:${selectedResumeProfileId}`}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (value === "__paste__") {
+                    setResumeSourceMode("paste");
+                    setSelectedResumeProfileId("");
+                  } else if (value.startsWith("profile:")) {
+                    setResumeSourceMode("profile");
+                    setSelectedResumeProfileId(value.replace("profile:", ""));
+                    setResumeText("");
+                  }
+                }}
+                disabled={isLoadingDocuments}
+              >
+                <option value="">
+                  {isLoadingDocuments ? "Loading resume sources..." : "Choose a resume source"}
+                </option>
+                {resumeProfiles.map((profile) => (
+                  <option key={profile.id} value={`profile:${profile.id}`}>
+                    {profile.is_default ? "Default - " : ""}
+                    {profile.title}
+                  </option>
+                ))}
+                <option value="__paste__">Paste resume text</option>
+              </select>
             </label>
+            {resumeSourceMode === "paste" ? (
+              <label className="match-source-input">
+                Resume text
+                <textarea
+                  value={resumeText}
+                  onChange={(event) => setResumeText(event.target.value)}
+                  placeholder="Paste resume text."
+                />
+              </label>
+            ) : selectedResumeProfile ? (
+              <div className="match-selected-source">
+                <strong>{selectedResumeProfile.title}</strong>
+                <span>{selectedResumeProfile.resume_data.headline || "Structured resume profile selected"}</span>
+                {selectedResumeProfile.is_default ? <span className="default-label">Default resume</span> : null}
+              </div>
+            ) : (
+              <p className="match-source-placeholder">Choose a resume profile to continue.</p>
+            )}
+          </section>
+
+          {!isBulkSavedJobMode ? (
+            <section className="match-source-panel">
+              <div className="match-source-panel-heading">
+                <span className="match-source-step" aria-hidden="true">2</span>
+                <BriefcaseBusiness size={19} aria-hidden="true" />
+                <div>
+                  <h2>Job</h2>
+                  <p>Add the opportunity you want to evaluate.</p>
+                </div>
+              </div>
+              <label>
+                Job source
+                <select
+                  value={jobSourceMode}
+                  onChange={(event) => {
+                    const nextMode = event.target.value as JobSourceMode;
+                    setJobSourceMode(nextMode);
+                    if (nextMode === "url") setJobText("");
+                    else setJobUrl("");
+                  }}
+                >
+                  <option value="url">Paste job URL</option>
+                  <option value="paste">Paste job description</option>
+                </select>
+              </label>
+              {jobSourceMode === "url" ? (
+                <label className="match-source-input">
+                  Job URL
+                  <input
+                    type="url"
+                    value={jobUrl}
+                    onChange={(event) => setJobUrl(event.target.value)}
+                    placeholder="https://company.com/careers/job-id"
+                  />
+                </label>
+              ) : (
+                <label className="match-source-input">
+                  Job description
+                  <textarea
+                    value={jobText}
+                    onChange={(event) => setJobText(event.target.value)}
+                    placeholder="Paste the job description."
+                  />
+                </label>
+              )}
+            </section>
           ) : null}
         </div>
-        {!isBulkSavedJobMode ? (
-          <div>
-            {jobSourceMode === "url" ? (
-              <label>
-                Job URL
-                <input
-                  type="url"
-                  value={jobUrl}
-                  onChange={(event) => setJobUrl(event.target.value)}
-                  placeholder="https://company.com/careers/job-id"
-                />
-              </label>
-            ) : (
-              <label>
-                Job description
-                <textarea
-                  value={jobText}
-                  onChange={(event) => setJobText(event.target.value)}
-                  placeholder="Paste the job description."
-                />
-              </label>
-            )}
-          </div>
-        ) : null}
       </section>
 
       {isBulkSavedJobMode ? (
@@ -312,7 +330,6 @@ function AuthenticatedResumeJobMatchForm() {
                   <span className="metadata">
                     {job.company || "Unknown company"}
                   </span>
-                  <Badge tone={job.job_data ? "success" : "warning"}>{job.job_data ? "Analyzed" : "Needs analysis"}</Badge>
                 </article>
               ))}
             </div>

@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const shell = readFileSync(new URL("../components/AppShell.tsx", import.meta.url), "utf8");
+const homePage = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+const introduction = readFileSync(new URL("../components/IntroductionHome.tsx", import.meta.url), "utf8");
 const dashboard = readFileSync(new URL("../components/DashboardHome.tsx", import.meta.url), "utf8");
+const jobSearch = readFileSync(new URL("../components/IndeedJobSearchManager.tsx", import.meta.url), "utf8");
 const jobs = readFileSync(new URL("../components/JobsManager.tsx", import.meta.url), "utf8");
 const applications = readFileSync(new URL("../components/ApplicationTracker.tsx", import.meta.url), "utf8");
 const interviews = readFileSync(new URL("../components/InterviewManager.tsx", import.meta.url), "utf8");
@@ -14,6 +17,7 @@ const materials = readFileSync(new URL("../components/ApplicationMaterialsManage
 const analytics = readFileSync(new URL("../components/AnalyticsDashboard.tsx", import.meta.url), "utf8");
 const askScout = readFileSync(new URL("../components/AskScoutPage.tsx", import.meta.url), "utf8");
 const auth = readFileSync(new URL("../components/AuthForm.tsx", import.meta.url), "utf8");
+const searchCriteria = readFileSync(new URL("../components/SearchCriteriaManager.tsx", import.meta.url), "utf8");
 const admin = readFileSync(new URL("../components/AdminReports.tsx", import.meta.url), "utf8");
 const operations = readFileSync(new URL("../components/OperationsManager.tsx", import.meta.url), "utf8");
 const urlDebug = readFileSync(new URL("../components/JobUrlDebugTool.tsx", import.meta.url), "utf8");
@@ -72,6 +76,7 @@ test("resume profiles separate readable and edit modes while matching preserves 
   assert.match(matching, /Choose a saved resume profile or paste resume text before matching/);
   assert.match(matching, /Low compatibility/);
   assert.match(matching, /MatchScoreBadge/);
+  assert.match(matching, /useState<JobSourceMode>\("paste"\)/);
 });
 
 test("documents, materials, and analytics expose versions and exact values", () => {
@@ -89,31 +94,50 @@ test("navigation exposes active routes and an accessible mobile drawer", () => {
   assert.match(shell, /Close navigation/);
   assert.match(shell, /event\.key === "Escape"/);
   assert.match(shell, /ChevronDown/);
-  assert.match(shell, /user\.tutorial_completed \|\| pathname === "\/tutorial"/);
+  assert.match(shell, /currentUser\.tutorial_completed \? "\/dashboard" : "\/"/);
+  assert.doesNotMatch(shell, /window\.location\.replace\("\/tutorial"\)/);
   assert.match(shell, /<TutorialCoachmark \/>/);
+  assert.match(shell, /href: "\/", label: "Home"/);
+  assert.match(shell, /href: "\/dashboard", label: "Dashboard"/);
   assert.doesNotMatch(shell, /笆ｼ/);
   assert.match(overhaul, /\.sidebar\.mobile-open/);
   assert.match(overhaul, /\.resume-profile-delete[\s\S]*grid-column: 1/);
   assert.match(overhaul, /\.resume-profile-open[\s\S]*grid-column: 2/);
 });
 
+test("home introduces resume matching while Job Search owns saved search criteria", () => {
+  assert.match(homePage, /IntroductionHome/);
+  assert.doesNotMatch(homePage, /DashboardHome/);
+  assert.doesNotMatch(homePage, /QuickFindHome/);
+  assert.match(introduction, /Find the jobs that match your resume best/);
+  assert.match(introduction, /href=\{isAuthenticated \? "\/tutorial\?replay=1" : "\/auth"\}/);
+  assert.match(introduction, /> Getting Started/);
+  assert.match(jobSearch, /listJobSearchCriteria\(\)/);
+  assert.match(jobSearch, /Change keywords or location/);
+  assert.match(jobSearch, /Save this search\?/);
+  assert.match(jobSearch, /usesSelectedCriterion \? selectedCriterion\?\.id/);
+  assert.match(searchCriteria, /updateJobSearchCriterion/);
+  assert.match(searchCriteria, /deleteJobSearchCriterion/);
+});
+
 test("first-run tutorial supports cross-page steps, per-step skipping, and replay", () => {
   assert.match(tutorial, /window\.sessionStorage\.setItem\(tutorialSessionKey, "0"\)/);
   assert.match(tutorial, /Skip Step/);
-  assert.match(tutorial, /Skip Tutorial/);
+  assert.match(tutorial, /Skip Getting Started/);
   assert.match(tutorial, /completeTutorial\(\)/);
+  assert.match(tutorial, /window\.location\.href = "\/dashboard"/);
   assert.match(tutorial, /href: "\/profile"/);
   assert.match(tutorial, /href: "\/jobs"/);
   assert.match(tutorial, /href: "\/jobs\/search"/);
   assert.match(tutorial, /href: "\/match"/);
   assert.match(tutorial, /href: "\/applications"/);
-  assert.match(dashboard, /href="\/tutorial\?replay=1"/);
+  assert.doesNotMatch(dashboard, /href="\/tutorial\?replay=1"/);
+  assert.doesNotMatch(dashboard, /> Getting Started/);
 });
 
 test("dashboard and jobs use the shared feedback and hierarchy components", () => {
   assert.match(dashboard, /PageHeader/);
   assert.match(dashboard, /SkeletonRows/);
-  assert.match(dashboard, /ToastRegion/);
   assert.match(dashboard, /className="dashboard-compact-list"/);
   assert.match(dashboard, /className="dashboard-compact-job"/);
   assert.match(jobs, /Toolbar/);
@@ -122,9 +146,11 @@ test("dashboard and jobs use the shared feedback and hierarchy components", () =
   assert.match(jobs, /aria-label=\{selectionMode \? `Select \$\{job\.title/);
   assert.match(jobs, /className="job-detail-tabs"/);
   assert.match(jobs, /"Match Analysis" : "Match Resume"/);
-  assert.match(jobs, />\s*Analyze All\s*<\/Button>/);
-  assert.match(jobs, /for \(const job of unanalyzedJobs\)/);
-  assert.match(jobs, /!selectionMode && !job\.job_data \? \(/);
+  assert.match(jobs, />\s*Match All\s*<\/Button>/);
+  assert.match(jobs, /params\.set\("job_ids", sortedJobs\.map/);
+  assert.match(jobs, /!selectionMode && !job\.match_data \? \(/);
+  assert.match(jobs, /await draftJobFromText\(description\)/);
+  assert.match(jobs, /save_as_user_edit: true/);
   assert.doesNotMatch(jobs, />\s*View\s*</);
   assert.doesNotMatch(jobs, />\s*Match Data\s*</);
   assert.doesNotMatch(jobs, />\s*Profile\s*</);
@@ -135,8 +161,7 @@ test("dashboard and jobs use the shared feedback and hierarchy components", () =
   assert.match(jobs, /className="job-description-toggle"/);
   assert.match(jobs, /ReadableJobProfile/);
   assert.match(jobs, /job-notes-readonly/);
-  assert.match(jobs, /title="Job profile not analyzed"[\s\S]*action=\{editor\.id && onAnalyze/);
-  assert.match(jobs, /loading=\{isAnalyzing\}/);
+  assert.match(jobs, /title="Structured job profile not available"[\s\S]*action=\{editor\.id && onMatch/);
   assert.match(jobs, /const hasMatch = Boolean\(job\.match_data\)/);
   assert.match(jobs, />\s*Re-match\s*<\/Button>/);
   assert.match(jobs, />Select Jobs<\/Button>/);

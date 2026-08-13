@@ -137,7 +137,7 @@ DaliJob supports two server auth modes:
 
 Accounts have either a `user` or `admin` role. Public registration can only create `user` accounts. Administrators can review submitted support reports and access diagnostic pages, but the role does not grant a general endpoint for browsing users' resumes, jobs, applications, or documents.
 
-New accounts launch a first-run tutorial after email verification and login. The tutorial walks through resumes, saved jobs, job search, matching, and applications. Every step or the entire tutorial can be skipped, and the Tutorial button on the homepage can replay it without changing saved account data.
+New accounts land on the introduction homepage after email verification and login. Getting Started is optional and walks through resumes, saved jobs, job search, matching, and applications. Completing or skipping it records the account as initialized and sends future logins to the dashboard without changing saved account data.
 
 Configure the mode in your private server config:
 

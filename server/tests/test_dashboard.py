@@ -110,6 +110,55 @@ def test_dashboard_returns_best_matches_and_recent_jobs() -> None:
     assert payload["recently_saved_jobs"][0]["status"] == "matched"
 
 
+def test_dashboard_combines_unanalyzed_and_analyzed_jobs_into_matching_alert() -> None:
+    client, session_factory = create_test_client()
+    identity = get_dev_identity()
+
+    with session_factory() as session:
+        profile_repository.create_resume_profile(
+            session,
+            ResumeProfileCreateRequest(
+                title="Backend Resume",
+                resume_data=ResumeData(headline="Backend Engineer", skills=["Python"]),
+                is_default=True,
+            ),
+            identity,
+        )
+        job_repository.create_job_from_source(
+            session,
+            identity,
+            source_url="https://example.com/jobs/unparsed-role",
+            raw_description_text="Build backend services.",
+            title="Unparsed Role",
+            company="Example Co",
+            cache_write_source="provider_normalization",
+        )
+        job_repository.create_job_from_description(
+            session,
+            identity,
+            source_url=None,
+            raw_description_text="Build APIs using Python.",
+            job_data=JobDescriptionData(
+                title="Analyzed Role",
+                company="Example Co",
+                required_skills=["Python"],
+            ),
+        )
+        session.commit()
+
+    payload = client.get("/api/v1/dashboard").json()
+
+    assert payload["setup_alerts"] == [
+        {
+            "kind": "jobs_need_matching",
+            "message": "2 saved jobs can be matched with a resume.",
+            "href": "/jobs",
+        }
+    ]
+    assert payload["recommended_next_step"]["kind"] == "run_matching"
+    assert payload["recommended_next_step"]["label"] == "Match saved jobs"
+
+
 def test_dashboard_surfaces_overdue_application_actions() -> None:
     client, session_factory = create_test_client()
     identity = get_dev_identity()

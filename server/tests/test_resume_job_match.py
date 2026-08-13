@@ -236,6 +236,8 @@ def test_resume_job_match_returns_score_and_skills() -> None:
     jobs = client.get("/api/v1/jobs").json()
     assert len(jobs) == 1
     assert jobs[0]["source_url"] is None
+    assert jobs[0]["jobs_cache_id"] is None
+    assert jobs[0]["user_edited_job_id"] is not None
     assert jobs[0]["job_data"]["required_skills"] == ["PostgreSQL"]
     assert jobs[0]["match_score"] == 7
     assert jobs[0]["matched_resume_source"] == "pasted_text"

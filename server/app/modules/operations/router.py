@@ -32,6 +32,7 @@ from app.modules.jobs.schemas import (
     JobImportRequest,
     JobListDiscoverRequest,
     JobListImportRequest,
+    QuickFindRequest,
 )
 from app.modules.operations import repository
 from app.modules.operations.handlers import build_operation_handlers
@@ -120,7 +121,7 @@ def enqueue_job_search(
 ) -> ManagedOperationResponse:
     return _enqueue(
         operation_type="job_search",
-        payload=payload.model_dump(mode="json"),
+        payload=payload.model_dump(mode="json", exclude_none=True),
         request=request,
         background_tasks=background_tasks,
         db=db,
@@ -129,6 +130,30 @@ def enqueue_job_search(
         provider="apify",
         model_or_actor=APIFY_INDEED_ACTOR_ID,
         progress_total=1,
+    )
+
+
+@router.post("/quick-find-jobs", response_model=ManagedOperationResponse, status_code=status.HTTP_202_ACCEPTED)
+def enqueue_quick_find_jobs(
+    payload: QuickFindRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> ManagedOperationResponse:
+    return _enqueue(
+        operation_type="quick_find_jobs",
+        payload=payload.model_dump(mode="json"),
+        request=request,
+        background_tasks=background_tasks,
+        db=db,
+        identity=identity,
+        idempotency_key=idempotency_key,
+        provider="apify+openai",
+        model_or_actor=f"{APIFY_INDEED_ACTOR_ID}+{request.app.state.runtime.openai_model}",
+        prompt_version="quick-find-jobs-v1",
+        progress_total=payload.max_results,
     )
 
 

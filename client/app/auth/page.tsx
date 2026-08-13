@@ -1,5 +1,6 @@
 import { AuthForm } from "../../components/AuthForm";
 import { UserReports } from "../../components/UserReports";
+import { SearchCriteriaManager } from "../../components/SearchCriteriaManager";
 import { PageHeader, SectionHeader } from "../../components/ui";
 import { Activity, UserRound } from "lucide-react";
 
@@ -8,6 +9,7 @@ export default function AuthPage() {
     <section className="panel account-page">
       <PageHeader eyebrow="Account" title="Account and security" description="Review your session, security options, and submitted support requests." icon={UserRound} />
       <AuthForm />
+      <SearchCriteriaManager />
       <section className="account-tools" aria-label="Account tools">
         <SectionHeader title="Account tools" description="Review background activity associated with your account." />
         <div className="account-tools-list">

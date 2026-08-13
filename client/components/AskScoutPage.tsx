@@ -8,7 +8,7 @@ import { AlertBanner, Badge, Button, EmptyState, PageHeader, SectionHeader } fro
 
 const knownPaths = new Set([
   "/", "/profile", "/match", "/jobs", "/jobs/import-url", "/jobs/manual", "/jobs/import",
-  "/jobs/search", "/applications", "/materials", "/interviews", "/documents", "/analytics",
+  "/jobs/search", "/applications", "/materials", "/interviews", "/dashboard", "/documents", "/analytics",
   "/auth", "/operations",
 ]);
 

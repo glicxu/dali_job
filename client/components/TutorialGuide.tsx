@@ -36,9 +36,9 @@ const tutorialSteps: TutorialStep[] = [
   },
   {
     title: "Save your first job",
-    pageLabel: "Jobs",
+    pageLabel: "Saved Jobs",
     href: "/jobs",
-    description: "The Jobs page keeps opportunities you want to review, analyze, and track.",
+    description: "The Saved Jobs page keeps opportunities you want to review, match, and track.",
     task: "Import a job URL, import a list, or create a manual saved job.",
     icon: BriefcaseBusiness,
   },
@@ -51,10 +51,10 @@ const tutorialSteps: TutorialStep[] = [
     icon: Search,
   },
   {
-    title: "Analyze and match",
+    title: "Match a job",
     pageLabel: "Match",
     href: "/match",
-    description: "DaliJob can structure a job description and compare it with one of your resume profiles.",
+    description: "DaliJob prepares the job details and compares them with one of your resume profiles.",
     task: "Choose your resume and saved job, then run a match to review strengths and gaps.",
     icon: Target,
   },
@@ -76,10 +76,6 @@ function readTutorialStep(): number | null {
   return Number.isInteger(parsed) && parsed >= 0 && parsed < tutorialSteps.length ? parsed : null;
 }
 
-export function isTutorialActive(): boolean {
-  return readTutorialStep() !== null;
-}
-
 function beginTutorial() {
   window.sessionStorage.setItem(tutorialSessionKey, "0");
   window.location.href = tutorialSteps[0].href;
@@ -88,7 +84,7 @@ function beginTutorial() {
 async function finishTutorial() {
   await completeTutorial();
   window.sessionStorage.removeItem(tutorialSessionKey);
-  window.location.href = "/";
+  window.location.href = "/dashboard";
 }
 
 export function TutorialStartup() {
@@ -98,7 +94,7 @@ export function TutorialStartup() {
   if (!getAuthToken()) {
     return (
       <AlertBanner tone="warning">
-        Login is required to start the tutorial. <a href="/auth">Login or register</a> to continue.
+        Login is required to use Getting Started. <a href="/auth">Login or register</a> to continue.
       </AlertBanner>
     );
   }
@@ -109,7 +105,7 @@ export function TutorialStartup() {
     try {
       await finishTutorial();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "The tutorial could not be skipped.");
+      setError(err instanceof Error ? err.message : "Getting Started could not be skipped.");
       setIsSkipping(false);
     }
   }
@@ -127,8 +123,8 @@ export function TutorialStartup() {
           </p>
         </div>
         <div className="button-row">
-          <Button type="button" icon={ArrowRight} onClick={beginTutorial}>Start Tutorial</Button>
-          <Button type="button" variant="ghost" loading={isSkipping} onClick={() => void skipTutorial()}>Skip Tutorial</Button>
+          <Button type="button" icon={ArrowRight} onClick={beginTutorial}>Begin</Button>
+          <Button type="button" variant="ghost" loading={isSkipping} onClick={() => void skipTutorial()}>Skip Getting Started</Button>
         </div>
       </section>
 
@@ -145,7 +141,7 @@ export function TutorialStartup() {
       </ol>
 
       <p className="metadata tutorial-data-note">
-        Every step is optional. Replaying or skipping this tutorial never removes or replaces your existing data.
+        Every step is optional. Replaying or skipping Getting Started never removes or replaces your existing data.
       </p>
     </div>
   );
@@ -184,13 +180,13 @@ export function TutorialCoachmark() {
     try {
       await finishTutorial();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "The tutorial could not be completed.");
+      setError(err instanceof Error ? err.message : "Getting Started could not be completed.");
       setIsFinishing(false);
     }
   }
 
   return (
-    <aside className="tutorial-coachmark" aria-label="DaliJob tutorial" aria-live="polite">
+    <aside className="tutorial-coachmark" aria-label="DaliJob Getting Started guide" aria-live="polite">
       <div className="tutorial-progress-track" aria-hidden="true">
         <span style={{ width: `${((stepIndex + 1) / tutorialSteps.length) * 100}%` }} />
       </div>
@@ -210,7 +206,7 @@ export function TutorialCoachmark() {
           </Button>
         )}
         {!isLastStep ? <Button type="button" size="compact" variant="ghost" onClick={() => moveToStep(stepIndex + 1)}>Skip Step</Button> : null}
-        <Button type="button" size="compact" variant="ghost" loading={isFinishing} onClick={() => void completeAndExit()}>Skip Tutorial</Button>
+        <Button type="button" size="compact" variant="ghost" loading={isFinishing} onClick={() => void completeAndExit()}>Skip Getting Started</Button>
       </div>
     </aside>
   );

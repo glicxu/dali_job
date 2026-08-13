@@ -147,23 +147,44 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Build resume profile list UI with the default resume displayed first.
 - [x] Build profile editor UI.
 
-### Homepage Dashboard
+### Introduction Home And Dashboard
 
+- [x] Use `/` as a concise introduction centered on finding jobs that match the user's resume.
+- [x] Add the Getting Started action below the homepage introduction and route signed-out users through authentication.
+- [x] Keep the operational summary at `/dashboard`, expose it in navigation, and remove Getting Started from its header.
+- [x] Land first-time authenticated users on Home without automatically opening Getting Started.
+- [x] Use the database tutorial-completion state to send returning users to Dashboard after authentication.
+- [x] Send users to Dashboard after they complete or skip Getting Started.
 - [x] Replace the immediate logged-out login screen with a public homepage overview.
-- [x] Add logged-out homepage Login/Register calls to action.
+- [x] Add a logged-out homepage action that directs the user to authentication.
 - [x] Add static preview sections for resume profiles, job search/import, saved jobs, resume-to-job matching, and match data.
 - [x] Exclude future application tracking from the public preview until that product area is intentionally designed.
 - [x] Prevent logged-out users from using AI, scraping, provider integrations, file uploads, user database data, or persistence.
 - [x] Let logged-out users browse static read-only previews of major app pages.
 - [x] Direct logged-out users to `/auth` when they want to use protected live actions.
 - [x] Add owner-scoped `GET /dashboard` summary endpoint.
-- [x] Add setup alerts for missing resume profiles, no saved jobs, jobs needing analysis, and jobs needing matching.
+- [x] Add setup alerts for missing resume profiles, no saved jobs, and saved jobs that can be matched; count unanalyzed and analyzed-but-unmatched jobs together.
 - [x] Add a recommended next-step card with the documented priority order.
 - [x] Show best saved-job matches sorted by match score, including score, title, company, resume label, and short match summary when available.
 - [x] Show recently saved jobs with needs-analysis, ready-to-match, or matched state.
-- [x] Add homepage links that open the selected saved-job profile on the Jobs page.
+- [x] Add dashboard links that open the selected saved-job profile on the Jobs page.
 - [x] Add Jobs page deep-link support for opening `/jobs?job_id=<user_saved_job_id>`.
 - [x] Keep the homepage free of provider-specific wording such as Apify, Indeed, or OpenAI.
+
+### Saved Search Criteria And Former Quick Find
+
+- [x] Remove the Quick Find workflow from the homepage.
+- [x] Use the default resume profile to derive a recommended job-search keyword while requesting location explicitly.
+- [x] Let users upload, review, and apply a resume when no default profile exists.
+- [x] Search for and immediately match up to five recommended jobs through a managed operation.
+- [x] Save generated canonical job JSON in `jobs_cache` without automatically creating `user_saved_jobs`.
+- [x] Add Save Selected and Save All actions that persist only explicitly chosen jobs and match records.
+- [x] Persist owner-scoped saved search criteria with optional resume-profile provenance.
+- [x] Create an incomplete AI-generated keyword criterion when an imported resume profile is applied.
+- [x] Display saved criteria and generated keywords on Job Search with a collapsible keyword/location editor.
+- [x] Finalize a generated criterion's location after its first successful search.
+- [x] Prompt before saving a new or changed keyword/location search.
+- [x] Add Account controls for editing and deleting saved search criteria.
 
 ### Job Import
 
@@ -203,6 +224,7 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Add server-side validation, timeouts, and clear errors for Apify token exhaustion, actor failure, empty results, or invalid input.
 - [x] Add initial request rate limiting and cost controls for the current single-server deployment.
 - [x] Add new client Job Search page where the user enters keyword and location.
+- [x] Add saved-criteria selection, first-use location completion, and optional custom-search saving to Job Search.
 - [x] Display up to 10 Apify-sourced Indeed results in a reviewable list.
 - [x] Add result detail view so the user can inspect the full job description before importing.
 - [x] Add selection flow so the user can import one or more Apify search results.

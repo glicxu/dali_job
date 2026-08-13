@@ -81,21 +81,12 @@ def _build_alerts(resume_count: int, jobs: list[dict[str, Any]]) -> list[Dashboa
                 href="/jobs/search",
             )
         )
-    jobs_needing_analysis = sum(1 for job in jobs if job.get("job_data") is None)
-    if jobs_needing_analysis:
-        alerts.append(
-            DashboardAlert(
-                kind="jobs_need_analysis",
-                message=f"{jobs_needing_analysis} saved job{'s' if jobs_needing_analysis != 1 else ''} need analysis before full matching details are available.",
-                href="/jobs",
-            )
-        )
-    jobs_needing_match = sum(1 for job in jobs if job.get("job_data") is not None and job.get("match_score") is None)
+    jobs_needing_match = sum(1 for job in jobs if job.get("match_score") is None)
     if jobs_needing_match:
         alerts.append(
             DashboardAlert(
                 kind="jobs_need_matching",
-                message=f"{jobs_needing_match} analyzed job{'s' if jobs_needing_match != 1 else ''} are ready for resume matching.",
+                message=f"{jobs_needing_match} saved job{'s' if jobs_needing_match != 1 else ''} can be matched with a resume.",
                 href="/jobs",
             )
         )
@@ -134,19 +125,12 @@ def _build_next_step(
             href="/jobs/search",
             reason="Saved jobs give you opportunities to analyze, compare, and track.",
         )
-    if any(job.get("job_data") is None for job in jobs):
-        return DashboardNextStep(
-            kind="analyze_saved_jobs",
-            label="Analyze saved jobs",
-            href="/jobs",
-            reason="Some saved jobs need structured job data before full match details are available.",
-        )
     if any(job.get("match_score") is None for job in jobs):
         return DashboardNextStep(
             kind="run_matching",
-            label="Run matching",
+            label="Match saved jobs",
             href="/jobs",
-            reason="Analyzed jobs are ready to compare against one of your resume profiles.",
+            reason="Saved jobs are ready to compare with a resume. Missing job details will be prepared during matching.",
         )
     if best_matches:
         return DashboardNextStep(

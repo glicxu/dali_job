@@ -67,12 +67,11 @@ The comparison should use the OpenAI API through the server-side AI provider abs
 
 This prototype should still preserve the client/server split: the client submits source selections through the API, and the server performs URL fetching, AI parsing, scoring, validation, and persistence.
 
-### 4.0.1 Homepage And Public Preview
+### 4.0.1 Introduction Home, Dashboard, Saved Searches, And Public Preview
 
-The homepage has two modes:
+The root homepage is a concise introduction for both signed-out and signed-in users. It explains that DaliJob's main purpose is to compare a user's resume with job requirements so the user can focus on stronger-fit opportunities. It includes a simple visual match example and a prominent Getting Started action directly below the introduction. For signed-in users the action opens `/tutorial?replay=1`; for signed-out users it opens `/auth` before any protected workflow is available.
 
-- Signed-out mode: a public product overview that explains what DaliJob does and gives the user clear login/register entry points.
-- Signed-in mode: the private dashboard that helps the user decide what to do next.
+Authentication landing behavior uses the database-backed `tutorial_completed` value returned with the authenticated user. A first-time user with `tutorial_completed = false` lands on `/` after login or email verification and is not forced into the tutorial. A returning user with `tutorial_completed = true` lands on `/dashboard`. Completing or skipping Getting Started marks the tutorial complete and exits to `/dashboard`.
 
 The signed-out homepage may include static, non-database-backed previews of the core product areas:
 
@@ -86,9 +85,20 @@ The signed-out preview must not include future application tracking until that p
 
 Public navigation should expose the major app pages so prospective users can inspect the workflow before registering. Signed-out versions of those pages must be static read-only previews. Any live action that would use user data, OpenAI, Apify, scraping, file uploads, or persistence must require authentication and should direct the user to `/auth`.
 
-The signed-in homepage should not be a marketing landing page and should not mention internal providers such as Apify or OpenAI.
+The introduction should remain brief and should not mention internal providers such as Apify or OpenAI. The operational dashboard lives at `/dashboard` and has its own primary-navigation item. The dashboard does not duplicate the Getting Started action.
 
-Initial homepage contents:
+Saved-search behavior belongs to Job Search at `/jobs/search`:
+
+1. Applying an AI-generated resume creates an incomplete `job_search_criteria` row from the first target role, then headline, then up to three skills. Location remains empty because resume personal locations are redacted.
+2. Display saved criteria at the top of Job Search. Selecting one fills the visible keyword and location.
+3. Let the user expand a compact editor to change keywords or location without modifying the selected saved criterion automatically.
+4. On first use of an incomplete generated criterion, require a location and persist it only after the provider search succeeds.
+5. For a changed or entirely new query, run the search first and explicitly ask whether the user wants to save it.
+6. Continue using the existing Job Search review flow: return up to ten results, let the user inspect descriptions, and create `user_saved_jobs` only for explicitly imported results.
+
+The Account page owns saved-search maintenance. Users can edit keywords/locations or soft-delete criteria without changing resume JSON or historical search results.
+
+Dashboard contents at `/dashboard`:
 
 - Setup alerts for missing prerequisites, especially when the user has no structured resume profiles. The alert should explain the missing setup item and link directly to the page where the user can fix it, such as `/profile`.
 - Best matches, showing the user's highest-scoring saved jobs from `job_resume_matches` joined through `user_saved_jobs` and `jobs_cache`.
@@ -99,13 +109,12 @@ Recommended next-step priority:
 
 1. If the user has no resume profiles, recommend creating or importing a resume profile.
 2. If the user has no saved jobs, recommend searching or importing jobs.
-3. If saved jobs exist but their effective job source is missing structured `job_data`, recommend analyzing saved jobs.
-4. If analyzed saved jobs exist without match results, recommend running resume/job matching.
-5. If matches exist, recommend reviewing the best matches and deciding which jobs to apply to.
+3. If any saved jobs lack match results, recommend resume/job matching. Jobs with missing structured `job_data` count in the same group because matching prepares those details lazily.
+4. If matches exist, recommend reviewing the best matches and deciding which jobs to apply to.
 
-Best match cards should display the score, job title, company, compared resume label when available, and a short match summary when it exists in `job_resume_matches.match_data`. Recently saved job cards should display whether the job needs analysis, is ready to match, or already has match data.
+Best match cards should display the score, job title, company, compared resume label when available, and a short match summary when it exists in `job_resume_matches.match_data`. Dashboard setup alerts combine unanalyzed and analyzed-but-unmatched jobs into one count of saved jobs that can be matched; analysis is not presented as a separate prerequisite.
 
-Homepage recently saved job links should open the corresponding saved-job profile on the Jobs page, for example with a route such as `/jobs?job_id=<user_saved_job_id>`. Homepage best-match links should open the saved job's match-data view, for example `/jobs?job_id=<user_saved_job_id>&view=match`. The Jobs page should support deep-linking to both views before this homepage link behavior is considered complete.
+Dashboard recently saved job links should open the corresponding saved-job profile on the Jobs page, for example with a route such as `/jobs?job_id=<user_saved_job_id>`. Dashboard best-match links should open the saved job's match-data view, for example `/jobs?job_id=<user_saved_job_id>&view=match`. The Jobs page should support deep-linking to both views.
 
 ### 4.1 Resume Profiles Module
 

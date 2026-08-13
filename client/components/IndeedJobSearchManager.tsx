@@ -1,13 +1,16 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { BriefcaseBusiness, Check, Eye, Search, X } from "lucide-react";
+import { BriefcaseBusiness, Check, Eye, MapPin, Save, Search, X } from "lucide-react";
 import {
+  createJobSearchCriterion,
   getAuthToken,
   importIndeedSearchResults,
   IndeedJobSearchResponse,
   IndeedJobSearchResult,
+  JobSearchCriterion,
   JobListImportResponse,
+  listJobSearchCriteria,
   listResumeProfiles,
   ResumeProfile,
   searchIndeedJobs,
@@ -49,6 +52,10 @@ export function IndeedJobSearchManager() {
 function AuthenticatedIndeedJobSearchManager() {
   const [keyword, setKeyword] = useState("");
   const [location, setLocation] = useState("");
+  const [searchCriteria, setSearchCriteria] = useState<JobSearchCriterion[]>([]);
+  const [selectedCriterionId, setSelectedCriterionId] = useState<number | null>(null);
+  const [searchEditorOpen, setSearchEditorOpen] = useState(false);
+  const [pendingCriterionSave, setPendingCriterionSave] = useState<{ keyword: string; location: string } | null>(null);
   const [result, setResult] = useState<IndeedJobSearchResponse | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
@@ -68,6 +75,7 @@ function AuthenticatedIndeedJobSearchManager() {
   const visibleResults = results.slice(pageStartIndex, pageStartIndex + RESULTS_PER_PAGE);
   const selectedResults = results.filter((item) => selectedKeys.has(resultKey(item)));
   const canImport = selectedResults.length > 0 && (!runMatching || Boolean(resumeProfileId));
+  const selectedCriterion = searchCriteria.find((criterion) => criterion.id === selectedCriterionId) ?? null;
 
   const sortedResumeProfiles = useMemo(
     () =>
@@ -80,31 +88,111 @@ function AuthenticatedIndeedJobSearchManager() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setKeyword(params.get("keyword")?.trim().slice(0, 200) || "");
-    setLocation(params.get("location")?.trim().slice(0, 200) || "");
-    listResumeProfiles()
-      .then((payload) => setResumeProfiles(payload.resume_profiles))
-      .catch(() => setResumeProfiles([]));
+    const queryKeyword = params.get("keyword")?.trim().slice(0, 200) || "";
+    const queryLocation = params.get("location")?.trim().slice(0, 200) || "";
+    Promise.all([listResumeProfiles(), listJobSearchCriteria()])
+      .then(([profilePayload, criteriaPayload]) => {
+        setResumeProfiles(profilePayload.resume_profiles);
+        setSearchCriteria(criteriaPayload);
+        if (queryKeyword || queryLocation) {
+          setKeyword(queryKeyword);
+          setLocation(queryLocation);
+          setSearchEditorOpen(true);
+          return;
+        }
+        const criterion = criteriaPayload[0];
+        if (criterion) {
+          setSelectedCriterionId(criterion.id);
+          setKeyword(criterion.keyword);
+          setLocation(criterion.location || "");
+          setSearchEditorOpen(!criterion.location);
+        } else {
+          setSearchEditorOpen(true);
+        }
+      })
+      .catch(() => {
+        setResumeProfiles([]);
+        setSearchCriteria([]);
+        setSearchEditorOpen(true);
+      });
   }, []);
 
-  async function search(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function selectCriterion(criterion: JobSearchCriterion) {
+    setSelectedCriterionId(criterion.id);
+    setKeyword(criterion.keyword);
+    setLocation(criterion.location || "");
+    setSearchEditorOpen(!criterion.location);
+    setPendingCriterionSave(null);
+  }
+
+  async function refreshCriteria(preferredId?: number) {
+    const criteria = await listJobSearchCriteria();
+    setSearchCriteria(criteria);
+    const preferred = criteria.find((criterion) => criterion.id === preferredId);
+    if (preferred) selectCriterion(preferred);
+  }
+
+  function changeKeyword(value: string) {
+    setKeyword(value);
+    if (selectedCriterion && value.trim() !== selectedCriterion.keyword) {
+      setSelectedCriterionId(null);
+    }
+  }
+
+  function changeLocation(value: string) {
+    setLocation(value);
+    if (selectedCriterion?.location && value.trim() !== selectedCriterion.location) {
+      setSelectedCriterionId(null);
+    }
+  }
+
+  async function searchJobs(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
     setError(null);
     setStatus(null);
     setImportResult(null);
+    setPendingCriterionSave(null);
     setActiveResult(null);
     setCurrentPage(1);
     setSelectedKeys(new Set());
     setIsSearching(true);
     try {
-      const payload = await searchIndeedJobs(keyword.trim(), location.trim(), 10);
+      const usesSelectedCriterion = Boolean(
+        selectedCriterion
+        && selectedCriterion.keyword === keyword.trim()
+        && (!selectedCriterion.location || selectedCriterion.location === location.trim()),
+      );
+      const payload = await searchIndeedJobs(
+        keyword.trim(),
+        location.trim(),
+        10,
+        usesSelectedCriterion ? selectedCriterion?.id : undefined,
+      );
       setResult(payload);
       setSelectedKeys(new Set(payload.results.map((item) => resultKey(item))));
+      if (usesSelectedCriterion && selectedCriterion) {
+        await refreshCriteria(selectedCriterion.id);
+      } else {
+        setPendingCriterionSave({ keyword: payload.keyword, location: payload.location });
+      }
       setStatus(`Found ${payload.results.length} job${payload.results.length === 1 ? "" : "s"}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Job search failed.");
     } finally {
       setIsSearching(false);
+    }
+  }
+
+  async function saveSearchCriterion() {
+    if (!pendingCriterionSave) return;
+    setError(null);
+    try {
+      const saved = await createJobSearchCriterion(pendingCriterionSave);
+      await refreshCriteria(saved.id);
+      setPendingCriterionSave(null);
+      setStatus("Search criteria saved.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The search criteria could not be saved.");
     }
   }
 
@@ -154,31 +242,102 @@ function AuthenticatedIndeedJobSearchManager() {
       {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
       <ToastRegion message={status} onDismiss={() => setStatus(null)} />
 
-      <section className="profile-card job-search-form-section">
-        <SectionHeader title="Search criteria" description="Enter a role and location to find up to ten current postings." />
+      <section className="profile-card job-search-form-section quick-find-search-card">
+        <SectionHeader
+          title="Search criteria"
+          description="Choose a saved search or adjust the keywords and location before searching."
+        />
+        {searchCriteria.length ? (
+          <div className="quick-find-criteria-list" aria-label="Saved search criteria">
+            {searchCriteria.map((criterion) => (
+              <button
+                type="button"
+                className={`quick-find-criterion${criterion.id === selectedCriterionId ? " selected" : ""}`}
+                aria-pressed={criterion.id === selectedCriterionId}
+                onClick={() => selectCriterion(criterion)}
+                key={criterion.id}
+              >
+                <span className="quick-find-criterion-copy">
+                  <strong>{criterion.keyword}</strong>
+                  <span>{criterion.location || "Location needed"}</span>
+                </span>
+                <span className="quick-find-criterion-source">
+                  {criterion.source === "resume_generated" ? "From resume" : "Saved"}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="metadata">No searches are saved yet. Enter keywords and a location to begin.</p>
+        )}
 
-        <form className="inline-form" onSubmit={search}>
-          <Field label="Keyword">
-            <input
-              type="text"
-              value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
-              placeholder="software engineer"
-              required
-            />
-          </Field>
-          <Field label="Location">
-            <input
-              type="text"
-              value={location}
-              onChange={(event) => setLocation(event.target.value)}
-              placeholder="Maryland"
-              required
-            />
-          </Field>
-          <Button type="submit" icon={Search} loading={isSearching}>Search</Button>
-        </form>
+        <div className="quick-find-active-search">
+          <div>
+            <span>Keywords</span>
+            <strong>{keyword || "Add search keywords"}</strong>
+          </div>
+          <div>
+            <span>Location</span>
+            <strong>{location || "Location needed"}</strong>
+          </div>
+          <Button
+            type="button"
+            icon={Search}
+            loading={isSearching}
+            disabled={!keyword.trim() || !location.trim()}
+            onClick={() => void searchJobs()}
+          >
+            Search Jobs
+          </Button>
+        </div>
+
+        <details
+          className="quick-find-search-editor"
+          open={searchEditorOpen}
+          onToggle={(event) => setSearchEditorOpen(event.currentTarget.open)}
+        >
+          <summary>Change keywords or location</summary>
+          <form className="quick-find-search-form" onSubmit={searchJobs}>
+            <Field label="Search for a job or keyword">
+              <input
+                type="text"
+                value={keyword}
+                onChange={(event) => changeKeyword(event.target.value)}
+                maxLength={255}
+                required
+              />
+            </Field>
+            <Field label="Location">
+              <div className="input-with-icon">
+                <MapPin size={17} aria-hidden="true" />
+                <input
+                  type="text"
+                  value={location}
+                  onChange={(event) => changeLocation(event.target.value)}
+                  maxLength={255}
+                  required
+                />
+              </div>
+            </Field>
+            <Button type="submit" icon={Search} loading={isSearching}>Search</Button>
+          </form>
+        </details>
       </section>
+
+      {pendingCriterionSave ? (
+        <AlertBanner tone="info">
+          <div>
+            <strong>Save this search?</strong>
+            <p className="summary">
+              Keep {pendingCriterionSave.keyword} in {pendingCriterionSave.location} as a reusable search option.
+            </p>
+          </div>
+          <div className="button-row">
+            <Button type="button" variant="ghost" onClick={() => setPendingCriterionSave(null)}>Not Now</Button>
+            <Button type="button" icon={Save} onClick={() => void saveSearchCriterion()}>Save Search</Button>
+          </div>
+        </AlertBanner>
+      ) : null}
 
       {result ? (
         <section className="job-search-workspace">
@@ -379,12 +538,12 @@ function IndeedJobSearchPreview() {
         </div>
         <form className="inline-form">
           <label>
-            Keyword
-            <input value="software engineer" readOnly />
+            Search for a job or keyword
+            <input value="" readOnly />
           </label>
           <label>
             Location
-            <input value="Maryland" readOnly />
+            <input value="" readOnly />
           </label>
           <button type="button" disabled>
             Search

@@ -174,6 +174,38 @@ def test_draft_job_description_does_not_save_until_user_creates_job(monkeypatch)
     assert client.get("/api/v1/jobs").json()[0]["id"] == saved["id"]
 
 
+def test_pasted_manual_job_draft_saves_as_user_edited_job_without_cache() -> None:
+    client = create_test_client()
+    description = "Build APIs using Python and PostgreSQL for customer workflows."
+
+    draft_response = client.post(
+        "/api/v1/jobs/draft",
+        json={"job_description_text": description},
+    )
+
+    assert draft_response.status_code == 200
+    draft = draft_response.json()
+    draft["job_data"]["title"] = "My Manual Backend Role"
+
+    create_response = client.post(
+        "/api/v1/jobs",
+        json={
+            "title": "My Manual Backend Role",
+            "company": draft["job_data"]["company"],
+            "raw_description_text": description,
+            "job_data": draft["job_data"],
+            "save_as_user_edit": True,
+        },
+    )
+
+    assert create_response.status_code == 200
+    saved = create_response.json()
+    assert saved["title"] == "My Manual Backend Role"
+    assert saved["jobs_cache_id"] is None
+    assert saved["user_edited_job_id"] is not None
+    assert saved["job_data"]["required_skills"] == ["Python", "API design"]
+
+
 def test_update_saved_job_stores_private_detail_edits() -> None:
     client = create_test_client()
     create_response = client.post(

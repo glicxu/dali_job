@@ -448,6 +448,46 @@ export type CoverLetterContent = {
   warnings: string[];
 };
 
+export type QuickFindCandidate = {
+  jobs_cache_id: number;
+  source_url: string;
+  title: string;
+  company: string;
+  location: string;
+  summary: string;
+  match_score: number;
+  match_data: Record<string, unknown>;
+  resume_data_snapshot: Record<string, unknown>;
+  job_data_snapshot: Record<string, unknown>;
+  model_name: string | null;
+  provider_execution_reference: string | null;
+};
+
+export type QuickFindResponse = {
+  operation_id: number;
+  resume_profile_id: number;
+  search_criterion_id: number | null;
+  resume_title: string;
+  keyword: string;
+  location: string;
+  candidates: QuickFindCandidate[];
+  warnings: string[];
+};
+
+export type JobSearchCriterion = {
+  id: number;
+  workspace_id: number;
+  user_id: number;
+  resume_profile_id: number | null;
+  keyword: string;
+  location: string | null;
+  source: "resume_generated" | "custom" | string;
+  is_complete: boolean;
+  last_used_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ApplicationMaterialVersion = {
   id: number; material_id: number; version_number: number; parent_version_id: number | null;
   operation_id: number | null; source_document_version_id: number | null; source_material_version_id: number | null;
@@ -1590,11 +1630,64 @@ export function searchIndeedJobs(
   keyword: string,
   location: string,
   maxResults = 10,
+  searchCriterionId?: number,
 ): Promise<IndeedJobSearchResponse> {
   return runManagedOperation<IndeedJobSearchResponse>("job_search", "/operations/job-search", {
       keyword,
       location,
       max_results: maxResults,
+      search_criterion_id: searchCriterionId,
+  });
+}
+
+export function quickFindJobs(
+  resumeProfileId: number,
+  keyword: string,
+  location: string,
+  searchCriterionId?: number,
+): Promise<QuickFindResponse> {
+  return runManagedOperation<QuickFindResponse>("quick_find_jobs", "/operations/quick-find-jobs", {
+    resume_profile_id: resumeProfileId,
+    search_criterion_id: searchCriterionId,
+    keyword,
+    location,
+    max_results: 5,
+  });
+}
+
+export function listJobSearchCriteria(): Promise<JobSearchCriterion[]> {
+  return requestJson<{ criteria: JobSearchCriterion[] }>("/job-search/criteria").then((payload) => payload.criteria);
+}
+
+export function createJobSearchCriterion(payload: {
+  resume_profile_id?: number;
+  keyword: string;
+  location: string;
+}): Promise<JobSearchCriterion> {
+  return requestJson<JobSearchCriterion>("/job-search/criteria", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateJobSearchCriterion(
+  criterionId: number,
+  payload: { keyword?: string; location?: string },
+): Promise<JobSearchCriterion> {
+  return requestJson<JobSearchCriterion>(`/job-search/criteria/${criterionId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteJobSearchCriterion(criterionId: number): Promise<void> {
+  return requestJson<void>(`/job-search/criteria/${criterionId}`, { method: "DELETE" });
+}
+
+export function saveQuickFindJobs(operationId: number, jobsCacheIds: number[]): Promise<JobListImportResponse> {
+  return requestJson<JobListImportResponse>("/job-search/quick-find/save", {
+    method: "POST",
+    body: JSON.stringify({ operation_id: operationId, jobs_cache_ids: jobsCacheIds }),
   });
 }
 

@@ -6,8 +6,8 @@ export default function TutorialPage() {
   return (
     <section className="panel tutorial-page">
       <PageHeader
-        eyebrow="Getting Started"
-        title="DaliJob Tutorial"
+        eyebrow="Welcome to DaliJob"
+        title="Getting Started"
         description="Learn the core workflow using your own account and data. Every step can be skipped."
         icon={GraduationCap}
       />

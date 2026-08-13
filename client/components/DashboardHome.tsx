@@ -6,7 +6,6 @@ import {
   BriefcaseBusiness,
   CheckCircle2,
   ClipboardCheck,
-  GraduationCap,
   ShieldCheck,
   Sparkles,
   Target,
@@ -46,7 +45,7 @@ export function DashboardHome() {
     try {
       setDashboard(await getDashboard());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load homepage.");
+      setError(err instanceof Error ? err.message : "Could not load dashboard.");
     } finally {
       setIsLoading(false);
     }
@@ -63,7 +62,7 @@ export function DashboardHome() {
   if (homeMode === "checking" || isLoading) {
     return (
       <section className="panel dashboard-page">
-        <PageHeader eyebrow="Home" title="DaliJob dashboard" description="Loading your career workspace." icon={Sparkles} />
+        <PageHeader eyebrow="Dashboard" title="DaliJob dashboard" description="Loading your career workspace." icon={Sparkles} />
         <SkeletonRows count={4} />
       </section>
     );
@@ -84,17 +83,10 @@ export function DashboardHome() {
   return (
     <section className="panel dashboard-page">
       <PageHeader
-        eyebrow="Home"
+        eyebrow="Dashboard"
         title="DaliJob dashboard"
         description="Review what needs attention and continue your job search."
         icon={Sparkles}
-        actions={
-          <div className="button-row">
-            <a className="button-link secondary-button action-with-icon" href="/tutorial?replay=1">
-              <GraduationCap size={17} aria-hidden="true" /> Tutorial
-            </a>
-          </div>
-        }
       />
 
       <section className="dashboard-next-step">

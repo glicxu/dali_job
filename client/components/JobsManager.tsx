@@ -12,16 +12,17 @@ import {
   ListPlus,
   RotateCcw,
   SearchCheck,
+  Sparkles,
   Target,
   Trash2,
   X,
 } from "lucide-react";
 import {
-  analyzeJob,
   archiveJob,
   bulkDeleteJobs,
   createJob,
   deleteJob,
+  draftJobFromText,
   draftJobFromUrl,
   emptyJobDescriptionData,
   getAuthToken,
@@ -174,11 +175,7 @@ function editorFromJob(job: StoredJob, showSaveButton = true): JobEditorState {
 
 function matchPageHref(job: StoredJob): string {
   const params = new URLSearchParams();
-  if (job.source_url) {
-    params.set("job_url", job.source_url);
-  } else {
-    params.set("job_ids", String(job.id));
-  }
+  params.set("job_ids", String(job.id));
   if (job.matched_resume_profile_id) {
     params.set("resume_profile_id", String(job.matched_resume_profile_id));
   }
@@ -310,9 +307,9 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
   const [resumeProfiles, setResumeProfiles] = useState<ResumeProfile[]>([]);
   const [documents, setDocuments] = useState<StoredDocument[]>([]);
   const [jobUrl, setJobUrl] = useState("");
-  const [editor, setEditor] = useState<JobEditorState | null>(
-    creationMode === "manual" ? emptyEditorState() : null,
-  );
+  const [manualJobTitle, setManualJobTitle] = useState("");
+  const [manualJobDescription, setManualJobDescription] = useState("");
+  const [editor, setEditor] = useState<JobEditorState | null>(null);
   const [matchDataJob, setMatchDataJob] = useState<StoredJob | null>(null);
   const [matchHistory, setMatchHistory] = useState<JobResumeMatchHistory[]>([]);
   const [detailTab, setDetailTab] = useState<JobDetailTab>("details");
@@ -322,8 +319,6 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
   const [isLoading, setIsLoading] = useState(true);
   const [isParsing, setIsParsing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [analyzingJobId, setAnalyzingJobId] = useState<number | null>(null);
-  const [isAnalyzingAll, setIsAnalyzingAll] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedBulkJobIds, setSelectedBulkJobIds] = useState<number[]>([]);
   const [isBulkRemoving, setIsBulkRemoving] = useState(false);
@@ -337,7 +332,6 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
   }, [creationMode]);
 
   const sortedJobs = useMemo(() => jobs, [jobs]);
-  const unanalyzedJobs = useMemo(() => jobs.filter((job) => !job.job_data), [jobs]);
   const isSelectionActionPending = isBulkRemoving || isBulkArchiving;
 
   async function loadJobs() {
@@ -410,6 +404,13 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
     if (!selectedBulkJobIds.length) return;
     const params = new URLSearchParams();
     params.set("job_ids", selectedBulkJobIds.join(","));
+    window.location.href = `/match?${params.toString()}`;
+  }
+
+  function matchAllJobs() {
+    if (!sortedJobs.length) return;
+    const params = new URLSearchParams();
+    params.set("job_ids", sortedJobs.map((job) => job.id).join(","));
     window.location.href = `/match?${params.toString()}`;
   }
 
@@ -518,6 +519,35 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
     }
   }
 
+  async function createManualJob(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const title = manualJobTitle.trim();
+    const description = manualJobDescription.trim();
+    if (!title || !description || isParsing || isSaving) return;
+
+    setError(null);
+    setStatus(null);
+    setIsParsing(true);
+    try {
+      const draft = await draftJobFromText(description);
+      const jobData = { ...draft.job_data, title };
+      setIsSaving(true);
+      const saved = await createJob({
+        title,
+        company: jobData.company,
+        raw_description_text: description,
+        job_data: jobData,
+        save_as_user_edit: true,
+      });
+      window.location.href = `/jobs?job_id=${saved.id}`;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Manual job creation failed.");
+    } finally {
+      setIsParsing(false);
+      setIsSaving(false);
+    }
+  }
+
   function setJobDataField<K extends keyof JobDescriptionData>(key: K, value: JobDescriptionData[K]) {
     if (!editor) return;
     const nextJobData = {
@@ -576,53 +606,6 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
       setError(err instanceof Error ? err.message : "Job save failed.");
     } finally {
       setIsSaving(false);
-    }
-  }
-
-  async function analyzeSavedJob(job: StoredJob) {
-    setError(null);
-    setStatus(null);
-    setAnalyzingJobId(job.id);
-    try {
-      const analyzed = await analyzeJob(job.id);
-      setJobs((current) => current.map((item) => (item.id === analyzed.id ? analyzed : item)));
-      if (editor?.id === analyzed.id) {
-        setEditor(editorFromJob(analyzed));
-      }
-      setStatus("Job analysis completed.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Job analysis failed.");
-    } finally {
-      setAnalyzingJobId(null);
-    }
-  }
-
-  async function analyzeAllJobs() {
-    if (!unanalyzedJobs.length || isAnalyzingAll) return;
-    setError(null);
-    setStatus(null);
-    setIsAnalyzingAll(true);
-    let completed = 0;
-    let failed = 0;
-
-    try {
-      for (const job of unanalyzedJobs) {
-        try {
-          const analyzed = await analyzeJob(job.id);
-          setJobs((current) => current.map((item) => (item.id === analyzed.id ? analyzed : item)));
-          setEditor((current) => current?.id === analyzed.id ? editorFromJob(analyzed) : current);
-          completed += 1;
-        } catch {
-          failed += 1;
-        }
-      }
-
-      setStatus(`${completed} job${completed === 1 ? "" : "s"} analyzed.`);
-      if (failed) {
-        setError(`${failed} job${failed === 1 ? "" : "s"} could not be analyzed. You can retry them individually.`);
-      }
-    } finally {
-      setIsAnalyzingAll(false);
     }
   }
 
@@ -717,6 +700,40 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
           </section>
         ) : null}
 
+        {creationMode === "manual" ? (
+          <section className="profile-card job-creation-card">
+            <SectionHeader
+              title="Add a manual job"
+              description="Enter the job title and paste the complete description. DaliJob will create the structured job profile for you."
+            />
+            <form className="stack-form" onSubmit={createManualJob}>
+              <label>
+                Job title
+                <input
+                  value={manualJobTitle}
+                  onChange={(event) => setManualJobTitle(event.target.value)}
+                  placeholder="Software Engineer"
+                  maxLength={255}
+                  required
+                />
+              </label>
+              <label>
+                Job description
+                <textarea
+                  value={manualJobDescription}
+                  onChange={(event) => setManualJobDescription(event.target.value)}
+                  placeholder="Paste the complete job description here."
+                  rows={14}
+                  required
+                />
+              </label>
+              <Button type="submit" icon={Sparkles} loading={isParsing || isSaving}>
+                Create Job
+              </Button>
+            </form>
+          </section>
+        ) : null}
+
         {editor && !editor.id ? (
           <JobEditor
             editor={editor}
@@ -804,14 +821,13 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
                   <Button
                     type="button"
                     variant="secondary"
-                    icon={SearchCheck}
-                    loading={isAnalyzingAll}
-                    disabled={!unanalyzedJobs.length || analyzingJobId !== null}
-                    onClick={() => void analyzeAllJobs()}
+                    icon={Target}
+                    disabled={!sortedJobs.length}
+                    onClick={matchAllJobs}
                   >
-                    Analyze All
+                    Match All
                   </Button>
-                  <Button type="button" icon={ListChecks} disabled={!sortedJobs.length || isAnalyzingAll} onClick={startSelectionMode}>Select Jobs</Button>
+                  <Button type="button" icon={ListChecks} disabled={!sortedJobs.length} onClick={startSelectionMode}>Select Jobs</Button>
                 </>
               )}
             </Toolbar>
@@ -894,21 +910,19 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
                     <p className="summary">{jobData.summary || "No structured summary saved yet."}</p>
                     <JobNotesPreview notes={job.notes} />
                   </div>
-                  {!selectionMode && !job.job_data ? (
+                  {!selectionMode && !job.match_data ? (
                     <div className="button-row job-row-actions">
                       <Button
                         type="button"
                         size="compact"
                         variant="secondary"
-                        icon={SearchCheck}
-                        loading={analyzingJobId === job.id}
-                        disabled={isAnalyzingAll || analyzingJobId !== null}
+                        icon={Target}
                         onClick={(event) => {
                           event.stopPropagation();
-                          void analyzeSavedJob(job);
+                          window.location.href = matchPageHref(job);
                         }}
                       >
-                        Analyze
+                        Match
                       </Button>
                     </div>
                   ) : null}
@@ -949,10 +963,9 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
               onArchive={archiveSavedJob}
               onRestore={restoreSavedJob}
               onDelete={permanentlyRemoveSavedJob}
-              isAnalyzing={analyzingJobId === editor.id}
-              onAnalyze={async () => {
+              onMatch={() => {
                 const selectedJob = jobs.find((job) => job.id === editor.id);
-                if (selectedJob) await analyzeSavedJob(selectedJob);
+                if (selectedJob) window.location.href = matchPageHref(selectedJob);
               }}
             />
           ) : null}
@@ -1025,7 +1038,7 @@ function JobsManagerPreview() {
   return (
     <div className="jobs-manager">
       <div className="warning-banner">
-        Login is required to save jobs, import postings, write notes, analyze jobs, and run matching.
+        Login is required to save jobs, import postings, write notes, and match jobs with resumes.
       </div>
       <section className="profile-card job-add-card">
         <div>
@@ -1087,7 +1100,7 @@ function JobCreationPreview({ mode }: { mode: ImportMode }) {
         <p className="metadata">
           {mode === "url"
             ? "After login, paste a job URL and review the extracted profile before saving."
-            : "After login, enter the job description and structured details manually."}
+            : "After login, enter a title and paste the job description. DaliJob will create the structured profile automatically."}
         </p>
         <a className="button-link" href="/auth">Login / Register</a>
       </section>
@@ -1322,8 +1335,7 @@ function JobEditor({
   onArchive,
   onRestore,
   onDelete,
-  isAnalyzing = false,
-  onAnalyze,
+  onMatch,
 }: {
   editor: JobEditorState;
   isSaving: boolean;
@@ -1334,8 +1346,7 @@ function JobEditor({
   onArchive: (jobId: number) => Promise<void>;
   onRestore: (jobId: number) => Promise<void>;
   onDelete: (jobId: number) => Promise<void>;
-  isAnalyzing?: boolean;
-  onAnalyze?: () => Promise<void>;
+  onMatch?: () => void;
 }) {
   const isSavedJob = Boolean(editor.id);
   const canEdit = !isSavedJob || editor.isEditing;
@@ -1473,12 +1484,12 @@ function JobEditor({
         {!editor.hasStructuredData && !canEdit ? (
           <EmptyState
             compact
-            icon={SearchCheck}
-            title="Job profile not analyzed"
-            description="The original job description is available at the top of this view. Analyze this job to create structured details."
-            action={editor.id && onAnalyze ? (
-              <Button type="button" icon={SearchCheck} loading={isAnalyzing} onClick={() => void onAnalyze()}>
-                Analyze
+            icon={Target}
+            title="Structured job profile not available"
+            description="DaliJob will prepare these details automatically when you match this job with a resume."
+            action={editor.id && onMatch ? (
+              <Button type="button" icon={Target} onClick={onMatch}>
+                Match
               </Button>
             ) : undefined}
           />

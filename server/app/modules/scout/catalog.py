@@ -22,7 +22,8 @@ class ScoutActionDefinition:
 ACTION_CATALOG: dict[str, ScoutActionDefinition] = {
     item.action_id: item
     for item in (
-        ScoutActionDefinition("open_home", "Open Home", "/", "Review setup alerts, recent jobs, and best matches."),
+        ScoutActionDefinition("open_home", "Open Home", "/", "Review setup alerts, recent jobs, best matches, and the recommended next step."),
+        ScoutActionDefinition("open_dashboard", "Open Dashboard", "/dashboard", "Review setup alerts, recent jobs, and best matches."),
         ScoutActionDefinition("open_resume_profiles", "Open Resumes", "/profile", "Upload, analyze, and manage resumes."),
         ScoutActionDefinition("open_match", "Open Match", "/match", "Compare a resume profile with one or more jobs.", ("job_url", "job_ids", "resume_profile_id")),
         ScoutActionDefinition("open_saved_jobs", "Open Saved Jobs", "/jobs", "Review saved jobs and their match data.", ("job_id", "view")),
@@ -44,7 +45,7 @@ ACTION_CATALOG: dict[str, ScoutActionDefinition] = {
 KNOWN_CLIENT_PATHS = {
     "/", "/profile", "/match", "/jobs", "/jobs/import-url", "/jobs/manual",
     "/jobs/import", "/jobs/search", "/applications", "/materials", "/interviews",
-    "/documents", "/analytics", "/auth", "/operations", "/ask-scout",
+    "/dashboard", "/documents", "/analytics", "/auth", "/operations", "/ask-scout",
 }
 
 

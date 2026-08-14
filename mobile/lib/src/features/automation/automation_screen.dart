@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../matching/matching_models.dart';
 import '../../matching/matching_repository.dart';
@@ -66,10 +67,15 @@ class _AutomationScreenState extends State<AutomationScreen> {
                 : '${profile.title}${profile.isDefault ? ' · Default' : ''}',
             actions: profile == null
                 ? [
+                    FilledButton.tonalIcon(
+                      onPressed: _busy ? null : _showLinkedInImport,
+                      icon: const Icon(Icons.badge_outlined),
+                      label: const Text('Import from LinkedIn'),
+                    ),
                     OutlinedButton.icon(
                       onPressed: _busy ? null : _uploadResume,
                       icon: const Icon(Icons.upload_file),
-                      label: const Text('Upload resume'),
+                      label: const Text('Upload PDF/TXT'),
                     ),
                     TextButton(
                       onPressed: _busy ? null : _createManualResume,
@@ -149,10 +155,10 @@ class _AutomationScreenState extends State<AutomationScreen> {
     );
   }
 
-  Future<void> _uploadResume() async {
+  Future<void> _uploadResume({bool linkedIn = false}) async {
     final file = await FilePicker.pickFile(
       type: FileType.custom,
-      allowedExtensions: const ['pdf', 'txt'],
+      allowedExtensions: linkedIn ? const ['pdf'] : const ['pdf', 'txt'],
     );
     if (file == null) return;
     final bytes = await file.readAsBytes();
@@ -164,8 +170,54 @@ class _AutomationScreenState extends State<AutomationScreen> {
       () => widget.repository.uploadAndApplyResume(
         fileName: file.name,
         bytes: bytes,
+        profileTitle: linkedIn ? 'LinkedIn Profile' : null,
       ),
     );
+  }
+
+  Future<void> _showLinkedInImport() async {
+    final chooseFile = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Import from LinkedIn'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('1. Open your LinkedIn profile.'),
+            SizedBox(height: 8),
+            Text('2. Choose More, then Save to PDF.'),
+            SizedBox(height: 8),
+            Text('3. Return here and select the exported PDF.'),
+            SizedBox(height: 12),
+            Text(
+              'DaliJob imports only the file you select and never asks for your LinkedIn password.',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              final opened = await launchUrl(
+                Uri.parse('https://www.linkedin.com/in/me/'),
+                mode: LaunchMode.externalApplication,
+              );
+              if (!opened && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Could not open LinkedIn.')),
+                );
+              }
+            },
+            child: const Text('Open LinkedIn'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Choose PDF'),
+          ),
+        ],
+      ),
+    );
+    if (chooseFile == true) await _uploadResume(linkedIn: true);
   }
 
   Future<void> _createManualResume() async {

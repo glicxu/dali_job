@@ -61,6 +61,7 @@ class MatchingRepository {
   Future<ResumeProfile> uploadAndApplyResume({
     required String fileName,
     required List<int> bytes,
+    String? profileTitle,
   }) => session.authorized((token) async {
     final imported = await api.postFile(
       'profile/resume-imports',
@@ -72,7 +73,7 @@ class MatchingRepository {
           : 'text/plain',
       accessToken: token,
     );
-    final applied = await api.post(
+    var applied = await api.post(
       'profile/resume-imports/apply',
       accessToken: token,
       body: {
@@ -81,6 +82,13 @@ class MatchingRepository {
         'source_document_version_id': imported['document_version_id'],
       },
     );
+    if (profileTitle != null) {
+      applied = await api.patch(
+        'resume-profiles/${applied['id']}',
+        accessToken: token,
+        body: {'title': profileTitle, 'is_default': true},
+      );
+    }
     return ResumeProfile.fromJson(applied);
   });
 

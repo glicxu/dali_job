@@ -184,14 +184,21 @@ class _AutomationScreenState extends State<AutomationScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('1. Open your LinkedIn profile.'),
-            SizedBox(height: 8),
-            Text('2. Choose More, then Save to PDF.'),
-            SizedBox(height: 8),
-            Text('3. Return here and select the exported PDF.'),
+            Text(
+              'LinkedIn does not provide profile PDF export in its mobile app.',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
             SizedBox(height: 12),
             Text(
-              'DaliJob imports only the file you select and never asks for your LinkedIn password.',
+              'Profile export: On a computer, open your LinkedIn profile, choose More or Resources, then Save to PDF. Transfer that PDF to this phone and select it here.',
+            ),
+            SizedBox(height: 12),
+            Text(
+              'Existing resume: On this phone, open LinkedIn Jobs → Preferences → Resumes and application data → More → Download.',
+            ),
+            SizedBox(height: 12),
+            Text(
+              'DaliJob imports only the PDF you select and never asks for your LinkedIn password.',
             ),
           ],
         ),
@@ -199,7 +206,9 @@ class _AutomationScreenState extends State<AutomationScreen> {
           TextButton(
             onPressed: () async {
               final opened = await launchUrl(
-                Uri.parse('https://www.linkedin.com/in/me/'),
+                Uri.parse(
+                  'https://www.linkedin.com/jobs/application-settings/',
+                ),
                 mode: LaunchMode.externalApplication,
               );
               if (!opened && context.mounted) {
@@ -208,7 +217,7 @@ class _AutomationScreenState extends State<AutomationScreen> {
                 );
               }
             },
-            child: const Text('Open LinkedIn'),
+            child: const Text('Open resume settings'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),

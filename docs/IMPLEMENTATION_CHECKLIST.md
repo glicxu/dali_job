@@ -154,7 +154,9 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Keep the operational summary at `/dashboard`, expose it in navigation, and remove Getting Started from its header.
 - [x] Land first-time authenticated users on Home without automatically opening Getting Started.
 - [x] Use the database tutorial-completion state to send returning users to Dashboard after authentication.
-- [x] Send users to Dashboard after they complete or skip Getting Started.
+- [x] Lock first-time account navigation to Home and the active ordered Getting Started route until the tutorial is completed once.
+- [x] Remove per-step skipping while retaining a whole-guide postpone action.
+- [x] Keep the database tutorial flag incomplete when Getting Started is postponed, and send users to Dashboard only after completion.
 - [x] Replace the immediate logged-out login screen with a public homepage overview.
 - [x] Add a logged-out homepage action that directs the user to authentication.
 - [x] Add static preview sections for resume profiles, job search/import, saved jobs, resume-to-job matching, and match data.
@@ -180,10 +182,9 @@ The sections below are grouped by product area. The order above should guide imp
 - [x] Save generated canonical job JSON in `jobs_cache` without automatically creating `user_saved_jobs`.
 - [x] Add Save Selected and Save All actions that persist only explicitly chosen jobs and match records.
 - [x] Persist owner-scoped saved search criteria with optional resume-profile provenance.
-- [x] Create an incomplete AI-generated keyword criterion when an imported resume profile is applied.
-- [x] Display saved criteria and generated keywords on Job Search with a collapsible keyword/location editor.
-- [x] Finalize a generated criterion's location after its first successful search.
-- [x] Prompt before saving a new or changed keyword/location search.
+- [x] Do not create saved search criteria automatically when a resume profile is created or imported.
+- [x] Display saved criteria on Job Search with a collapsible keyword/location editor.
+- [x] Save a new keyword/location combination only when the user explicitly selects `Save Search Options`.
 - [x] Add Account controls for editing and deleting saved search criteria.
 
 ### Job Import

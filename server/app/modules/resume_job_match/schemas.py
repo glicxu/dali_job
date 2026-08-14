@@ -11,6 +11,7 @@ class ResumeJobMatchRequest(BaseModel):
     resume_text: str | None = Field(default=None)
     resume_profile_id: int | None = Field(default=None)
     resume_document_id: int | None = Field(default=None)
+    job_title: str | None = Field(default=None, max_length=255)
     job_description_text: str | None = Field(default=None)
     job_url: HttpUrl | None = Field(default=None)
     resume_data: dict[str, Any] | None = Field(default=None)

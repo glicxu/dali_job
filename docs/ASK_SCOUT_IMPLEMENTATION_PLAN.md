@@ -186,7 +186,7 @@ The model selects an `action_id`; the server looks up the path and validates par
 | --- | --- | --- | --- |
 | `open_home` | Open Home | `/` | none |
 | `open_resume_profiles` | Open Resume Profiles | `/profile` | none |
-| `open_match` | Open Match | `/match` | `job_url`, `job_ids`, `resume_profile_id` |
+| `open_match` | Open Match | `/match` | `job_ids`, `resume_profile_id` |
 | `open_saved_jobs` | Open Saved Jobs | `/jobs` | `job_id`, `view` |
 | `open_job_import` | Import Job | `/jobs/import-url` | `job_url` |
 | `open_manual_job` | Create Job Manually | `/jobs/manual` | none in V1 |

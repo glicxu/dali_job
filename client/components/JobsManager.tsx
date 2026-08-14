@@ -7,9 +7,7 @@ import {
   ChevronDown,
   ExternalLink,
   FilePenLine,
-  Link2,
   ListChecks,
-  ListPlus,
   RotateCcw,
   SearchCheck,
   Sparkles,
@@ -18,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  analyzeJob,
   archiveJob,
   bulkDeleteJobs,
   createJob,
@@ -319,6 +318,7 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
   const [isLoading, setIsLoading] = useState(true);
   const [isParsing, setIsParsing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [analyzingJobId, setAnalyzingJobId] = useState<number | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedBulkJobIds, setSelectedBulkJobIds] = useState<number[]>([]);
   const [isBulkRemoving, setIsBulkRemoving] = useState(false);
@@ -626,6 +626,26 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
     }
   }
 
+  async function analyzeSavedJob(jobId: number) {
+    if (analyzingJobId !== null) return;
+    setError(null);
+    setStatus(null);
+    setAnalyzingJobId(jobId);
+    try {
+      const analyzedJob = await analyzeJob(jobId);
+      setJobs((current) => current.map((job) => job.id === analyzedJob.id ? analyzedJob : job));
+      setEditor(editorFromJob(analyzedJob));
+      setMatchDataJob(null);
+      setMatchHistory([]);
+      setDetailTab("details");
+      setStatus("Job profile analyzed.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Job analysis failed.");
+    } finally {
+      setAnalyzingJobId(null);
+    }
+  }
+
   function closeSelectedJob() {
     setEditor(null);
     setMatchDataJob(null);
@@ -703,7 +723,7 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
         {creationMode === "manual" ? (
           <section className="profile-card job-creation-card">
             <SectionHeader
-              title="Add a manual job"
+              title="Create Job Entry"
               description="Enter the job title and paste the complete description. DaliJob will create the structured job profile for you."
             />
             <form className="stack-form" onSubmit={createManualJob}>
@@ -722,13 +742,13 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
                 <textarea
                   value={manualJobDescription}
                   onChange={(event) => setManualJobDescription(event.target.value)}
-                  placeholder="Paste the complete job description here."
+                  placeholder="Paste as much of the full job posting as possible, including responsibilities, qualifications, location, application deadline, salary, and security clearance when applicable."
                   rows={14}
                   required
                 />
               </label>
               <Button type="submit" icon={Sparkles} loading={isParsing || isSaving}>
-                Create Job
+                Create Job Entry
               </Button>
             </form>
           </section>
@@ -764,11 +784,9 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
       <ToastRegion message={status} onDismiss={() => setStatus(null)} />
 
       <section className="profile-card job-add-card">
-        <SectionHeader title="Add a Job" description="Import one posting, discover a list, or create a private manual entry." />
+        <SectionHeader title="Add a new Job Entry" description="Add a job entry using a pasted title and description." />
         <div className="job-create-actions" aria-label="Create a saved job">
-          <a className="button-link action-with-icon" href="/jobs/import-url"><Link2 size={17} aria-hidden="true" /> Import Job</a>
-          <a className="button-link secondary-button action-with-icon" href="/jobs/import"><ListPlus size={17} aria-hidden="true" /> Import Job List</a>
-          <a className="button-link secondary-button action-with-icon" href="/jobs/manual"><FilePenLine size={17} aria-hidden="true" /> Create Manual Job</a>
+          <a className="button-link action-with-icon" href="/jobs/manual"><FilePenLine size={17} aria-hidden="true" /> Add Entry</a>
         </div>
       </section>
 
@@ -963,10 +981,12 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
               onArchive={archiveSavedJob}
               onRestore={restoreSavedJob}
               onDelete={permanentlyRemoveSavedJob}
-              onMatch={() => {
-                const selectedJob = jobs.find((job) => job.id === editor.id);
-                if (selectedJob) window.location.href = matchPageHref(selectedJob);
+              onCancelEdit={() => {
+                const savedJob = jobs.find((job) => job.id === editor.id);
+                if (savedJob) setEditor(editorFromJob(savedJob));
               }}
+              isAnalyzing={analyzingJobId === editor.id}
+              onAnalyze={() => void analyzeSavedJob(editor.id!)}
             />
           ) : null}
 
@@ -1042,13 +1062,11 @@ function JobsManagerPreview() {
       </div>
       <section className="profile-card job-add-card">
         <div>
-          <h2>Add a Job</h2>
-          <p className="metadata">Import one job description, multiple jobs from a search list, or add one manually.</p>
+          <h2>Add a new Job Entry</h2>
+          <p className="metadata">Add a job entry using a pasted title and description.</p>
         </div>
         <div className="job-create-actions" aria-label="Preview job creation options">
-          <a className="button-link" href="/jobs/import-url">Import Job</a>
-          <a className="button-link secondary-button" href="/jobs/import">Import Job List</a>
-          <a className="button-link secondary-button" href="/jobs/manual">Create Manual Job</a>
+          <a className="button-link" href="/jobs/manual">Add Entry</a>
         </div>
       </section>
 
@@ -1096,7 +1114,7 @@ function JobCreationPreview({ mode }: { mode: ImportMode }) {
     <div className="jobs-manager job-creation-manager">
       <div className="warning-banner">Login is required to create and save a job profile.</div>
       <section className="profile-card job-creation-card">
-        <h2>{mode === "url" ? "Import from a job URL" : "Create a manual job"}</h2>
+        <h2>{mode === "url" ? "Import from a job URL" : "Create Job Entry"}</h2>
         <p className="metadata">
           {mode === "url"
             ? "After login, paste a job URL and review the extracted profile before saving."
@@ -1335,7 +1353,9 @@ function JobEditor({
   onArchive,
   onRestore,
   onDelete,
-  onMatch,
+  onCancelEdit,
+  isAnalyzing = false,
+  onAnalyze,
 }: {
   editor: JobEditorState;
   isSaving: boolean;
@@ -1346,7 +1366,9 @@ function JobEditor({
   onArchive: (jobId: number) => Promise<void>;
   onRestore: (jobId: number) => Promise<void>;
   onDelete: (jobId: number) => Promise<void>;
-  onMatch?: () => void;
+  onCancelEdit?: () => void;
+  isAnalyzing?: boolean;
+  onAnalyze?: () => void;
 }) {
   const isSavedJob = Boolean(editor.id);
   const canEdit = !isSavedJob || editor.isEditing;
@@ -1377,51 +1399,64 @@ function JobEditor({
           </p>
         </div>
         <div className="button-row">
-          {editor.source_url ? (
-            <a
-              className="button-link secondary-button action-with-icon"
-              href={editor.source_url}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <ExternalLink size={16} aria-hidden="true" /> Source
-            </a>
-          ) : null}
-          {editor.id ? (
-            editor.archived_at ? (
-              <button type="button" className="secondary-button" onClick={() => void onRestore(editor.id!)}>
-                Restore
+          {isSavedJob && editor.isEditing ? (
+            <>
+              <button type="submit" disabled={isSaving}>
+                {isSaving ? "Saving..." : "Save changes"}
               </button>
-            ) : (
-              <button type="button" className="secondary-button" onClick={() => void onArchive(editor.id!)}>
-                Archive
+              <button type="button" className="secondary-button" disabled={isSaving} onClick={onCancelEdit}>
+                Cancel
               </button>
-            )
-          ) : null}
-          {editor.id ? (
-            <button type="button" className="secondary-button" onClick={() => void onDelete(editor.id!)}>
-              Delete
-            </button>
-          ) : null}
-          {isSavedJob && !editor.isEditing ? (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onChange({ ...editor, isEditing: true });
-              }}
-            >
-              Edit
-            </button>
-          ) : editor.showSaveButton ? (
-            <button type="submit" disabled={isSaving}>
-              {isSaving ? "Saving..." : isSavedJob ? "Save changes" : "Save Job"}
-            </button>
-          ) : null}
-          <button type="button" className="secondary-button" onClick={onClose}>
-            Close
-          </button>
+            </>
+          ) : (
+            <>
+              {editor.source_url ? (
+                <a
+                  className="button-link secondary-button action-with-icon"
+                  href={editor.source_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <ExternalLink size={16} aria-hidden="true" /> Source
+                </a>
+              ) : null}
+              {editor.id ? (
+                editor.archived_at ? (
+                  <button type="button" className="secondary-button" onClick={() => void onRestore(editor.id!)}>
+                    Restore
+                  </button>
+                ) : (
+                  <button type="button" className="secondary-button" onClick={() => void onArchive(editor.id!)}>
+                    Archive
+                  </button>
+                )
+              ) : null}
+              {editor.id ? (
+                <button type="button" className="secondary-button" onClick={() => void onDelete(editor.id!)}>
+                  Delete
+                </button>
+              ) : null}
+              {isSavedJob ? (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onChange({ ...editor, isEditing: true });
+                  }}
+                >
+                  Edit
+                </button>
+              ) : editor.showSaveButton ? (
+                <button type="submit" disabled={isSaving}>
+                  {isSaving ? "Saving..." : "Save Job"}
+                </button>
+              ) : null}
+              <button type="button" className="secondary-button" onClick={onClose}>
+                Close
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -1486,10 +1521,10 @@ function JobEditor({
             compact
             icon={Target}
             title="Structured job profile not available"
-            description="DaliJob will prepare these details automatically when you match this job with a resume."
-            action={editor.id && onMatch ? (
-              <Button type="button" icon={Target} onClick={onMatch}>
-                Match
+            description="Analyze the saved job description to generate structured details before matching it with a resume."
+            action={editor.id && onAnalyze ? (
+              <Button type="button" icon={Sparkles} loading={isAnalyzing} onClick={onAnalyze}>
+                Analyze
               </Button>
             ) : undefined}
           />

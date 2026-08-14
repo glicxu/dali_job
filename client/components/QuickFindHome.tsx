@@ -318,7 +318,7 @@ function AuthenticatedQuickFindHome() {
                     <strong>{criterion.keyword}</strong>
                     <span>{criterion.location || "Location needed"}</span>
                   </span>
-                  <span className="quick-find-criterion-source">{criterion.source === "resume_generated" ? "From resume" : "Saved"}</span>
+                  <span className="quick-find-criterion-source">Saved</span>
                 </button>
               ))}
             </div>

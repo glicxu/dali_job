@@ -266,7 +266,7 @@ Component rules:
 - Make the selected resume unmistakable through blue selection treatment.
 - Render the right side like a readable professional resume when not editing.
 - Separate view and edit modes so form fields do not dominate normal viewing.
-- Keep Import Resume as a separate, compact action section above the workspace.
+- Keep Upload Resume as a separate, compact action section above the workspace.
 
 ### Saved Jobs
 

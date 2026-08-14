@@ -148,6 +148,9 @@ def import_job_for_match(
         source_url = None
         raw_text = (payload.job_description_text or "").strip()
     job_data = parser.parse(raw_text)
+    requested_title = (payload.job_title or "").strip()
+    if requested_title:
+        job_data = job_data.model_copy(update={"title": requested_title})
     if source_url:
         cached_job = job_repository.get_or_create_cache_job(
             db,

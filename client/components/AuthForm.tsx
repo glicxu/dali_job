@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { LogIn, LogOut, ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import { LogIn, LogOut, Trash2, UserPlus } from "lucide-react";
 import {
   clearAuthToken,
   CurrentUser,
@@ -111,9 +111,9 @@ export function AuthForm({ onAuthChange }: { onAuthChange?: (user: CurrentUser |
       await deleteAccount(deletePassword);
       setUser(null);
       onAuthChange?.(null);
-      setStatus("Your account has been deleted.");
       setShowDelete(false);
       setDeletePassword("");
+      window.location.replace("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Account deletion failed.");
     } finally {
@@ -139,10 +139,6 @@ export function AuthForm({ onAuthChange }: { onAuthChange?: (user: CurrentUser |
               <Button type="button" variant="secondary" size="compact" icon={LogOut} onClick={signOut}>Sign Out</Button>
             </div>
           </div>
-          <section className="account-security-summary">
-            <ShieldCheck size={21} aria-hidden="true" />
-            <div><h3>Account security</h3><p className="metadata">Authentication uses secure server-managed session cookies. Password reset links are sent to your registered email.</p></div>
-          </section>
           <div className="account-danger-zone">
             <SectionHeader title="Delete account" description="This soft-deletes your account and ends all active sessions. This action is intentionally separated from normal account controls." />
             {!showDelete ? (

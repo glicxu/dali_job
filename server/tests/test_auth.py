@@ -14,16 +14,31 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.session import get_db_session
 from app.main import API_ROUTERS, create_app
-from app.modules.accounts.models import User
-from app.modules.auth.models import AuthSession
+from app.modules.accounts.models import User, Workspace
+from app.modules.applications.models import (
+    Application,
+    ApplicationDocument,
+    ApplicationEvent,
+    ApplicationNote,
+    ApplicationStatusHistory,
+    ApplicationTask,
+)
+from app.modules.auth.models import AuthActionToken, AuthSession
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.dependencies import get_auth_db_session
 from app.modules.auth.policy import validate_route_authorization
 from app.modules.auth.rate_limit import AuthRateLimiter, AuthRateLimitPolicy
 from app.modules.auth.security import hash_password, verify_password
 from app.modules.jobs import router as jobs_router
+from app.modules.documents.models import Document, DocumentDownloadTicket, DocumentVersion
+from app.modules.interviews.models import Interview, InterviewNote, InterviewPrepGuide
+from app.modules.job_search.models import JobSearchCriterion
+from app.modules.jobs.models import JobCache, JobResumeMatch, UserEditedJob, UserSavedJob
 from app.modules.jobs.router import get_job_description_parser
 from app.modules.jobs.schemas import JobDescriptionData
+from app.modules.materials.models import GeneratedApplicationMaterial, GeneratedApplicationMaterialVersion
+from app.modules.operations.models import ManagedOperation
+from app.modules.profiles.models import ResumeProfile
 from app.modules.resume_job_match import router as match_router
 from app.modules.resume_job_match.job_url_import import JobLinkCandidate, JobListDiscoveryResult
 from app.modules.reports.models import UserReport
@@ -246,10 +261,14 @@ def test_password_reset_is_generic_single_use_and_revokes_sessions(tmp_path: Pat
         "/api/v1/auth/reset-password",
         json={"token": reset_token, "new_password": "another-password"},
     ).status_code == 400
-    assert client.post(
+    login = client.post(
         "/api/v1/auth/login",
         json={"email": "user@example.com", "password": "new-strong-password"},
-    ).status_code == 200
+    )
+    assert login.status_code == 200
+    csrf = client.get("/api/v1/auth/csrf")
+    assert csrf.status_code == 200
+    assert csrf.json()["csrf_token"] == client.cookies.get("dalijob_csrf")
 
 
 def test_logout_revokes_session_and_requires_csrf(tmp_path: Path) -> None:
@@ -276,6 +295,222 @@ def test_account_soft_delete_revokes_every_session(tmp_path: Path) -> None:
     client = create_local_auth_client(tmp_path)
     _register(client)
     _verify(client)
+    session_factory = client.app.state.test_session_factory
+    with session_factory() as db:
+        user = db.execute(select(User).where(User.email == "user@example.com")).scalar_one()
+        workspace = db.execute(select(Workspace).where(Workspace.owner_user_id == user.id)).scalar_one()
+        original_user_id = user.id
+
+        document = Document(workspace_id=workspace.id, user_id=user.id, title="Private resume")
+        db.add(document)
+        db.flush()
+        document_version = DocumentVersion(
+            document_id=document.id,
+            version_number=1,
+            file_name="resume.txt",
+            content_type="text/plain",
+            size_bytes=14,
+            sha256="a" * 64,
+            storage_path="documents/private-resume.txt",
+            extracted_text="Private resume",
+        )
+        db.add(document_version)
+        db.flush()
+        download_ticket = DocumentDownloadTicket(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            document_version_id=document_version.id,
+            token_hash="b" * 64,
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+        )
+        profile = ResumeProfile(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            title="Private profile",
+            resume_data={"headline": "Engineer", "skills": ["Python"]},
+            source_document_id=document.id,
+            source_document_version_id=document_version.id,
+            is_default=True,
+        )
+        cache = JobCache(
+            title="Shared role",
+            company="Example Co",
+            source_url="https://example.com/jobs/shared-role",
+            source_url_hash="c" * 64,
+            raw_description_text="Build APIs.",
+            job_data={"title": "Shared role", "company": "Example Co"},
+        )
+        edited_job = UserEditedJob(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            title="Private edit",
+            company="Example Co",
+            raw_description_text="Private edited job.",
+            job_data={"title": "Private edit"},
+        )
+        db.add_all([download_ticket, profile, cache, edited_job])
+        db.flush()
+        saved_job = UserSavedJob(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            jobs_cache_id=cache.id,
+            notes="Private job note",
+        )
+        db.add(saved_job)
+        db.flush()
+        match = JobResumeMatch(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            user_job_id=saved_job.id,
+            jobs_cache_id=cache.id,
+            resume_profile_id=profile.id,
+            resume_document_id=document.id,
+            resume_source="profile",
+            match_score=7,
+            match_data={"match_score": 7},
+            resume_data_snapshot={"skills": ["Python"]},
+            job_data_snapshot={"required_skills": ["Python"]},
+        )
+        criterion = JobSearchCriterion(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            resume_profile_id=profile.id,
+            keyword="backend engineer",
+            location="Maryland",
+        )
+        application = Application(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            user_job_id=saved_job.id,
+            status="applied",
+            priority="normal",
+            active_duplicate_guard=1,
+        )
+        operation = ManagedOperation(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            operation_type="test_operation",
+            idempotency_key="account-delete-operation",
+            status="queued",
+            request_payload={"private": True},
+        )
+        report = UserReport(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            category="account",
+            title="Private report",
+            description="Private report details.",
+        )
+        db.add_all([match, criterion, application, operation, report])
+        db.flush()
+        status_history = ApplicationStatusHistory(
+            application_id=application.id,
+            from_status=None,
+            to_status="applied",
+        )
+        application_event = ApplicationEvent(
+            application_id=application.id,
+            event_type="application.created",
+            payload={"private": True},
+        )
+        application_note = ApplicationNote(application_id=application.id, body="Private application note")
+        application_document = ApplicationDocument(
+            application_id=application.id,
+            document_version_id=document_version.id,
+            purpose="resume",
+        )
+        application_task = ApplicationTask(application_id=application.id, title="Follow up")
+        interview = Interview(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            application_id=application.id,
+            interview_type="technical",
+            status="scheduled",
+            stage="technical_interview",
+        )
+        material = GeneratedApplicationMaterial(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            application_id=application.id,
+            material_type="tailored_resume",
+        )
+        db.add_all([
+            status_history,
+            application_event,
+            application_note,
+            application_document,
+            application_task,
+            interview,
+            material,
+        ])
+        db.flush()
+        interview_note = InterviewNote(interview_id=interview.id, body="Private interview note")
+        prep_guide = InterviewPrepGuide(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            interview_id=interview.id,
+            operation_id=operation.id,
+            resume_profile_id=profile.id,
+            resume_data_snapshot={"skills": ["Python"]},
+            job_data_snapshot={"required_skills": ["Python"]},
+        )
+        material_version = GeneratedApplicationMaterialVersion(
+            material_id=material.id,
+            version_number=1,
+            operation_id=None,
+            source_document_version_id=document_version.id,
+            source_resume_snapshot={"skills": ["Python"]},
+            job_snapshot={"required_skills": ["Python"]},
+            content_data={"sections": []},
+            version_source="ai",
+            prompt_version="test-v1",
+            schema_version="test-v1",
+        )
+        audit_event = AuditEvent(
+            workspace_id=workspace.id,
+            actor_user_id=user.id,
+            event_type="test.retained",
+            event_data={},
+        )
+        db.add_all([interview_note, prep_guide, material_version, audit_event])
+        db.commit()
+
+        owned_records = [
+            workspace,
+            document,
+            document_version,
+            download_ticket,
+            profile,
+            edited_job,
+            saved_job,
+            match,
+            criterion,
+            application,
+            status_history,
+            application_event,
+            application_note,
+            application_document,
+            application_task,
+            interview,
+            interview_note,
+            prep_guide,
+            operation,
+            material,
+            material_version,
+            report,
+        ]
+        owned_record_ids = [(type(record), record.id) for record in owned_records]
+        cache_id = cache.id
+        audit_event_id = audit_event.id
+        download_ticket_id = download_ticket.id
+        application_document_id = application_document.id
+        application_task_id = application_task.id
+        operation_id = operation.id
+
+    assert client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": "user@example.com"},
+    ).status_code == 200
     response = client.request(
         "DELETE",
         "/api/v1/auth/account",
@@ -283,11 +518,39 @@ def test_account_soft_delete_revokes_every_session(tmp_path: Path) -> None:
         json={"current_password": "strong-password"},
     )
     assert response.status_code == 204
-    with client.app.state.test_session_factory() as db:
-        user = db.execute(select(User).where(User.email == "user@example.com")).scalar_one()
-        assert not user.is_active
-        assert user.deleted_at is not None
+    with session_factory() as db:
+        deleted_user = db.get(User, original_user_id)
+        assert deleted_user is not None
+        assert not deleted_user.is_active
+        assert deleted_user.deleted_at is not None
+        assert deleted_user.email != "user@example.com"
+        assert deleted_user.email.startswith(f"deleted-{original_user_id}-")
+        assert deleted_user.email.endswith("@deleted.invalid")
+        for model, record_id in owned_record_ids:
+            record = db.get(model, record_id)
+            assert record is not None
+            assert record.deleted_at is not None, model.__tablename__
+        assert db.get(DocumentDownloadTicket, download_ticket_id).consumed_at is not None
+        assert db.get(ApplicationDocument, application_document_id).detached_at is not None
+        assert db.get(ApplicationTask, application_task_id).reminder_dismissed_at is not None
+        assert db.get(ManagedOperation, operation_id).status == "cancelled"
+        assert db.get(JobCache, cache_id).deleted_at is None
+        assert db.get(AuditEvent, audit_event_id) is not None
+        assert all(session.revoked_at is not None for session in db.scalars(select(AuthSession)).all())
+        assert all(token.consumed_at is not None for token in db.scalars(select(AuthActionToken)).all())
     assert client.get("/api/v1/me").status_code == 401
+
+    _register(client, email="user@example.com")
+    _verify(client)
+    with session_factory() as db:
+        replacement = db.execute(select(User).where(User.email == "user@example.com")).scalar_one()
+        assert replacement.id != original_user_id
+        assert replacement.display_name == "Example User"
+    assert client.get("/api/v1/documents").json()["documents"] == []
+    assert client.get("/api/v1/resume-profiles").json()["resume_profiles"] == []
+    assert client.get("/api/v1/jobs").json() == []
+    assert client.get("/api/v1/applications").json() == []
+    assert client.get("/api/v1/reports").json() == []
 
 
 def test_session_cookie_without_csrf_cannot_mutate(tmp_path: Path) -> None:

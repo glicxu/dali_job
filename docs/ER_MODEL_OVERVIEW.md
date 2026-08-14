@@ -106,7 +106,7 @@ users/workspaces 1 -> many job_search_criteria
 resume_profiles 1 -> many job_search_criteria, optional
 ```
 
-An AI-imported resume creates one `resume_generated` criterion with a derived keyword and no location. The first successful search fills its location. New or edited combinations are saved only after explicit confirmation. Criteria are soft-deleted and remain separate from managed-operation history and saved jobs.
+Creating or importing a resume does not create a search criterion. Keyword/location combinations are saved only when the user explicitly selects `Save Search Options`. Criteria may optionally reference an associated resume profile, are soft-deleted, and remain separate from managed-operation history and saved jobs. Legacy `resume_generated` rows are retired by migration and excluded from active saved-search queries.
 
 ### document_versions
 

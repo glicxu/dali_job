@@ -216,7 +216,29 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "purpose",
         "created_at",
         "detached_at",
+        "deleted_at",
     }.issubset(application_document_columns)
+
+    for table_name in (
+        "workspaces",
+        "document_versions",
+        "document_download_tickets",
+        "job_resume_matches",
+        "applications",
+        "application_status_history",
+        "application_events",
+        "application_notes",
+        "application_documents",
+        "application_tasks",
+        "interviews",
+        "interview_notes",
+        "interview_prep_guides",
+        "managed_operations",
+        "generated_application_materials",
+        "generated_application_material_versions",
+        "user_reports",
+    ):
+        assert "deleted_at" in Base.metadata.tables[table_name].columns, table_name
 
 
 def test_foundation_metadata_can_create_tables() -> None:
@@ -264,7 +286,7 @@ def test_alembic_has_initial_schema_revision() -> None:
     config.set_main_option("script_location", str(server_dir / "app" / "db" / "migrations"))
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == EXPECTED_ALEMBIC_HEAD == "20260812_0029"
+    assert script.get_current_head() == EXPECTED_ALEMBIC_HEAD == "20260814_0031"
 
 
 def test_phase3_migration_does_not_recreate_existing_document_version_constraint() -> None:

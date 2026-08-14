@@ -178,3 +178,4 @@ class JobResumeMatch(Base):
     schema_version: Mapped[str] = mapped_column(String(64), nullable=False, default="resume-job-match-v1")
     provider_execution_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

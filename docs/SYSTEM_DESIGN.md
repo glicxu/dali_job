@@ -59,7 +59,7 @@ Score meaning:
 - `5`: partial match with several important gaps.
 - `10`: excellent match where the resume strongly supports the job's core requirements.
 
-The first prototype started with pasted text only. After document management is available, the matcher should support selecting a structured resume profile or uploaded resume document and pasting a job URL, while retaining pasted text fallbacks for pages that block extraction. The resume selector should list the default resume profile first, followed by other resume profiles, uploaded resume documents, and pasted-text fallback. The job URL field and pasted job description field should be mutually exclusive. In either mode, the server should save high-compatibility jobs automatically and let the user decide whether to save jobs with a score below 5. `jobs_cache` is the reusable URL source cache, `user_saved_jobs` stores each user's saved-job relationship and notes, `user_edited_jobs` stores manual jobs and private corrections, and match scores are user/resume-specific in `job_resume_matches`.
+The direct Match page supports selecting a structured resume profile or pasting resume text, then entering a job title and pasted job description. It does not expose a job-URL source selector; users import URL-backed jobs through the Saved Jobs workflow and launch matching from that saved job. The server parses direct pasted descriptions into structured job JSON and uses the supplied title as the authoritative job title. The API retains URL matching support for existing internal workflows, but the direct page stays focused on pasted job details. High-compatibility direct matches are saved automatically, while scores below 5 require an explicit save decision. `jobs_cache` is the reusable URL source cache, `user_saved_jobs` stores each user's saved-job relationship and notes, `user_edited_jobs` stores direct/manual jobs and private corrections, and match scores are user/resume-specific in `job_resume_matches`.
 
 The matcher should also support bulk matching from Saved Jobs. In that flow, the user selects multiple `user_saved_jobs` rows, chooses one resume source on the Match page, and the server compares that resume against each selected saved job. Because the jobs are already saved, low-score bulk match results should still be stored in `job_resume_matches` without an additional save/discard prompt.
 
@@ -71,7 +71,9 @@ This prototype should still preserve the client/server split: the client submits
 
 The root homepage is a concise introduction for both signed-out and signed-in users. It explains that DaliJob's main purpose is to compare a user's resume with job requirements so the user can focus on stronger-fit opportunities. It includes a simple visual match example and a prominent Getting Started action directly below the introduction. For signed-in users the action opens `/tutorial?replay=1`; for signed-out users it opens `/auth` before any protected workflow is available.
 
-Authentication landing behavior uses the database-backed `tutorial_completed` value returned with the authenticated user. A first-time user with `tutorial_completed = false` lands on `/` after login or email verification and is not forced into the tutorial. A returning user with `tutorial_completed = true` lands on `/dashboard`. Completing or skipping Getting Started marks the tutorial complete and exits to `/dashboard`.
+Authentication landing behavior uses the database-backed `tutorial_completed` value returned with the authenticated user. A first-time user with `tutorial_completed = false` lands on `/` after login or email verification and is not automatically placed inside the guide. Normal navigation remains locked until the user completes Getting Started once. The guide may navigate only through its current ordered step. A returning user with `tutorial_completed = true` lands on `/dashboard`.
+
+Getting Started has one forward action per step and no per-step skip. Its ordered walkthrough is: add a resume on Resumes, find and save a job through Job Search, then open Saved Jobs to analyze the job profile if needed and match it with the resume. Navigation remains constrained to the active step, but the final step explicitly permits both `/jobs` and `/match` because matching transitions between those pages; a blocked route returns to the active step's primary page instead of a generic loading redirect. While Getting Started is active, Job Search hides and disables its immediate-match-after-import shortcut so the saved-job matching step remains visible and intentional; normal Job Search sessions retain the shortcut. `Skip Getting Started` postpones the entire guide, clears only the browser's active tutorial session, returns the user to Home, and does not call the tutorial-completion endpoint. Only finishing the final step sets `users.tutorial_completed_at` and exits to `/dashboard`. Sign out remains available while navigation is locked.
 
 The signed-out homepage may include static, non-database-backed previews of the core product areas:
 
@@ -89,14 +91,15 @@ The introduction should remain brief and should not mention internal providers s
 
 Saved-search behavior belongs to Job Search at `/jobs/search`:
 
-1. Applying an AI-generated resume creates an incomplete `job_search_criteria` row from the first target role, then headline, then up to three skills. Location remains empty because resume personal locations are redacted.
-2. Display saved criteria at the top of Job Search. Selecting one fills the visible keyword and location.
-3. Let the user expand a compact editor to change keywords or location without modifying the selected saved criterion automatically.
-4. On first use of an incomplete generated criterion, require a location and persist it only after the provider search succeeds.
-5. For a changed or entirely new query, run the search first and explicitly ask whether the user wants to save it.
-6. Continue using the existing Job Search review flow: return up to ten results, let the user inspect descriptions, and create `user_saved_jobs` only for explicitly imported results.
+1. Applying or manually creating a resume profile does not create a `job_search_criteria` row.
+2. Display explicitly saved criteria at the top of Job Search. Selecting one uses its keyword and location.
+3. Let the user expand a compact editor to enter different keywords or a location without modifying a selected saved criterion automatically.
+4. Persist a new query only when the user explicitly selects `Save Search Options` before searching.
+5. Continue using the existing Job Search review flow: return up to ten results, let the user inspect descriptions, and create `user_saved_jobs` only for explicitly imported results.
 
 The Account page owns saved-search maintenance. Users can edit keywords/locations or soft-delete criteria without changing resume JSON or historical search results.
+
+Account deletion anonymizes the unique email and soft-deletes the complete user-owned data graph in one transaction. A later registration with the original email creates a new user/workspace identity after verification and cannot inherit the deleted identity's documents, resumes, jobs, matches, applications, interviews, materials, operations, reports, or search criteria. Shared job-source cache rows and immutable audit events remain outside this deletion boundary.
 
 Dashboard contents at `/dashboard`:
 
@@ -720,7 +723,7 @@ The broader Dalifin goal of registering once and using many apps should be treat
 
 DaliJob uses a deliberately small account-level role boundary. Every public registration creates a `user`; an existing account can become an `admin` only through the config-aware `scripts/set_admin_role.py` operator command or an equivalent controlled database migration. The built-in development identity is an administrator for local testing.
 
-Administrator access is enforced by the server-side `require_admin` dependency, not by navigation visibility. The initial admin surface is limited to user-submitted support reports and links to safe diagnostic pages. It does not provide general access to users' resumes, documents, jobs, applications, AI prompts, or provider responses. Regular users can submit and track their own reports, but cannot read internal administrator notes.
+Administrator access is enforced by the server-side `require_admin` dependency, not by navigation visibility. The initial admin surface is limited to user-submitted support reports and links to safe diagnostic pages. It does not provide general access to users' resumes, documents, jobs, applications, AI prompts, or provider responses. Regular users can submit reports but cannot read internal administrator notes; the Account UI does not expose report history.
 
 Every administrative report read or mutation must create an `audit_events` row with the actor, subject, action, outcome, and safe access/change metadata. Audit metadata must never contain passwords, session or action tokens, raw resumes, prompts, report descriptions, administrator note text, or provider response bodies.
 

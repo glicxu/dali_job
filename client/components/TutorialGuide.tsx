@@ -6,10 +6,8 @@ import {
   ArrowRight,
   BriefcaseBusiness,
   CheckCircle2,
-  ClipboardList,
   FileText,
   Search,
-  Target,
 } from "lucide-react";
 import { completeTutorial, getAuthToken } from "../lib/api";
 import { AlertBanner, Button } from "./ui";
@@ -18,6 +16,7 @@ type TutorialStep = {
   title: string;
   pageLabel: string;
   href: string;
+  allowedPaths?: string[];
   description: string;
   task: string;
   icon: typeof FileText;
@@ -35,36 +34,21 @@ const tutorialSteps: TutorialStep[] = [
     icon: FileText,
   },
   {
-    title: "Save your first job",
-    pageLabel: "Saved Jobs",
-    href: "/jobs",
-    description: "The Saved Jobs page keeps opportunities you want to review, match, and track.",
-    task: "Import a job URL, import a list, or create a manual saved job.",
-    icon: BriefcaseBusiness,
-  },
-  {
     title: "Explore Job Search",
     pageLabel: "Job Search",
     href: "/jobs/search",
-    description: "Search for roles and import promising results into your saved jobs.",
-    task: "Try a keyword and location search, or continue with the job you already saved.",
+    description: "Search for roles and save a promising result so you can review it before matching.",
+    task: "Run a keyword and location search, select a result, and save it without using the immediate-match option.",
     icon: Search,
   },
   {
-    title: "Match a job",
-    pageLabel: "Match",
-    href: "/match",
-    description: "DaliJob prepares the job details and compares them with one of your resume profiles.",
-    task: "Choose your resume and saved job, then run a match to review strengths and gaps.",
-    icon: Target,
-  },
-  {
-    title: "Track applications",
-    pageLabel: "Applications",
-    href: "/applications",
-    description: "Applications connect a saved job with its status, documents, tasks, interviews, and notes.",
-    task: "Open this page when you apply so DaliJob can track the rest of the process.",
-    icon: ClipboardList,
+    title: "View Saved Jobs and Match",
+    pageLabel: "Saved Jobs",
+    href: "/jobs",
+    allowedPaths: ["/jobs", "/match"],
+    description: "Review the jobs you saved from search and compare one with your resume.",
+    task: "Open a saved job, analyze its job profile if needed, then match it with your resume to review strengths and gaps.",
+    icon: BriefcaseBusiness,
   },
 ];
 
@@ -74,6 +58,27 @@ function readTutorialStep(): number | null {
   if (rawValue === null) return null;
   const parsed = Number(rawValue);
   return Number.isInteger(parsed) && parsed >= 0 && parsed < tutorialSteps.length ? parsed : null;
+}
+
+export function isTutorialActive(): boolean {
+  return readTutorialStep() !== null;
+}
+
+function isPathAllowedForStep(pathname: string, step: TutorialStep): boolean {
+  const allowedPaths = step.allowedPaths ?? [step.href];
+  return allowedPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
+
+export function isTutorialRouteAllowed(pathname: string): boolean {
+  if (pathname === "/tutorial") return true;
+  const stepIndex = readTutorialStep();
+  if (stepIndex === null) return pathname === "/";
+  return isPathAllowedForStep(pathname, tutorialSteps[stepIndex]);
+}
+
+export function tutorialRouteFallback(): string {
+  const stepIndex = readTutorialStep();
+  return stepIndex === null ? "/" : tutorialSteps[stepIndex].href;
 }
 
 function beginTutorial() {
@@ -87,10 +92,12 @@ async function finishTutorial() {
   window.location.href = "/dashboard";
 }
 
-export function TutorialStartup() {
-  const [error, setError] = useState<string | null>(null);
-  const [isSkipping, setIsSkipping] = useState(false);
+function postponeTutorial() {
+  window.sessionStorage.removeItem(tutorialSessionKey);
+  window.location.href = "/";
+}
 
+export function TutorialStartup() {
   if (!getAuthToken()) {
     return (
       <AlertBanner tone="warning">
@@ -99,32 +106,20 @@ export function TutorialStartup() {
     );
   }
 
-  async function skipTutorial() {
-    setError(null);
-    setIsSkipping(true);
-    try {
-      await finishTutorial();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Getting Started could not be skipped.");
-      setIsSkipping(false);
-    }
-  }
-
   return (
     <div className="tutorial-startup">
-      {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
       <section className="tutorial-welcome-card">
         <div>
           <p className="eyebrow">First steps</p>
           <h2>Set up your job-search workspace</h2>
           <p className="summary">
-            Follow a short walkthrough to add a resume, save a job, explore search, run a match,
-            and learn where applications are tracked.
+            Follow a short walkthrough to add a resume, find and save a job through Job Search,
+            then match it from Saved Jobs.
           </p>
         </div>
         <div className="button-row">
           <Button type="button" icon={ArrowRight} onClick={beginTutorial}>Begin</Button>
-          <Button type="button" variant="ghost" loading={isSkipping} onClick={() => void skipTutorial()}>Skip Getting Started</Button>
+          <Button type="button" variant="ghost" onClick={postponeTutorial}>Skip Getting Started</Button>
         </div>
       </section>
 
@@ -141,7 +136,7 @@ export function TutorialStartup() {
       </ol>
 
       <p className="metadata tutorial-data-note">
-        Every step is optional. Replaying or skipping Getting Started never removes or replaces your existing data.
+        You can postpone Getting Started without changing your data. Your account remains in first-time setup until you finish every step once.
       </p>
     </div>
   );
@@ -161,7 +156,7 @@ export function TutorialCoachmark() {
 
   const step = tutorialSteps[stepIndex];
   const Icon = step.icon;
-  const onTargetPage = pathname === step.href || pathname.startsWith(`${step.href}/`);
+  const onTargetPage = isPathAllowedForStep(pathname, step);
   const isLastStep = stepIndex === tutorialSteps.length - 1;
 
   function moveToStep(nextIndex: number) {
@@ -205,8 +200,9 @@ export function TutorialCoachmark() {
             {isLastStep ? "Finish" : "Next"}
           </Button>
         )}
-        {!isLastStep ? <Button type="button" size="compact" variant="ghost" onClick={() => moveToStep(stepIndex + 1)}>Skip Step</Button> : null}
-        <Button type="button" size="compact" variant="ghost" loading={isFinishing} onClick={() => void completeAndExit()}>Skip Getting Started</Button>
+        {!isLastStep ? (
+          <Button type="button" size="compact" variant="ghost" onClick={postponeTutorial}>Skip Getting Started</Button>
+        ) : null}
       </div>
     </aside>
   );

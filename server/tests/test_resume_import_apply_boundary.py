@@ -110,11 +110,14 @@ def test_resume_import_preview_does_not_update_profile_until_apply(monkeypatch, 
         assert resume_profiles[0].resume_data["skills"] == ["Parsed Skill"]
         assert resume_profiles[0].source_document_id == preview_payload["document_id"]
         assert resume_profiles[0].source_document_version_id == preview_payload["document_version_id"]
-        criteria = session.query(JobSearchCriterion).all()
-        assert len(criteria) == 1
-        assert criteria[0].keyword == "Parsed Resume"
-        assert criteria[0].location is None
-        assert criteria[0].source == "resume_generated"
+        assert session.query(JobSearchCriterion).count() == 0
+
+    criteria_response = client.get("/api/v1/job-search/criteria")
+    assert criteria_response.status_code == 200
+    assert criteria_response.json() == {"criteria": []}
+
+    with session_factory() as session:
+        assert session.query(JobSearchCriterion).count() == 0
 
 
 def test_resume_import_preserves_document_and_can_retry_failed_parse(monkeypatch, tmp_path) -> None:

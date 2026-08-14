@@ -110,13 +110,13 @@ session_idle_seconds = 43200
 session_absolute_seconds = 604800
 email_action_ttl_seconds = 3600
 
-[email]
-delivery_mode = smtp
-from_address = no-reply@dalifin.com
-smtp_host = <production smtp host>
-smtp_port = 587
-smtp_username = <production smtp username>
-smtp_use_tls = true
+[smtp]
+smtp_server = <production smtp host>
+port = 587
+sender_email = no-reply@dalifin.com
+login = <production smtp username>
+password =
+use_tls = true
 
 [logging]
 directory = /data/dali/prod/logs/dali_job

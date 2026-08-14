@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Bug, HeartPulse, Inbox, Save } from "lucide-react";
+import { Activity, Bug, HeartPulse, Inbox, Link2, ListPlus, Save } from "lucide-react";
 import {
   AdminReport,
   getCurrentUser,
@@ -76,8 +76,11 @@ export function AdminReports() {
     <>
       {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
       <section className="admin-diagnostics" aria-label="System tools">
-        <SectionHeader title="System tools" description="Restricted diagnostic views for validating the client/server boundary and scraper output." />
+        <SectionHeader title="System tools" description="Restricted views for reviewing background activity and validating system behavior." />
         <div className="admin-diagnostic-links">
+          <a className="admin-diagnostic-link" href="/jobs/import-url"><Link2 size={20} aria-hidden="true" /><span><strong>Import Job</strong><small>Test importing and analyzing one job posting URL.</small></span></a>
+          <a className="admin-diagnostic-link" href="/jobs/import"><ListPlus size={20} aria-hidden="true" /><span><strong>Import Job List</strong><small>Test discovering postings from a job-list URL.</small></span></a>
+          <a className="admin-diagnostic-link" href="/operations"><Activity size={20} aria-hidden="true" /><span><strong>Operations</strong><small>Review background searches, imports, matching, and AI generation activity.</small></span></a>
           <a className="admin-diagnostic-link" href="/health"><HeartPulse size={20} aria-hidden="true" /><span><strong>System health</strong><small>Review the configured API boundary.</small></span></a>
           <a className="admin-diagnostic-link" href="/job-url-debug"><Bug size={20} aria-hidden="true" /><span><strong>URL Debug</strong><small>Inspect extracted job posting text.</small></span></a>
         </div>

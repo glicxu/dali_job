@@ -137,7 +137,7 @@ DaliJob supports two server auth modes:
 
 Accounts have either a `user` or `admin` role. Public registration can only create `user` accounts. Administrators can review submitted support reports and access diagnostic pages, but the role does not grant a general endpoint for browsing users' resumes, jobs, applications, or documents.
 
-New accounts land on the introduction homepage after email verification and login. Getting Started is optional and walks through resumes, saved jobs, job search, matching, and applications. Completing or skipping it records the account as initialized and sends future logins to the dashboard without changing saved account data.
+New accounts land on the introduction homepage after email verification and login. Their normal navigation remains locked while the account is marked as first-time. Getting Started walks through resumes, saved jobs, job search, matching, and applications in order. Postponing the guide returns Home without completing account setup; only finishing it unlocks navigation and sends future logins to the dashboard.
 
 Configure the mode in your private server config:
 
@@ -152,19 +152,20 @@ session_absolute_seconds = 604800
 email_action_ttl_seconds = 3600
 ```
 
-Local development writes verification and password-reset messages to `server/storage/email_outbox`. Production must use SMTP:
+When no email or shared SMTP configuration is present, local development writes verification and password-reset messages to `server/storage/email_outbox`. DaliJob can reuse an imported DaliCommonLib-style `[smtp]` section:
 
 ```ini
-[email]
-delivery_mode = smtp
-from_address = no-reply@example.com
-smtp_host = smtp.example.com
-smtp_port = 587
-smtp_username = smtp-user
-smtp_use_tls = true
+[smtp]
+smtp_server = dalifin-com-smtp.dynu.com
+port = 587
+sender_email = report@dalifin.com
+login = <smtp login>
+password = <smtp password>
 ```
 
-Set the SMTP password only in `server/.env` as `DALIJOB_SMTP_PASSWORD`. When `local` auth is enabled, registration requires email verification. Login creates an opaque database session and sends it in an `HttpOnly`, `SameSite=Lax` cookie (`Secure` in production). Mutating requests also require the CSRF cookie/header pair. Password changes, logout, account disablement, and soft deletion revoke server-side sessions.
+When the shared section supplies both `smtp_server` and `sender_email`, DaliJob automatically selects SMTP delivery. Without them, local email is written to `server/storage/email_outbox`. `DALIJOB_SMTP_*` environment variables remain higher-priority deployment overrides.
+
+For a standalone DaliJob configuration, set the SMTP password in `server/.env` as `DALIJOB_SMTP_PASSWORD`. When a trusted imported common configuration already owns `[smtp].password`, DaliJob can reuse it. Environment values take precedence. When `local` auth is enabled, registration requires email verification. Login creates an opaque database session and sends it in an `HttpOnly`, `SameSite=Lax` cookie (`Secure` in production). Mutating requests also require the CSRF cookie/header pair. Password changes, logout, account disablement, and soft deletion revoke server-side sessions. Account deletion anonymizes the old unique email and soft-deletes user-owned records, so registering the original email later creates a new verified user ID without restoring old data.
 
 Long term, one registration across multiple Dalifin apps should be handled by a shared identity database or standalone auth service. That is different from requiring users to log in through another app such as app_server.
 

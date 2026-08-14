@@ -11,6 +11,7 @@ from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.job_search.apify_indeed import get_apify_indeed_client, normalize_indeed_item
 from app.modules.job_search import criteria_repository
+from app.modules.job_search.models import JobSearchCriterion
 from app.modules.auth.dependencies import AuthenticatedIdentity
 from app.modules.job_search.router import (
     build_quick_find_recommendations,
@@ -380,59 +381,6 @@ def test_quick_find_caches_matches_then_saves_only_selected_job() -> None:
         assert db.query(UserSavedJob).count() == 1
 
 
-def test_generated_search_criterion_gets_location_on_first_quick_find() -> None:
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool, future=True)
-    Base.metadata.create_all(bind=engine)
-    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
-    identity = AuthenticatedIdentity(
-        external_user_id="criteria-user",
-        email="criteria@example.com",
-        display_name="Criteria User",
-        timezone="UTC",
-        provider="local",
-    )
-
-    with session_factory() as db:
-        resume = profile_repository.create_resume_profile(
-            db,
-            ResumeProfileCreateRequest(
-                title="Backend Resume",
-                resume_data={
-                    "headline": "Backend Engineer",
-                    "experience": ["Built FastAPI services with Python."],
-                    "skills": ["Python", "FastAPI"],
-                    "target_roles": ["Backend Engineer"],
-                },
-                is_default=True,
-            ),
-            identity,
-        )
-        criterion = criteria_repository.ensure_generated_criterion(db, identity, resume)
-        assert criterion is not None
-        assert criterion.keyword == "Backend Engineer"
-        assert criterion.location is None
-
-        response = build_quick_find_recommendations(
-            QuickFindRequest(
-                resume_profile_id=resume.id,
-                search_criterion_id=criterion.id,
-                keyword=criterion.keyword,
-                location="Maryland",
-            ),
-            operation_id=91,
-            provider=FakeQuickFindProvider(),
-            parser=FakeJobDescriptionParser(),
-            matcher=FakeMatcher(),
-            db=db,
-            identity=identity,
-        )
-
-        db.refresh(criterion)
-        assert response.search_criterion_id == criterion.id
-        assert criterion.location == "Maryland"
-        assert criterion.last_used_at is not None
-
-
 def test_search_criteria_crud_is_soft_deleted() -> None:
     client = create_test_client()
 
@@ -459,3 +407,38 @@ def test_search_criteria_crud_is_soft_deleted() -> None:
     deleted = client.delete(f"/api/v1/job-search/criteria/{criterion_id}")
     assert deleted.status_code == 204
     assert client.get("/api/v1/job-search/criteria").json()["criteria"] == []
+
+
+def test_active_search_criteria_exclude_legacy_resume_generated_rows() -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool, future=True)
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    identity = AuthenticatedIdentity(
+        external_user_id="saved-search-user",
+        email="saved-search@example.com",
+        display_name="Saved Search User",
+        timezone="UTC",
+        provider="local",
+    )
+
+    with session_factory() as db:
+        user, workspace = profile_repository.ensure_account_for_identity(db, identity)
+        legacy = JobSearchCriterion(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            keyword="Automatically Generated Role",
+            location=None,
+            source="resume_generated",
+        )
+        db.add(legacy)
+        explicit = criteria_repository.create_criterion(
+            db,
+            identity,
+            keyword="Data Engineer",
+            location="Maryland",
+            resume_profile_id=None,
+        )
+        db.flush()
+
+        assert [item["id"] for item in criteria_repository.list_criteria(db, identity)] == [explicit["id"]]
+        assert criteria_repository.get_criterion(db, identity, legacy.id) is None

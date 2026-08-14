@@ -15,11 +15,10 @@ export function IntroductionHome() {
     <section className="panel introduction-home">
       <section className="introduction-primary">
         <div className="introduction-copy">
-          <p className="eyebrow">Resume-guided job search</p>
-          <h1>Find the jobs that match your resume best.</h1>
+          <p className="eyebrow">Find your best fit</p>
+          <h1>Find the job that suits you most</h1>
           <p className="lede">
-            DaliJob helps you organize resumes and job opportunities, compare your experience with job requirements,
-            and focus your search on roles where your background is the strongest fit.
+            Compare your resume with job requirements, save strong matches, and manage your applications in one place.
           </p>
           <a className="button-link introduction-start-action action-with-icon" href={isAuthenticated ? "/tutorial?replay=1" : "/auth"}>
             <GraduationCap size={18} aria-hidden="true" /> Getting Started
@@ -30,16 +29,16 @@ export function IntroductionHome() {
           <div className="introduction-source">
             <span className="introduction-icon"><FileText size={21} aria-hidden="true" /></span>
             <div>
-              <span>Your resume</span>
-              <strong>Skills and experience</strong>
+              <span>Resume</span>
+              <strong>Your experience</strong>
             </div>
           </div>
           <ArrowRight className="introduction-arrow" size={24} aria-hidden="true" />
           <div className="introduction-source">
             <span className="introduction-icon"><BriefcaseBusiness size={21} aria-hidden="true" /></span>
             <div>
-              <span>Job opportunity</span>
-              <strong>Requirements and keywords</strong>
+              <span>Job</span>
+              <strong>What they need</strong>
             </div>
           </div>
           <div className="introduction-score">
@@ -50,9 +49,9 @@ export function IntroductionHome() {
       </section>
 
       <section className="introduction-summary" aria-label="DaliJob workflow summary">
-        <div><strong>Build your resume profile</strong><span>Keep reusable career information in one place.</span></div>
-        <div><strong>Review better-fit jobs</strong><span>See matched skills, missing requirements, and a clear score.</span></div>
-        <div><strong>Manage your progress</strong><span>Save opportunities and track applications through each stage.</span></div>
+        <div><strong>Add your resume</strong><span>Build a reusable profile.</span></div>
+        <div><strong>Compare jobs</strong><span>See strengths, gaps, and a match score.</span></div>
+        <div><strong>Track applications</strong><span>Keep every opportunity organized.</span></div>
       </section>
     </section>
   );

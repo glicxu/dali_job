@@ -36,7 +36,11 @@ def list_reports_for_identity(db: Session, identity: AuthenticatedIdentity) -> l
     return list(
         db.scalars(
             select(UserReport)
-            .where(UserReport.user_id == user.id, UserReport.workspace_id == workspace.id)
+            .where(
+                UserReport.user_id == user.id,
+                UserReport.workspace_id == workspace.id,
+                UserReport.deleted_at.is_(None),
+            )
             .order_by(desc(UserReport.updated_at), desc(UserReport.id))
         ).all()
     )
@@ -46,6 +50,7 @@ def list_admin_reports(db: Session, report_status: str | None = None) -> list[di
     query = (
         select(UserReport, User)
         .join(User, User.id == UserReport.user_id)
+        .where(UserReport.deleted_at.is_(None))
         .order_by(desc(UserReport.updated_at), desc(UserReport.id))
     )
     if report_status:
@@ -80,7 +85,7 @@ def update_admin_report(
     row = db.execute(
         select(UserReport, User)
         .join(User, User.id == UserReport.user_id)
-        .where(UserReport.id == report_id)
+        .where(UserReport.id == report_id, UserReport.deleted_at.is_(None))
         .limit(1)
     ).one_or_none()
     if row is None:

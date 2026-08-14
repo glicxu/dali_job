@@ -67,6 +67,7 @@ class RuntimeConfig:
     smtp_host: str
     smtp_port: int
     smtp_username: str
+    smtp_password: str
     smtp_use_tls: bool
     email_outbox_dir: str
     log_dir: str
@@ -102,6 +103,19 @@ def read_config_value(section: str, key: str, default: Optional[str] = None) -> 
         return default
     text = str(value).strip()
     return text or default
+
+
+def read_compatible_config_value(
+    sections: tuple[str, ...],
+    keys: tuple[str, ...],
+    default: Optional[str] = None,
+) -> Optional[str]:
+    for section in sections:
+        for key in keys:
+            value = read_config_value(section, key, None)
+            if value not in (None, ""):
+                return value
+    return default
 
 
 def _coerce_int(value: Optional[str], default: int) -> int:
@@ -164,31 +178,39 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
 
     host = (
         os.getenv("DALIJOB_HOST", "").strip()
-        or read_config_value("dali_job", "host", DEFAULT_HOST)
+        or read_compatible_config_value(("dali_job", "dali_jobs"), ("host",), DEFAULT_HOST)
         or DEFAULT_HOST
     )
     port_value = (
         os.getenv("DALIJOB_PORT", "").strip()
-        or read_config_value("dali_job", "port", str(DEFAULT_PORT))
+        or read_compatible_config_value(("dali_job", "dali_jobs"), ("port",), str(DEFAULT_PORT))
     )
     log_level = (
         os.getenv("DALIJOB_LOG_LEVEL", "").strip()
-        or read_config_value("dali_job", "log_level", DEFAULT_LOG_LEVEL)
+        or read_compatible_config_value(("dali_job", "dali_jobs"), ("log_level",), DEFAULT_LOG_LEVEL)
         or DEFAULT_LOG_LEVEL
     )
     env_name = (
         os.getenv("DALIJOB_ENV", "").strip()
-        or read_config_value("dali_job", "env", DEFAULT_ENV_NAME)
+        or read_compatible_config_value(("dali_job", "dali_jobs"), ("env",), DEFAULT_ENV_NAME)
         or DEFAULT_ENV_NAME
     )
     client_origins = _split_csv(
         os.getenv("DALIJOB_CLIENT_ORIGINS", "").strip()
-        or read_config_value("dali_job", "client_origins", DEFAULT_CLIENT_ORIGIN),
+        or read_compatible_config_value(
+            ("dali_job", "dali_jobs"),
+            ("client_origins", "client_origin"),
+            DEFAULT_CLIENT_ORIGIN,
+        ),
         [DEFAULT_CLIENT_ORIGIN],
     )
     client_origin_regex = (
         os.getenv("DALIJOB_CLIENT_ORIGIN_REGEX", "").strip()
-        or read_config_value("dali_job", "client_origin_regex", DEFAULT_CLIENT_ORIGIN_REGEX)
+        or read_compatible_config_value(
+            ("dali_job", "dali_jobs"),
+            ("client_origin_regex",),
+            DEFAULT_CLIENT_ORIGIN_REGEX,
+        )
         or DEFAULT_CLIENT_ORIGIN_REGEX
     )
     if env_name.lower() in PRODUCTION_ENV_NAMES:
@@ -205,7 +227,7 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
     )
     auth_mode = (
         os.getenv("DALIJOB_AUTH_MODE", "").strip()
-        or read_config_value("dali_job", "auth_mode", "dev")
+        or read_compatible_config_value(("dali_job", "dali_jobs"), ("auth_mode",), "dev")
         or "dev"
     )
     document_storage_dir = (
@@ -266,47 +288,71 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         DEFAULT_AUTH_REGISTER_WINDOW_SECONDS,
     )
     session_idle_seconds = _coerce_int(
-        read_config_value("dali_job_auth", "session_idle_seconds", str(DEFAULT_SESSION_IDLE_SECONDS)),
+        read_compatible_config_value(
+            ("dali_job_auth", "dali_jobs_auth"),
+            ("session_idle_seconds",),
+            str(DEFAULT_SESSION_IDLE_SECONDS),
+        ),
         DEFAULT_SESSION_IDLE_SECONDS,
     )
     session_absolute_seconds = _coerce_int(
-        read_config_value("dali_job_auth", "session_absolute_seconds", str(DEFAULT_SESSION_ABSOLUTE_SECONDS)),
+        read_compatible_config_value(
+            ("dali_job_auth", "dali_jobs_auth"),
+            ("session_absolute_seconds",),
+            str(DEFAULT_SESSION_ABSOLUTE_SECONDS),
+        ),
         DEFAULT_SESSION_ABSOLUTE_SECONDS,
     )
     email_action_ttl_seconds = _coerce_int(
-        read_config_value("dali_job_auth", "email_action_ttl_seconds", str(DEFAULT_EMAIL_ACTION_TTL_SECONDS)),
+        read_compatible_config_value(
+            ("dali_job_auth", "dali_jobs_auth"),
+            ("email_action_ttl_seconds",),
+            str(DEFAULT_EMAIL_ACTION_TTL_SECONDS),
+        ),
         DEFAULT_EMAIL_ACTION_TTL_SECONDS,
     )
     public_client_url = (
         os.getenv("DALIJOB_PUBLIC_CLIENT_URL", "").strip()
-        or read_config_value("dali_job", "public_client_url", client_origins[0])
+        or read_compatible_config_value(
+            ("dali_job", "dali_jobs"),
+            ("public_client_url",),
+            client_origins[0],
+        )
         or client_origins[0]
     ).rstrip("/")
+    shared_smtp_host = read_config_value("smtp", "smtp_server", "") or ""
+    shared_smtp_sender = read_config_value("smtp", "sender_email", "") or ""
     email_delivery_mode = (
         os.getenv("DALIJOB_EMAIL_DELIVERY_MODE", "").strip()
-        or read_config_value("email", "delivery_mode", "file")
-        or "file"
+        or ("smtp" if shared_smtp_host and shared_smtp_sender else "file")
     ).lower()
     email_from_address = (
         os.getenv("DALIJOB_EMAIL_FROM", "").strip()
-        or read_config_value("email", "from_address", "no-reply@dalijob.local")
+        or shared_smtp_sender
         or "no-reply@dalijob.local"
     )
-    smtp_host = os.getenv("DALIJOB_SMTP_HOST", "").strip() or read_config_value("email", "smtp_host", "") or ""
+    smtp_host = os.getenv("DALIJOB_SMTP_HOST", "").strip() or shared_smtp_host
     smtp_port = _coerce_int(
-        os.getenv("DALIJOB_SMTP_PORT", "").strip() or read_config_value("email", "smtp_port", "587"),
+        os.getenv("DALIJOB_SMTP_PORT", "").strip()
+        or read_config_value("smtp", "port", "587"),
         587,
     )
     smtp_username = (
         os.getenv("DALIJOB_SMTP_USERNAME", "").strip()
-        or read_config_value("email", "smtp_username", "")
+        or read_config_value("smtp", "login", "")
         or ""
     )
-    smtp_use_tls = _coerce_bool(read_config_value("email", "smtp_use_tls", "true"), True)
-    email_outbox_dir = (
-        read_config_value("email", "outbox_dir", "")
-        or str(Path(__file__).resolve().parents[1] / "storage" / "email_outbox")
+    smtp_password = (
+        os.getenv("DALIJOB_SMTP_PASSWORD", "").strip()
+        or read_config_value("smtp", "password", "")
+        or ""
     )
+    smtp_use_tls = _coerce_bool(
+        os.getenv("DALIJOB_SMTP_USE_TLS", "").strip()
+        or read_config_value("smtp", "use_tls", "true"),
+        True,
+    )
+    email_outbox_dir = str(Path(__file__).resolve().parents[1] / "storage" / "email_outbox")
     log_dir = read_config_value("logging", "directory", "") or str(Path(__file__).resolve().parents[1] / "logs")
     log_max_bytes = _coerce_int(
         read_config_value("logging", "max_bytes", str(DEFAULT_LOG_MAX_BYTES)),
@@ -347,6 +393,7 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         smtp_host=smtp_host,
         smtp_port=max(smtp_port, 1),
         smtp_username=smtp_username,
+        smtp_password=smtp_password,
         smtp_use_tls=smtp_use_tls,
         email_outbox_dir=str(Path(email_outbox_dir).expanduser().resolve()),
         log_dir=str(Path(log_dir).expanduser().resolve()),

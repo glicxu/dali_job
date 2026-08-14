@@ -68,7 +68,7 @@ Returns the current user, including the account role (`user` or `admin`). Public
 - `POST /auth/reset-password` consumes a single-use token, changes the password, and revokes all sessions.
 - `POST /auth/logout` revokes the current session.
 - `GET /auth/csrf` bootstraps the non-secret CSRF value for a separately hosted browser client with a valid session.
-- `DELETE /auth/account` confirms the current password, soft-deletes the account, and revokes all sessions.
+- `DELETE /auth/account` confirms the current password, anonymizes the account email, soft-deletes all user-owned database records, invalidates sessions and action tokens, and releases the original email for a new independently verified account. Shared job-cache and immutable audit rows are retained; old records are never reassigned to the replacement account.
 
 ### `PATCH /me`
 
@@ -519,7 +519,7 @@ Body:
 }
 ```
 
-`search_criterion_id` is optional. When supplied, the server verifies that the saved criterion belongs to the current user and uses its stored keyword and location. An incomplete generated criterion may use the request location; the server stores that location and updates `last_used_at` only after the provider search succeeds. New or edited searches omit the ID and are not persisted unless the user explicitly calls the criteria create endpoint.
+`search_criterion_id` is optional. When supplied, the server verifies that the saved criterion belongs to the current user and uses its stored keyword and location. New or edited searches omit the ID and are not persisted unless the user explicitly selects `Save Search Options`, which calls the criteria create endpoint.
 
 Response:
 
@@ -573,15 +573,15 @@ Retains the former Quick Find recommendation workflow as a managed operation for
 
 The completed operation result contains its `operation_id`, the resolved keyword and resume label, warnings, and up to five candidates with `jobs_cache_id`, source metadata, match score, match data, and immutable resume/job snapshots. The operation is owner-scoped and provider-rate-limited.
 
-When `search_criterion_id` identifies an incomplete generated criterion, a successful operation stores the supplied location and marks the criterion used. Edited or entirely new keyword/location combinations omit that ID and are not persisted unless the user later calls the criteria create endpoint.
+When `search_criterion_id` identifies a saved criterion, the operation marks it used after a successful search. Edited or entirely new keyword/location combinations omit that ID and are not persisted unless the user explicitly saves the search options.
 
 ### `GET /job-search/criteria`
 
-Lists active saved searches owned by the current user. The response includes the optional source resume, keyword, location, source (`resume_generated` or `custom`), completion state, and last-used timestamp. Existing imported resume profiles are lazily backfilled with one generated criterion when needed.
+Lists active saved searches owned by the current user. The response includes the optional associated resume, keyword, location, source, completion state, and last-used timestamp. Loading this endpoint never creates criteria from resume profiles.
 
 ### `POST /job-search/criteria`
 
-Explicitly saves a custom keyword/location combination after a successful search. An optional `resume_profile_id` records which resume was used.
+Explicitly saves a custom keyword/location combination when the user selects `Save Search Options`. An optional `resume_profile_id` records which resume is associated with the search.
 
 ### `PATCH /job-search/criteria/{criterion_id}`
 
@@ -589,7 +589,7 @@ Updates the keyword or location of a current-user-owned saved search.
 
 ### `DELETE /job-search/criteria/{criterion_id}`
 
-Soft-deletes a current-user-owned saved search. Deleted generated criteria are not recreated automatically.
+Soft-deletes a current-user-owned saved search. Deleted criteria are not recreated automatically.
 
 ### `POST /job-search/quick-find/save`
 
@@ -720,11 +720,11 @@ Returns:
 
 Runs the initial resume-to-job matching prototype. This endpoint compares a selected resume source against a job description without requiring the full application tracker flow.
 
-The endpoint accepts exactly one resume source: `resume_profile_id`, pasted resume text, or an uploaded resume document ID. It also accepts exactly one job source: pasted job description text or a job URL. The UI should block conflicting inputs.
+The endpoint accepts exactly one resume source: `resume_profile_id`, pasted resume text, or an uploaded resume document ID. It also accepts exactly one job source: pasted job description text or a job URL. The direct Match UI exposes a required `job_title` with pasted `job_description_text`; URL-backed matching is launched from Saved Jobs and other controlled internal workflows. The API continues to reject conflicting text and URL inputs.
 
 Before scoring, the server ensures the job source has structured `job_data` JSON, then compares structured resume JSON against structured job JSON. If the selected saved job or URL already has cached `job_data`, the server reuses it. If `job_data` is missing but `raw_description_text` exists, the server lazily parses `raw_description_text`, saves the resulting `job_data` to `jobs_cache`, and then runs the match. If parsing fails, the server returns a clear error instead of spending match tokens on unusable job data. If a structured resume profile is not selected, the server falls back to the supplied resume/document text wrapped as raw resume JSON so the prototype remains usable.
 
-When `job_url` is provided, the server uses broader cleaned visible page extraction for the job parser. When pasted text is provided, that text is parsed the same way.
+When `job_url` is provided, the server uses broader cleaned visible page extraction for the job parser. When pasted text is provided, that text is parsed the same way. If `job_title` is supplied, it replaces the parser-inferred title in structured `job_data` and any saved job entry.
 
 Save behavior:
 
@@ -736,6 +736,7 @@ Pasted text body:
 ```json
 {
   "resume_text": "Resume text pasted by user...",
+  "job_title": "Software Engineer",
   "job_description_text": "Job description pasted by user..."
 }
 ```

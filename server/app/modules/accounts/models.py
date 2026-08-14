@@ -62,5 +62,6 @@ class Workspace(Base):
         default=utc_now,
         onupdate=utc_now,
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     owner: Mapped[User] = relationship("User", back_populates="workspaces")

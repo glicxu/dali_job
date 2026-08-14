@@ -10826,6 +10826,18 @@
             ],
             "title": "Resume Document Id"
           },
+          "job_title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Title"
+          },
           "job_description_text": {
             "anyOf": [
               {

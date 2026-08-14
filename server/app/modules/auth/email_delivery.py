@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import smtplib
 from email.message import EmailMessage
 from pathlib import Path
@@ -30,10 +29,9 @@ def send_account_email(runtime: RuntimeConfig, recipient: str, subject: str, bod
     if runtime.email_delivery_mode != "smtp":
         raise RuntimeError(f"Unsupported email delivery mode: {runtime.email_delivery_mode}")
 
-    password = os.getenv("DALIJOB_SMTP_PASSWORD", "")
     with smtplib.SMTP(runtime.smtp_host, runtime.smtp_port, timeout=15) as smtp:
         if runtime.smtp_use_tls:
             smtp.starttls()
         if runtime.smtp_username:
-            smtp.login(runtime.smtp_username, password)
+            smtp.login(runtime.smtp_username, runtime.smtp_password)
         smtp.send_message(message)

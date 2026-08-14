@@ -18,7 +18,6 @@ import {
 import { AlertBanner, Button, MatchScoreBadge, SectionHeader, ToastRegion } from "./ui";
 
 type ResumeSourceMode = "profile" | "paste";
-type JobSourceMode = "url" | "paste";
 
 export function ResumeJobMatchForm() {
   if (!getAuthToken()) {
@@ -31,10 +30,9 @@ export function ResumeJobMatchForm() {
 function AuthenticatedResumeJobMatchForm() {
   const [resumeProfiles, setResumeProfiles] = useState<ResumeProfile[]>([]);
   const [resumeSourceMode, setResumeSourceMode] = useState<ResumeSourceMode>("profile");
-  const [jobSourceMode, setJobSourceMode] = useState<JobSourceMode>("paste");
   const [selectedResumeProfileId, setSelectedResumeProfileId] = useState("");
   const [resumeText, setResumeText] = useState("");
-  const [jobUrl, setJobUrl] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
   const [jobText, setJobText] = useState("");
   const [result, setResult] = useState<ResumeJobMatchResponse | null>(null);
   const [bulkResult, setBulkResult] = useState<BulkSavedJobMatchResponse | null>(null);
@@ -48,7 +46,7 @@ function AuthenticatedResumeJobMatchForm() {
 
   const hasResumeSource = resumeSourceMode === "profile" ? Boolean(selectedResumeProfileId) : Boolean(resumeText.trim());
   const isBulkSavedJobMode = selectedBulkJobIds.length > 0;
-  const hasJobSource = isBulkSavedJobMode || (jobSourceMode === "url" ? Boolean(jobUrl.trim()) : Boolean(jobText.trim()));
+  const hasJobSource = isBulkSavedJobMode || Boolean(jobTitle.trim() && jobText.trim());
   const selectedResumeProfile = resumeProfiles.find((profile) => String(profile.id) === selectedResumeProfileId) ?? null;
   const resumeWarning =
     !isLoadingDocuments && !hasResumeSource
@@ -61,7 +59,6 @@ function AuthenticatedResumeJobMatchForm() {
         setResumeProfiles(profilePayload.resume_profiles);
         const firstProfile = profilePayload.resume_profiles[0];
         const params = new URLSearchParams(window.location.search);
-        const initialJobUrl = params.get("job_url");
         const initialJobIds = params
           .get("job_ids")
           ?.split(",")
@@ -74,14 +71,9 @@ function AuthenticatedResumeJobMatchForm() {
         } else {
           setResumeSourceMode("paste");
         }
-        if (initialJobUrl) {
-          setJobSourceMode("url");
-          setJobUrl(initialJobUrl);
-          setJobText("");
-        }
         if (initialJobIds.length) {
           setSelectedBulkJobIds(initialJobIds);
-          setJobUrl("");
+          setJobTitle("");
           setJobText("");
           listJobs()
             .then((jobs) => {
@@ -117,7 +109,7 @@ function AuthenticatedResumeJobMatchForm() {
       return;
     }
     if (!hasJobSource) {
-      setError("Add a job URL or paste a job description before matching.");
+      setError("Add the job title and job description before matching.");
       return;
     }
 
@@ -153,8 +145,8 @@ function AuthenticatedResumeJobMatchForm() {
             ? Number(selectedResumeProfileId)
             : undefined,
         resume_text: resumeSourceMode === "paste" ? resumeText : undefined,
-        job_url: jobSourceMode === "url" ? jobUrl.trim() : undefined,
-        job_description_text: jobSourceMode === "paste" ? jobText : undefined,
+        job_title: jobTitle.trim(),
+        job_description_text: jobText.trim(),
       });
       setResult(match);
       if (match.pending_job && match.match_score < 5) {
@@ -209,7 +201,7 @@ function AuthenticatedResumeJobMatchForm() {
       {resumeWarning ? <AlertBanner tone="warning">{resumeWarning}</AlertBanner> : null}
 
       <section className="profile-card match-source-card">
-        <SectionHeader title="Match sources" description="Choose one structured resume profile or paste text, then select the job source to compare." />
+        <SectionHeader title="Match sources" description="Choose one structured resume profile or paste resume text, then enter the job title and description to compare." />
         <div className={`match-source-workspace${isBulkSavedJobMode ? " single-source" : ""}`}>
           <section className="match-source-panel">
             <div className="match-source-panel-heading">
@@ -279,41 +271,24 @@ function AuthenticatedResumeJobMatchForm() {
                   <p>Add the opportunity you want to evaluate.</p>
                 </div>
               </div>
-              <label>
-                Job source
-                <select
-                  value={jobSourceMode}
-                  onChange={(event) => {
-                    const nextMode = event.target.value as JobSourceMode;
-                    setJobSourceMode(nextMode);
-                    if (nextMode === "url") setJobText("");
-                    else setJobUrl("");
-                  }}
-                >
-                  <option value="url">Paste job URL</option>
-                  <option value="paste">Paste job description</option>
-                </select>
+              <label className="match-source-input">
+                Job title
+                <input
+                  value={jobTitle}
+                  onChange={(event) => setJobTitle(event.target.value)}
+                  maxLength={255}
+                  required
+                />
               </label>
-              {jobSourceMode === "url" ? (
-                <label className="match-source-input">
-                  Job URL
-                  <input
-                    type="url"
-                    value={jobUrl}
-                    onChange={(event) => setJobUrl(event.target.value)}
-                    placeholder="https://company.com/careers/job-id"
-                  />
-                </label>
-              ) : (
-                <label className="match-source-input">
-                  Job description
-                  <textarea
-                    value={jobText}
-                    onChange={(event) => setJobText(event.target.value)}
-                    placeholder="Paste the job description."
-                  />
-                </label>
-              )}
+              <label className="match-source-input">
+                Job description
+                <textarea
+                  value={jobText}
+                  onChange={(event) => setJobText(event.target.value)}
+                  placeholder="Paste as much of the full job posting as possible, including responsibilities, qualifications, location, application deadline, salary, and security clearance when applicable."
+                  required
+                />
+              </label>
             </section>
           ) : null}
         </div>
@@ -383,10 +358,12 @@ function ResumeJobMatchPreview() {
           </select>
         </label>
         <label>
-          Job source
-          <select disabled>
-            <option>Saved job or pasted job URL</option>
-          </select>
+          Job title
+          <input value="Software Engineer" readOnly />
+        </label>
+        <label>
+          Job description
+          <textarea value="Example job description" readOnly />
         </label>
       </section>
       <section className="result-panel">

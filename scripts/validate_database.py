@@ -263,6 +263,27 @@ REQUIRED_TABLE_COLUMNS: dict[str, set[str]] = {
     },
 }
 
+for table_name in (
+    "workspaces",
+    "document_versions",
+    "document_download_tickets",
+    "job_resume_matches",
+    "applications",
+    "application_status_history",
+    "application_events",
+    "application_notes",
+    "application_documents",
+    "application_tasks",
+    "interviews",
+    "interview_notes",
+    "interview_prep_guides",
+    "managed_operations",
+    "generated_application_materials",
+    "generated_application_material_versions",
+    "user_reports",
+):
+    REQUIRED_TABLE_COLUMNS[table_name].add("deleted_at")
+
 
 def main() -> int:
     args = parse_config_args("Validate the configured DaliJob database schema.")

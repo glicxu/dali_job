@@ -219,6 +219,7 @@ def test_resume_job_match_returns_score_and_skills() -> None:
         "/api/v1/resume-job-matches",
         json={
             "resume_text": "Built FastAPI services with Python.",
+            "job_title": "Senior API Engineer",
             "job_description_text": "Build APIs using PostgreSQL and Kubernetes.",
         },
     )
@@ -238,6 +239,8 @@ def test_resume_job_match_returns_score_and_skills() -> None:
     assert jobs[0]["source_url"] is None
     assert jobs[0]["jobs_cache_id"] is None
     assert jobs[0]["user_edited_job_id"] is not None
+    assert jobs[0]["title"] == "Senior API Engineer"
+    assert jobs[0]["job_data"]["title"] == "Senior API Engineer"
     assert jobs[0]["job_data"]["required_skills"] == ["PostgreSQL"]
     assert jobs[0]["match_score"] == 7
     assert jobs[0]["matched_resume_source"] == "pasted_text"

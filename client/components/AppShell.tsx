@@ -25,7 +25,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { AuthForm } from "./AuthForm";
-import { TutorialCoachmark } from "./TutorialGuide";
+import { isTutorialRouteAllowed, tutorialRouteFallback, TutorialCoachmark } from "./TutorialGuide";
 import { PageHeader } from "./ui";
 import { clearAuthToken, CurrentUser, getCurrentUser, logoutUser } from "../lib/api";
 
@@ -36,8 +36,8 @@ const careerItems: NavItem[] = [
   { href: "/", label: "Home", icon: Home, exact: true },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/profile", label: "Resumes", icon: FileText },
-  { href: "/jobs", label: "Saved Jobs", icon: BriefcaseBusiness, exact: true },
   { href: "/jobs/search", label: "Job Search", icon: Search },
+  { href: "/jobs", label: "Saved Jobs", icon: BriefcaseBusiness, exact: true },
   { href: "/match", label: "Match", icon: Target },
 ];
 
@@ -54,9 +54,27 @@ function isActivePath(pathname: string, item: NavItem): boolean {
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
-function NavigationLink({ item, pathname, onNavigate }: { item: NavItem; pathname: string; onNavigate?: () => void }) {
+function NavigationLink({
+  item,
+  pathname,
+  onNavigate,
+  disabled = false,
+}: {
+  item: NavItem;
+  pathname: string;
+  onNavigate?: () => void;
+  disabled?: boolean;
+}) {
   const Icon = item.icon;
   const active = isActivePath(pathname, item);
+  if (disabled) {
+    return (
+      <span className="sidebar-nav-link sidebar-nav-disabled" aria-disabled="true" title="Finish Getting Started to unlock this page.">
+        <Icon size={18} strokeWidth={2} aria-hidden="true" />
+        <span>{item.label}</span>
+      </span>
+    );
+  }
   return (
     <Link
       className={`sidebar-nav-link${active ? " active" : ""}`}
@@ -77,6 +95,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
+  const firstRunIncomplete = authState === "authenticated" && Boolean(user && !user.tutorial_completed);
+  const firstRunRouteBlocked = firstRunIncomplete && !isTutorialRouteAllowed(pathname);
 
   async function signOut() {
     try {
@@ -104,6 +124,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     setMobileNavOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (firstRunRouteBlocked) window.location.replace(tutorialRouteFallback());
+  }, [firstRunRouteBlocked]);
 
   useEffect(() => {
     if (!mobileNavOpen) return;
@@ -178,15 +202,25 @@ export function AppShell({ children }: { children: ReactNode }) {
     );
   }
 
+  if (firstRunRouteBlocked) {
+    return (
+      <main className="content session-check" aria-busy="true">
+        <div className="ui-session-skeleton"><span /><span /><span /></div>
+        <span className="sr-only">Returning to first-time setup.</span>
+      </main>
+    );
+  }
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Skip to main content</a>
-      <MobileHeader open={mobileNavOpen} onOpen={() => setMobileNavOpen(true)} menuButtonRef={menuButtonRef} />
+      <MobileHeader open={mobileNavOpen} onOpen={() => setMobileNavOpen(true)} menuButtonRef={menuButtonRef} navigationLocked={firstRunIncomplete} />
       <Sidebar
         pathname={pathname}
         user={user}
         open={mobileNavOpen}
         sidebarRef={sidebarRef}
+        navigationLocked={firstRunIncomplete}
         onClose={() => setMobileNavOpen(false)}
         onSignOut={() => void signOut()}
       />
@@ -197,10 +231,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-function MobileHeader({ open, onOpen, menuButtonRef }: { open: boolean; onOpen: () => void; menuButtonRef: React.RefObject<HTMLButtonElement | null> }) {
+function MobileHeader({
+  open,
+  onOpen,
+  menuButtonRef,
+  navigationLocked = false,
+}: {
+  open: boolean;
+  onOpen: () => void;
+  menuButtonRef: React.RefObject<HTMLButtonElement | null>;
+  navigationLocked?: boolean;
+}) {
   return (
     <header className="mobile-app-header">
-      <Brand />
+      <Brand disabled={navigationLocked} />
       <button ref={menuButtonRef} type="button" className="mobile-menu-button" aria-label="Open navigation" aria-expanded={open} onClick={onOpen}>
         <Menu size={21} aria-hidden="true" />
       </button>
@@ -208,7 +252,15 @@ function MobileHeader({ open, onOpen, menuButtonRef }: { open: boolean; onOpen: 
   );
 }
 
-function Brand() {
+function Brand({ disabled = false }: { disabled?: boolean }) {
+  if (disabled) {
+    return (
+      <span className="brand" aria-label="DaliJob">
+        <span className="brand-mark" aria-hidden="true">D</span>
+        <span>DaliJob</span>
+      </span>
+    );
+  }
   return (
     <Link className="brand" href="/" aria-label="DaliJob home">
       <span className="brand-mark" aria-hidden="true">D</span>
@@ -222,6 +274,7 @@ function Sidebar({
   user,
   open,
   sidebarRef,
+  navigationLocked,
   onClose,
   onSignOut,
 }: {
@@ -229,33 +282,39 @@ function Sidebar({
   user: CurrentUser | null;
   open: boolean;
   sidebarRef: React.RefObject<HTMLElement | null>;
+  navigationLocked: boolean;
   onClose: () => void;
   onSignOut: () => void;
 }) {
   return (
     <aside ref={sidebarRef} className={`sidebar${open ? " mobile-open" : ""}`} aria-label="Primary navigation">
       <div className="sidebar-topline">
-        <Brand />
+        <Brand disabled={navigationLocked} />
         <button type="button" className="sidebar-close" aria-label="Close navigation" onClick={onClose}>
           <X size={20} aria-hidden="true" />
         </button>
       </div>
       <nav>
         <NavSection label="Career">
-          {careerItems.map((item) => <NavigationLink item={item} pathname={pathname} onNavigate={onClose} key={item.href} />)}
-          <ApplicationNavGroup pathname={pathname} onNavigate={onClose} />
+          {careerItems.map((item) => <NavigationLink item={item} pathname={pathname} onNavigate={onClose} disabled={navigationLocked} key={item.href} />)}
+          <ApplicationNavGroup pathname={pathname} onNavigate={onClose} disabled={navigationLocked} />
         </NavSection>
         <NavSection label="Workspace">
-          {workspaceItems.map((item) => <NavigationLink item={item} pathname={pathname} onNavigate={onClose} key={item.href} />)}
+          {workspaceItems.map((item) => <NavigationLink item={item} pathname={pathname} onNavigate={onClose} disabled={navigationLocked} key={item.href} />)}
         </NavSection>
       </nav>
       <div className="sidebar-utility">
-        <Link className="sidebar-scout-action" href={`/ask-scout?from=${encodeURIComponent(pathname)}`} aria-label="Open Ask Scout" onClick={onClose}>
-          <MessageSquareText size={18} aria-hidden="true" />
-          <span>Ask Scout</span>
-        </Link>
-        <NavigationLink item={{ href: "/auth", label: "Account", icon: UserRound }} pathname={pathname} onNavigate={onClose} />
-        {user?.role === "admin" ? <NavigationLink item={{ href: "/admin", label: "Admin", icon: ShieldCheck }} pathname={pathname} onNavigate={onClose} /> : null}
+        {navigationLocked ? (
+          <span className="sidebar-nav-link sidebar-nav-disabled" aria-disabled="true"><MessageSquareText size={18} aria-hidden="true" /><span>Ask Scout</span></span>
+        ) : (
+          <Link className="sidebar-scout-action" href={`/ask-scout?from=${encodeURIComponent(pathname)}`} aria-label="Open Ask Scout" onClick={onClose}>
+            <MessageSquareText size={18} aria-hidden="true" />
+            <span>Ask Scout</span>
+          </Link>
+        )}
+        <NavigationLink item={{ href: "/auth", label: "Account", icon: UserRound }} pathname={pathname} onNavigate={onClose} disabled={navigationLocked} />
+        {user?.role === "admin" ? <NavigationLink item={{ href: "/admin", label: "Admin", icon: ShieldCheck }} pathname={pathname} onNavigate={onClose} disabled={navigationLocked} /> : null}
+        {navigationLocked ? <p className="sidebar-first-run-note">Finish Getting Started once to unlock navigation.</p> : null}
         <button type="button" className="sidebar-nav-link sidebar-sign-out" onClick={onSignOut}>
           <LogOut size={18} aria-hidden="true" />
           <span>Sign Out</span>
@@ -316,7 +375,7 @@ function PublicShell({
   );
 }
 
-function ApplicationNavGroup({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+function ApplicationNavGroup({ pathname, onNavigate, disabled = false }: { pathname: string; onNavigate?: () => void; disabled?: boolean }) {
   const isApplicationSection = pathname.startsWith("/applications") || pathname === "/materials" || pathname === "/interviews";
   const [expanded, setExpanded] = useState(pathname === "/materials" || pathname === "/interviews");
 
@@ -329,6 +388,17 @@ function ApplicationNavGroup({ pathname, onNavigate }: { pathname: string; onNav
     const next = !expanded;
     setExpanded(next);
     window.localStorage.setItem("dalijob_applications_nav_expanded", String(next));
+  }
+
+  if (disabled) {
+    return (
+      <div className="sidebar-nav-group">
+        <span className="sidebar-nav-link sidebar-nav-disabled" aria-disabled="true" title="Finish Getting Started to unlock this page.">
+          <ClipboardList size={18} aria-hidden="true" />
+          <span>Applications</span>
+        </span>
+      </div>
+    );
   }
 
   return (

@@ -17,6 +17,8 @@ const materials = readFileSync(new URL("../components/ApplicationMaterialsManage
 const analytics = readFileSync(new URL("../components/AnalyticsDashboard.tsx", import.meta.url), "utf8");
 const askScout = readFileSync(new URL("../components/AskScoutPage.tsx", import.meta.url), "utf8");
 const auth = readFileSync(new URL("../components/AuthForm.tsx", import.meta.url), "utf8");
+const userReports = readFileSync(new URL("../components/UserReports.tsx", import.meta.url), "utf8");
+const accountPage = readFileSync(new URL("../app/auth/page.tsx", import.meta.url), "utf8");
 const searchCriteria = readFileSync(new URL("../components/SearchCriteriaManager.tsx", import.meta.url), "utf8");
 const admin = readFileSync(new URL("../components/AdminReports.tsx", import.meta.url), "utf8");
 const operations = readFileSync(new URL("../components/OperationsManager.tsx", import.meta.url), "utf8");
@@ -59,12 +61,30 @@ test("applications and interviews use semantic list-detail states", () => {
 });
 
 test("resume profiles separate readable and edit modes while matching preserves guards", () => {
+  assert.match(profiles, /title="Upload Resume"/);
+  assert.match(profiles, /> Upload File/);
+  assert.doesNotMatch(profiles, /Import Resume/);
+  assert.match(profiles, /Save Resume Profile/);
+  assert.doesNotMatch(profiles, /Apply JSON/);
   assert.match(profiles, /ReadableResumeProfile/);
   assert.match(profiles, /setIsEditing\(true\)/);
   assert.match(profiles, /label=\{`Delete \$\{profile\.title\}`\}/);
   assert.match(profiles, /getResumeProfileDependencies\(profile\.id\)/);
   assert.match(profiles, /current\.filter\(\(item\) => item\.id !== profile\.id\)/);
-  assert.match(profiles, /className="profile-card manual-resume-card"[\s\S]*className="profile-workspace"/);
+  assert.match(profiles, /className="manual-resume-option"[\s\S]*Prefer manual entry\?[\s\S]*Create Resume Profile[\s\S]*className="profile-workspace"/);
+  assert.doesNotMatch(profiles, /manual-resume-card/);
+  const manualCreateFlow = profiles.slice(
+    profiles.indexOf("function createBlankResumeProfile"),
+    profiles.indexOf("async function setDefaultProfile"),
+  );
+  assert.match(manualCreateFlow, /setIsCreatingProfile\(true\)/);
+  assert.doesNotMatch(manualCreateFlow, /createResumeProfile\(/);
+  const resumeEditor = profiles.slice(
+    profiles.indexOf('className="profile-card resume-profile-editor"'),
+    profiles.indexOf("function ReadableResumeProfile"),
+  );
+  assert.match(resumeEditor, /selectedProfile \? setEditorFromProfile\(selectedProfile\) : resetEditor\(\)/);
+  assert.doesNotMatch(resumeEditor, />Close<\/Button>/);
   assert.match(profiles, /title="Your Resumes"/);
   const readableProfile = profiles.slice(
     profiles.indexOf("function ReadableResumeProfile"),
@@ -72,11 +92,14 @@ test("resume profiles separate readable and edit modes while matching preserves 
   );
   assert.doesNotMatch(readableProfile, /variant="danger"/);
   assert.match(readableProfile, /onClick=\{onClose\}>Close<\/Button>/);
-  assert.match(profiles, /icon=\{X\} onClick=\{resetEditor\}>Close<\/Button>/);
   assert.match(matching, /Choose a saved resume profile or paste resume text before matching/);
   assert.match(matching, /Low compatibility/);
   assert.match(matching, /MatchScoreBadge/);
-  assert.match(matching, /useState<JobSourceMode>\("paste"\)/);
+  assert.match(matching, /const \[jobTitle, setJobTitle\] = useState\(""\)/);
+  assert.match(matching, /Job title[\s\S]*Job description/);
+  assert.match(matching, /location, application deadline, salary, and security clearance when applicable/);
+  assert.match(jobs, /location, application deadline, salary, and security clearance when applicable/);
+  assert.doesNotMatch(matching, /Paste job URL|Job source/);
 });
 
 test("documents, materials, and analytics expose versions and exact values", () => {
@@ -96,9 +119,13 @@ test("navigation exposes active routes and an accessible mobile drawer", () => {
   assert.match(shell, /ChevronDown/);
   assert.match(shell, /currentUser\.tutorial_completed \? "\/dashboard" : "\/"/);
   assert.doesNotMatch(shell, /window\.location\.replace\("\/tutorial"\)/);
+  assert.match(shell, /firstRunIncomplete/);
+  assert.match(shell, /isTutorialRouteAllowed\(pathname\)/);
+  assert.match(shell, /Finish Getting Started once to unlock navigation/);
   assert.match(shell, /<TutorialCoachmark \/>/);
   assert.match(shell, /href: "\/", label: "Home"/);
   assert.match(shell, /href: "\/dashboard", label: "Dashboard"/);
+  assert.ok(shell.indexOf('label: "Job Search"') < shell.indexOf('label: "Saved Jobs"'));
   assert.doesNotMatch(shell, /笆ｼ/);
   assert.match(overhaul, /\.sidebar\.mobile-open/);
   assert.match(overhaul, /\.resume-profile-delete[\s\S]*grid-column: 1/);
@@ -109,30 +136,58 @@ test("home introduces resume matching while Job Search owns saved search criteri
   assert.match(homePage, /IntroductionHome/);
   assert.doesNotMatch(homePage, /DashboardHome/);
   assert.doesNotMatch(homePage, /QuickFindHome/);
-  assert.match(introduction, /Find the jobs that match your resume best/);
+  assert.match(introduction, /Find the job that suits you most/);
   assert.match(introduction, /href=\{isAuthenticated \? "\/tutorial\?replay=1" : "\/auth"\}/);
   assert.match(introduction, /> Getting Started/);
   assert.match(jobSearch, /listJobSearchCriteria\(\)/);
-  assert.match(jobSearch, /Change keywords or location/);
-  assert.match(jobSearch, /Save this search\?/);
-  assert.match(jobSearch, /usesSelectedCriterion \? selectedCriterion\?\.id/);
+  assert.match(jobSearch, /title="Saved Search Criteria"/);
+  assert.match(jobSearch, /Make a Search/);
+  assert.match(jobSearch, /<\/section>\s*\n\s*<details[\s\S]*className="quick-find-search-editor"/);
+  assert.match(jobSearch, /searchWithCriterion\(criterion\)/);
+  assert.doesNotMatch(jobSearch, /className="quick-find-active-search"/);
+  assert.doesNotMatch(jobSearch, />\s*Search Jobs\s*</);
+  assert.match(jobSearch, /Save Search Options/);
+  assert.doesNotMatch(jobSearch, /Save as search criteria/);
+  assert.match(jobSearch, /else if \(saveAsCriterion\)[\s\S]*createJobSearchCriterion/);
+  assert.match(jobSearch, /executeSearch\(trimmedKeyword, trimmedLocation, matchingCriterion, saveAdjustedSearch\)/);
+  assert.doesNotMatch(profiles, /createJobSearchCriterion/);
+  assert.doesNotMatch(jobSearch, /From resume/);
+  assert.doesNotMatch(searchCriteria, /From resume/);
+  assert.match(jobSearch, /setSearchEditorOpen\(false\)/);
+  assert.match(jobSearch, /setSearchEditorOpen\(true\)/);
+  assert.doesNotMatch(jobSearch, /Save this search\?/);
+  assert.match(jobSearch, /executeSearch\(criterion\.keyword\.trim\(\), criterionLocation, criterion\)/);
   assert.match(searchCriteria, /updateJobSearchCriterion/);
   assert.match(searchCriteria, /deleteJobSearchCriterion/);
 });
 
-test("first-run tutorial supports cross-page steps, per-step skipping, and replay", () => {
+test("first-run tutorial requires ordered steps and only completion unlocks the account", () => {
   assert.match(tutorial, /window\.sessionStorage\.setItem\(tutorialSessionKey, "0"\)/);
-  assert.match(tutorial, /Skip Step/);
+  assert.doesNotMatch(tutorial, /Skip Step/);
   assert.match(tutorial, /Skip Getting Started/);
+  assert.match(tutorial, /function postponeTutorial\(\)[\s\S]*removeItem\(tutorialSessionKey\)[\s\S]*window\.location\.href = "\/"/);
   assert.match(tutorial, /completeTutorial\(\)/);
   assert.match(tutorial, /window\.location\.href = "\/dashboard"/);
   assert.match(tutorial, /href: "\/profile"/);
-  assert.match(tutorial, /href: "\/jobs"/);
   assert.match(tutorial, /href: "\/jobs\/search"/);
-  assert.match(tutorial, /href: "\/match"/);
-  assert.match(tutorial, /href: "\/applications"/);
+  assert.match(tutorial, /title: "View Saved Jobs and Match"[\s\S]*href: "\/jobs"/);
+  assert.match(tutorial, /allowedPaths: \["\/jobs", "\/match"\]/);
+  assert.match(tutorial, /const onTargetPage = isPathAllowedForStep\(pathname, step\)/);
+  assert.match(tutorial, /export function tutorialRouteFallback\(\)/);
+  assert.match(shell, /window\.location\.replace\(tutorialRouteFallback\(\)\)/);
+  assert.doesNotMatch(shell, /if \(firstRunRouteBlocked\) window\.location\.replace\("\/"\)/);
+  assert.ok(tutorial.indexOf('href: "/jobs/search"') < tutorial.indexOf('href: "/jobs"'));
+  assert.doesNotMatch(tutorial, /title: "Match a job"/);
+  assert.doesNotMatch(tutorial, /title: "Track applications"/);
+  assert.match(tutorial, /!isLastStep \? \([\s\S]*Skip Getting Started[\s\S]*\) : null/);
   assert.doesNotMatch(dashboard, /href="\/tutorial\?replay=1"/);
   assert.doesNotMatch(dashboard, /> Getting Started/);
+  assert.match(overhaul, /\.tutorial-overview-icon,[\s\S]*display: inline-flex;[\s\S]*justify-content: center;/);
+  assert.match(overhaul, /\.tutorial-step-overview li > div > span/);
+  assert.doesNotMatch(overhaul, /\.tutorial-step-overview span\s*\{/);
+  assert.match(jobSearch, /isTutorialActive/);
+  assert.match(jobSearch, /runMatching: !tutorialActive && runMatching/);
+  assert.match(jobSearch, /\{!tutorialActive \? \([\s\S]*Run matching after import/);
 });
 
 test("dashboard and jobs use the shared feedback and hierarchy components", () => {
@@ -159,12 +214,21 @@ test("dashboard and jobs use the shared feedback and hierarchy components", () =
   assert.match(jobs, /className="job-editor-section job-profile-section"/);
   assert.match(jobs, /className="job-description-details"/);
   assert.match(jobs, /className="job-description-toggle"/);
+  assert.match(overhaul, /\.job-description-details \.job-description-text[\s\S]*?max-height: min\(52vh, 520px\);[\s\S]*?overflow-y: auto;/);
   assert.match(jobs, /ReadableJobProfile/);
   assert.match(jobs, /job-notes-readonly/);
-  assert.match(jobs, /title="Structured job profile not available"[\s\S]*action=\{editor\.id && onMatch/);
+  assert.match(jobs, /title="Structured job profile not available"[\s\S]*action=\{editor\.id && onAnalyze/);
+  assert.match(jobs, /isSavedJob && editor\.isEditing \? \([\s\S]*Save changes[\s\S]*onClick=\{onCancelEdit\}[\s\S]*Cancel/);
+  assert.match(jobs, /const savedJob = jobs\.find\(\(job\) => job\.id === editor\.id\);[\s\S]*setEditor\(editorFromJob\(savedJob\)\)/);
+  assert.match(jobs, /analyzeJob\(jobId\)/);
+  assert.match(jobs, />\s*Analyze\s*<\/Button>/);
   assert.match(jobs, /const hasMatch = Boolean\(job\.match_data\)/);
   assert.match(jobs, />\s*Re-match\s*<\/Button>/);
   assert.match(jobs, />Select Jobs<\/Button>/);
+  assert.doesNotMatch(jobs, /href="\/jobs\/import-url"/);
+  assert.doesNotMatch(jobs, /href="\/jobs\/import"/);
+  assert.match(admin, /href="\/jobs\/import-url"/);
+  assert.match(admin, /href="\/jobs\/import"/);
   assert.match(jobs, /updateSelectedArchiveState/);
   assert.match(jobs, /toggleSelectAllJobs/);
   assert.doesNotMatch(jobs, />Bulk Match<\/Button>/);
@@ -177,11 +241,17 @@ test("dashboard and jobs use the shared feedback and hierarchy components", () =
 
 test("Ask Scout, authentication, administration, and diagnostics use shared semantic controls", () => {
   assert.match(askScout, /Scout provides navigation guidance only/);
+  assert.match(auth, /await deleteAccount\(deletePassword\);[\s\S]*window\.location\.replace\("\/"\);/);
+  assert.match(userReports, /Report a problem or share feedback\./);
+  assert.match(userReports, /Your report was submitted\./);
+  assert.doesNotMatch(userReports, /listUserReports|report-history|track its review status/);
   assert.match(askScout, /Badge tone=\{statusTone/);
-  assert.match(auth, /Account security/);
+  assert.doesNotMatch(auth, /Account security/);
   assert.match(auth, /variant="danger"/);
   assert.match(auth, /aria-pressed=\{mode === "login"\}/);
   assert.match(admin, /admin-diagnostic-link/);
+  assert.match(admin, /href="\/operations"/);
+  assert.doesNotMatch(accountPage, /href="\/operations"/);
   assert.match(admin, /Badge tone=\{reportStatusTone/);
   assert.match(operations, /Badge tone=\{operationTone/);
   assert.match(urlDebug, /Login is required to scrape and debug job URLs/);

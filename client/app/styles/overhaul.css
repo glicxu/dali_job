@@ -263,6 +263,22 @@ input[type="radio"] {
   width: 4px;
 }
 
+.sidebar-nav-disabled,
+.sidebar-nav-disabled:hover {
+  background: transparent;
+  color: #7892a8;
+  cursor: not-allowed;
+  opacity: 0.62;
+  pointer-events: none;
+}
+
+.sidebar-first-run-note {
+  color: #b8cde0;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 4px 10px 8px;
+}
+
 .sidebar-nav-parent {
   align-items: stretch;
   display: grid;
@@ -1148,18 +1164,24 @@ h2 {
   background: var(--brand-100);
   border-radius: 50%;
   color: var(--brand-700);
-  display: flex;
+  display: inline-flex;
+  flex: 0 0 36px;
   height: 36px;
   justify-content: center;
   width: 36px;
 }
 
-.tutorial-step-overview strong,
-.tutorial-step-overview span {
+.tutorial-overview-icon svg,
+.tutorial-coachmark-icon svg {
   display: block;
 }
 
-.tutorial-step-overview span {
+.tutorial-step-overview li > div > strong,
+.tutorial-step-overview li > div > span {
+  display: block;
+}
+
+.tutorial-step-overview li > div > span {
   color: var(--text-muted);
   font-size: 14px;
   margin-top: 3px;
@@ -1549,8 +1571,10 @@ h2 {
 }
 
 .job-description-details .job-description-text {
-  max-height: none;
-  overflow: visible;
+  max-height: min(52vh, 520px);
+  overflow-y: auto;
+  padding-right: 10px;
+  scrollbar-gutter: stable;
 }
 
 .job-notes-preview {
@@ -1898,14 +1922,27 @@ button.prep-guide-toggle:hover:not(:disabled) {
   max-width: 920px;
 }
 
-.manual-resume-card {
+.manual-resume-option {
   align-items: center;
+  border-top: 1px solid var(--border-default);
+  display: grid;
+  gap: var(--space-4);
   grid-template-columns: minmax(0, 1fr) auto;
   max-width: 920px;
+  padding-top: var(--space-4);
 }
 
-.manual-resume-card > .ui-button,
-.manual-resume-card > button {
+.manual-resume-option h2 {
+  font-size: var(--font-size-md);
+  margin: 0 0 var(--space-1);
+}
+
+.manual-resume-option p {
+  margin: 0;
+}
+
+.manual-resume-option > .ui-button,
+.manual-resume-option > button {
   justify-self: end;
 }
 
@@ -2439,25 +2476,27 @@ button.material-list-row.selected:hover:not(:disabled) {
   justify-self: start;
 }
 
-.account-security-summary,
-.account-tool-description {
-  align-items: start;
-  display: grid;
+.resume-file-picker {
+  align-items: center;
+  display: flex;
   gap: var(--space-3);
-  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
 }
 
-.account-security-summary {
-  background: var(--brand-50);
-  border: 1px solid var(--brand-200);
-  border-radius: var(--radius-card);
-  color: var(--brand-800);
-  padding: var(--space-4);
+.resume-file-button {
+  flex: 0 0 auto;
 }
 
-.account-security-summary h3,
-.account-security-summary p {
-  margin: 0;
+.resume-file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resume-file-input:focus-visible + .resume-file-button {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .account-danger-zone {
@@ -2480,16 +2519,10 @@ button.material-list-row.selected:hover:not(:disabled) {
   border-top-color: var(--border-default);
 }
 
-.account-tools-list article,
-.report-history article {
+.account-tools-list article {
   background: var(--surface-raised);
   border-color: var(--border-default);
   border-radius: var(--radius-card);
-}
-
-.account-tool-description > svg {
-  color: var(--brand-700);
-  margin-top: 2px;
 }
 
 .report-form,
@@ -2635,8 +2668,7 @@ button.material-list-row.selected:hover:not(:disabled) {
   .profile-card-header,
   .operation-main,
   .admin-report-list button,
-  .admin-report-detail,
-  .report-history article
+  .admin-report-detail
 ) {
   min-width: 0;
 }
@@ -2801,13 +2833,13 @@ button,
     width: 100%;
   }
 
-  .manual-resume-card {
+  .manual-resume-option {
     align-items: stretch;
     grid-template-columns: 1fr;
   }
 
-  .manual-resume-card > .ui-button,
-  .manual-resume-card > button {
+  .manual-resume-option > .ui-button,
+  .manual-resume-option > button {
     justify-self: start;
   }
 
@@ -3055,6 +3087,7 @@ button,
   align-items: center;
   background: var(--surface-raised);
   border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
   color: var(--text-default);
   display: grid;
   gap: 12px;
@@ -3104,6 +3137,12 @@ button,
   padding: 5px 8px;
 }
 
+.quick-find-criterion-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
 .quick-find-active-search {
   align-items: end;
   background: var(--brand-50);
@@ -3149,6 +3188,29 @@ button,
   gap: 12px;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 0.65fr) auto;
   padding: 16px;
+}
+
+.quick-find-search-actions {
+  align-items: flex-end;
+  display: flex;
+  gap: 14px;
+}
+
+.quick-find-save-option {
+  align-items: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  font-size: 13px;
+  gap: 7px;
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.quick-find-save-option input {
+  height: 16px;
+  margin: 0;
+  width: 16px;
 }
 
 .account-search-criteria {
@@ -3277,6 +3339,20 @@ button,
   .quick-find-active-search .ui-button,
   .quick-find-search-form .ui-button {
     width: 100%;
+  }
+
+  .quick-find-criterion {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .quick-find-criterion-actions {
+    justify-content: space-between;
+  }
+
+  .quick-find-search-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .account-search-criterion > .ui-badge {

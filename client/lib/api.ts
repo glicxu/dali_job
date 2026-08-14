@@ -33,6 +33,7 @@ export type ResumeJobMatchRequest = {
   resume_text?: string;
   resume_profile_id?: number;
   resume_document_id?: number;
+  job_title?: string;
   job_description_text?: string;
   job_url?: string;
 };

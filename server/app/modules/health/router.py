@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db_session
 
 router = APIRouter(tags=["health"])
-EXPECTED_ALEMBIC_HEAD = "20260812_0029"
+EXPECTED_ALEMBIC_HEAD = "20260814_0031"
 
 
 @router.get("/health")

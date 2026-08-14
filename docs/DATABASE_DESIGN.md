@@ -24,7 +24,17 @@
 - Sensitive integration secrets: encrypt before storing.
 - AI outputs: store model provider, model name, prompt version, input references, and validation status.
 
-## 2.1 DaliCommonLib Database Access
+### 2.1 Account Deletion and Email Reuse
+
+Account deletion is one transaction across the account boundary. The server replaces the deleted user's email with a unique `deleted-{user_id}-{random}@deleted.invalid` tombstone, replaces the password hash, clears email verification, disables the user, revokes every session, and consumes outstanding email-action tokens. This releases the original unique email for a later registration.
+
+Every user-owned aggregate receives the same `deleted_at` timestamp: the private workspace; documents and versions; download tickets; resume profiles; edited and saved jobs; match history; saved search criteria; applications and their history, events, notes, attachments, and tasks; interviews, notes, and preparation guides; managed operations; generated application materials and versions; and support reports. Pending operations are cancelled, download tickets are consumed, application attachments are detached, reminders are dismissed, and active application duplicate guards are released.
+
+Soft deletion does not erase local/object-storage files immediately. Their owning document and version rows become deleted and inaccessible, allowing a future retention cleanup process to remove physical objects. Shared `jobs_cache` rows are not account-owned and are preserved. Immutable `audit_events` are also preserved and continue to identify the historical actor by the deleted user ID without retaining the original email in the user row.
+
+Registering the original email again always creates a new `users.id` and private workspace after normal email verification. No record tied to the deleted user ID is reassigned or restored to the replacement account.
+
+## 2.2 DaliCommonLib Database Access
 
 The server should not scatter raw database connection strings or independent SQLAlchemy engine creation across modules. Use a local repository layer backed by `DbMan`.
 
@@ -38,7 +48,7 @@ Required pattern:
 
 Current `DbMan` behavior expects a `mysql` config section and builds MySQL-compatible SQLAlchemy URLs through `mysql+pymysql`. If the project later needs PostgreSQL, update or wrap `DbMan` first rather than bypassing the shared database layer.
 
-## 2.2 DaliJob Schema Setup
+## 2.3 DaliJob Schema Setup
 
 DaliJob should use its own schema/database, separate from other projects. The default schema name is:
 
@@ -269,23 +279,23 @@ The older one-row `profiles.resume_data` design is intentionally removed. If Dal
 
 ### job_search_criteria
 
-Stores reusable, owner-scoped keyword and location combinations for Job Search. Applying an AI-generated resume import creates one `resume_generated` criterion with a derived keyword and no location. Its location is filled only after the user's first successful search. Custom searches are persisted only after the user explicitly chooses Save Search.
+Stores reusable, owner-scoped keyword and location combinations for Job Search. Resume-profile creation does not insert a criterion. A search is persisted only when the user explicitly selects `Save Search Options`.
 
 | Field | Type | Notes |
 | --- | --- | --- |
 | id | integer | Primary key |
 | workspace_id | integer | FK to workspaces |
 | user_id | integer | FK to users |
-| resume_profile_id | integer | Nullable FK to the resume used to generate or save the search |
+| resume_profile_id | integer | Nullable FK to the resume associated with the saved search |
 | keyword | text | Required job title or keyword query |
-| location | text | Nullable until first use of a generated criterion |
-| source | text | `resume_generated` or `custom` |
+| location | text | Nullable for backward compatibility; new explicitly saved searches include a location |
+| source | text | `custom` for user-saved rows; retired `resume_generated` rows are soft-deleted and ignored |
 | last_used_at | timestamptz | Nullable, updated after successful Job Search use |
 | created_at | timestamptz | Required |
 | updated_at | timestamptz | Required |
 | deleted_at | timestamptz | Nullable soft delete |
 
-Criteria are private to one user/workspace. Deleting a generated criterion must not silently recreate it. Deleting its source resume sets `resume_profile_id` to null while preserving the saved search until the user deletes it.
+Criteria are private to one user/workspace and are never recreated automatically. Deleting an associated resume sets `resume_profile_id` to null while preserving an explicitly saved search until the user deletes it. Migration `20260814_0031` retires criteria that older versions generated from resume uploads.
 
 ### companies
 

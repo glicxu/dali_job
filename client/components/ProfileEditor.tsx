@@ -121,6 +121,7 @@ function AuthenticatedProfileEditor() {
     makeSectionText(emptyResumeData),
   );
   const [resumeImport, setResumeImport] = useState<ResumeImportResponse | null>(null);
+  const [selectedResumeFileName, setSelectedResumeFileName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -128,6 +129,7 @@ function AuthenticatedProfileEditor() {
   const [isApplyingResume, setIsApplyingResume] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isCreatingProfile, setIsCreatingProfile] = useState(false);
   const [deletingProfileId, setDeletingProfileId] = useState<number | null>(null);
 
   const selectedProfile = useMemo(
@@ -141,6 +143,7 @@ function AuthenticatedProfileEditor() {
     setTitle(profile.title);
     setResumeData(normalized);
     setSectionText(makeSectionText(normalized));
+    setIsCreatingProfile(false);
     setIsEditing(false);
   }
 
@@ -157,6 +160,7 @@ function AuthenticatedProfileEditor() {
     setTitle("Master Resume");
     setResumeData(emptyResumeData);
     setSectionText(makeSectionText(emptyResumeData));
+    setIsCreatingProfile(false);
     setIsEditing(false);
   }
 
@@ -218,6 +222,7 @@ function AuthenticatedProfileEditor() {
       const saved = selectedProfile
         ? await updateResumeProfile(selectedProfile.id, payload)
         : await createResumeProfile({ ...payload, is_default: false });
+      setIsCreatingProfile(false);
       upsertResumeProfile(saved);
       setIsEditing(false);
       setStatus("Resume profile saved.");
@@ -228,21 +233,15 @@ function AuthenticatedProfileEditor() {
     }
   }
 
-  async function createBlankResumeProfile() {
+  function createBlankResumeProfile() {
     setError(null);
     setStatus(null);
-    try {
-      const created = await createResumeProfile({
-        title: "Untitled Resume",
-        resume_data: emptyResumeData,
-        is_default: false,
-      });
-      upsertResumeProfile(created);
-      setIsEditing(true);
-      setStatus("Blank resume profile created.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Resume profile creation failed.");
-    }
+    setSelectedId(null);
+    setTitle("Untitled Resume");
+    setResumeData(emptyResumeData);
+    setSectionText(makeSectionText(emptyResumeData));
+    setIsCreatingProfile(true);
+    setIsEditing(true);
   }
 
   async function setDefaultProfile(profile: ResumeProfile) {
@@ -315,7 +314,7 @@ function AuthenticatedProfileEditor() {
       setStatus(
         imported.parse_warning
           ? "The resume file and cleaned text were saved, but automatic analysis needs attention."
-          : "Resume analyzed for preview only. Nothing is saved until you click Apply JSON.",
+          : "Resume analyzed for preview only. Nothing is saved until you click Save Resume Profile.",
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Resume import failed.");
@@ -356,7 +355,7 @@ function AuthenticatedProfileEditor() {
       resetEditor();
       setStatus("Resume suggestions saved as a new resume profile. Select it from the list to view or edit it.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Applying resume suggestions failed.");
+      setError(err instanceof Error ? err.message : "Saving resume profile failed.");
     } finally {
       setIsApplyingResume(false);
     }
@@ -372,10 +371,26 @@ function AuthenticatedProfileEditor() {
       <ToastRegion message={status} onDismiss={() => setStatus(null)} />
 
       <section className="profile-card profile-import-card">
-        <SectionHeader title="Import resume" description="Recommended: upload a PDF to generate a reviewable structured profile. Analysis does not save the JSON automatically." />
+        <SectionHeader title="Upload Resume" description="Recommended: upload a PDF to generate a reviewable structured profile. Analysis does not save the JSON automatically." />
         <ResumePrivacyNotice />
         <form className="inline-form resume-upload-form" onSubmit={importResume}>
-          <input name="resume" type="file" accept="application/pdf" required />
+          <div className="resume-file-picker">
+            <input
+              className="sr-only resume-file-input"
+              id="resume-file-upload"
+              name="resume"
+              type="file"
+              accept="application/pdf"
+              required
+              onChange={(event) => setSelectedResumeFileName(event.target.files?.[0]?.name ?? "")}
+            />
+            <label className="button-link secondary-button action-with-icon resume-file-button" htmlFor="resume-file-upload">
+              <Upload size={17} aria-hidden="true" /> Upload File
+            </label>
+            <span className="metadata resume-file-name" aria-live="polite">
+              {selectedResumeFileName || "No file selected"}
+            </span>
+          </div>
           <Button type="submit" icon={Upload} loading={isImportingResume}>Analyze Resume</Button>
         </form>
         {resumeImport ? (
@@ -390,12 +405,12 @@ function AuthenticatedProfileEditor() {
         ) : null}
       </section>
 
-      <section className="profile-card manual-resume-card">
+      <section className="manual-resume-option">
         <SectionHeader
-          title="Manually Create Resume Profile"
-          description="Importing a resume is recommended. Create one manually if automatic analysis is unavailable or you prefer to enter every section yourself."
+          title="Prefer manual entry?"
+          description="Create a resume profile manually if you cannot upload a PDF or prefer to enter each section yourself."
         />
-        <Button type="button" variant="secondary" icon={FilePlus2} onClick={() => void createBlankResumeProfile()}>Create</Button>
+        <Button type="button" variant="secondary" icon={FilePlus2} onClick={createBlankResumeProfile}>Create Resume Profile</Button>
       </section>
 
       <section className="profile-workspace">
@@ -423,19 +438,23 @@ function AuthenticatedProfileEditor() {
         </section>
 
         <div className="profile-detail-pane">
-          {selectedProfile ? (
-            isEditing ? (
+          {isEditing && (selectedProfile || isCreatingProfile) ? (
             <form className="profile-card resume-profile-editor" onSubmit={saveResumeProfile}>
               <div className="profile-card-header">
                 <div>
-                  <p className="eyebrow">Editing resume</p>
-                  <h2>{selectedProfile.title}</h2>
-                  <p className="metadata">Resume Profile ID: {selectedProfile.id}</p>
+                  <p className="eyebrow">{isCreatingProfile ? "New resume profile" : "Editing resume"}</p>
+                  <h2>{isCreatingProfile ? "Create Resume Profile" : selectedProfile?.title}</h2>
+                  {selectedProfile ? <p className="metadata">Resume Profile ID: {selectedProfile.id}</p> : null}
                 </div>
                 <div className="button-row">
-                  <Button type="button" variant="ghost" onClick={() => setEditorFromProfile(selectedProfile)}>Cancel</Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => selectedProfile ? setEditorFromProfile(selectedProfile) : resetEditor()}
+                  >
+                    Cancel
+                  </Button>
                   <Button type="submit" icon={Save} loading={isSaving}>Save Resume</Button>
-                  <Button type="button" variant="secondary" icon={X} onClick={resetEditor}>Close</Button>
                 </div>
               </div>
 
@@ -478,13 +497,12 @@ function AuthenticatedProfileEditor() {
                 ))}
               </div>
             </form>
-            ) : (
-              <ReadableResumeProfile
-                profile={selectedProfile}
-                onEdit={() => setIsEditing(true)}
-                onClose={resetEditor}
-              />
-            )
+          ) : selectedProfile ? (
+            <ReadableResumeProfile
+              profile={selectedProfile}
+              onEdit={() => setIsEditing(true)}
+              onClose={resetEditor}
+            />
           ) : (
             <EmptyState icon={FileText} title="Resume profile details" description="Select a resume profile from the list to read or edit its full details." />
           )}
@@ -556,25 +574,30 @@ function ProfileEditorPreview() {
       <section className="profile-card profile-import-card">
         <div className="profile-card-header">
           <div>
-            <h2>Import Resume</h2>
+            <h2>Upload Resume</h2>
             <p className="metadata">Recommended: upload a PDF after login to generate a structured resume profile.</p>
           </div>
         </div>
         <ResumePrivacyNotice />
         <form className="inline-form resume-upload-form">
-          <input type="file" disabled />
+          <div className="resume-file-picker">
+            <button type="button" className="secondary-button action-with-icon resume-file-button" disabled>
+              <Upload size={17} aria-hidden="true" /> Upload File
+            </button>
+            <span className="metadata resume-file-name">No file selected</span>
+          </div>
           <button type="button" disabled>
             Analyze Resume
           </button>
         </form>
       </section>
-      <section className="profile-card manual-resume-card">
+      <section className="manual-resume-option">
         <div>
-          <h2>Manually Create Resume Profile</h2>
-          <p className="metadata">Importing a resume is recommended. Create one manually only when you prefer to enter every section yourself.</p>
+          <h2>Prefer manual entry?</h2>
+          <p className="metadata">Create a resume profile manually if you cannot upload a PDF or prefer to enter each section yourself.</p>
         </div>
         <button type="button" className="secondary-button" disabled>
-          Create
+          Create Resume Profile
         </button>
       </section>
       <section className="profile-workspace">
@@ -749,7 +772,7 @@ function ResumeImportReview({
             Discard
           </button>
           <button type="button" disabled={isApplying} onClick={() => void onApply()}>
-            {isApplying ? "Applying..." : result.parse_warning ? "Create Manual Profile" : "Apply JSON"}
+            {isApplying ? "Saving..." : result.parse_warning ? "Create Manual Profile" : "Save Resume Profile"}
           </button>
         </div>
       </div>

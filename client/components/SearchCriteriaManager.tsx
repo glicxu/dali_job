@@ -96,9 +96,7 @@ export function SearchCriteriaManager() {
               <strong>{criterion.keyword}</strong>
               <p className="metadata">{criterion.location || "Location needed"}</p>
             </div>
-            <Badge tone={criterion.source === "resume_generated" ? "info" : "neutral"}>
-              {criterion.source === "resume_generated" ? "From resume" : "Saved"}
-            </Badge>
+            <Badge tone="neutral">Saved</Badge>
             <div className="button-row">
               <IconButton label={`Edit ${criterion.keyword}`} icon={Pencil} variant="ghost" onClick={() => beginEdit(criterion)} />
               <IconButton label={`Delete ${criterion.keyword}`} icon={Trash2} variant="danger" onClick={() => void removeCriterion(criterion)} />

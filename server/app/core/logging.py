@@ -17,6 +17,14 @@ from app.config import RuntimeConfig
 
 REQUEST_ID: ContextVar[str] = ContextVar("request_id", default="-")
 
+NOISY_TRANSPORT_LOGGERS = (
+    "httpcore",
+    "httpcore.connection",
+    "httpcore.http11",
+    "httpcore.http2",
+    "httpx",
+)
+
 
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
@@ -66,6 +74,11 @@ def configure_logging(runtime: RuntimeConfig) -> None:
     api_file._dalijob_handler = True  # type: ignore[attr-defined]
     root.addHandler(console)
     root.addHandler(api_file)
+
+    # A global DEBUG level is useful for DaliJob, but HTTP clients emit several
+    # connection lifecycle records per provider request at that level.
+    for logger_name in NOISY_TRANSPORT_LOGGERS:
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
 
     alerts = logging.getLogger("dalijob.alerts")
     alerts.setLevel(logging.WARNING)

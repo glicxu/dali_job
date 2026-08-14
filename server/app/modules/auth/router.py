@@ -23,6 +23,7 @@ from app.modules.auth.service import (
     send_password_reset_email,
     send_verification_email,
 )
+from app.modules.auth.account_deletion import soft_delete_account
 from app.modules.profiles.repository import ensure_account_for_identity
 
 router = APIRouter(tags=["auth"])
@@ -161,6 +162,9 @@ def verify_email(
     identity = _identity(user)
     ensure_account_for_identity(db, identity)
     create_session(db, user, _runtime(request), response)
+    # The browser validates the new session immediately through /auth/csrf.
+    # Commit before returning so that request cannot race dependency cleanup.
+    db.commit()
     return AuthResponse(user=_public_user(request, identity))
 
 
@@ -198,6 +202,8 @@ def login(
     identity = _identity(user)
     ensure_account_for_identity(db, identity)
     create_session(db, user, _runtime(request), response)
+    # Make the cookie-backed session visible before the immediate CSRF request.
+    db.commit()
     return AuthResponse(user=_public_user(request, identity))
 
 
@@ -263,10 +269,10 @@ def delete_account(
     user = db.get(User, int(identity.external_user_id))
     if user is None or not verify_password(payload.current_password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="current password is incorrect")
-    now = datetime.now(timezone.utc)
-    user.is_active = False
-    user.deleted_at = now
-    revoke_all_sessions(db, user.id)
+    soft_delete_account(db, user)
+    # The client redirects immediately after this response, so make deletion
+    # durable before it starts a new anonymous session check.
+    db.commit()
     clear_session_cookies(response)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response

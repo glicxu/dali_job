@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ExternalLink,
   FilePenLine,
+  Link2,
   ListChecks,
   RotateCcw,
   SearchCheck,
@@ -784,9 +785,10 @@ function AuthenticatedJobsManager({ creationMode }: { creationMode: ImportMode |
       <ToastRegion message={status} onDismiss={() => setStatus(null)} />
 
       <section className="profile-card job-add-card">
-        <SectionHeader title="Add a new Job Entry" description="Add a job entry using a pasted title and description." />
+        <SectionHeader title="Add a new Job Entry" description="Import a posting from its URL or add an entry using a pasted title and description." />
         <div className="job-create-actions" aria-label="Create a saved job">
-          <a className="button-link action-with-icon" href="/jobs/manual"><FilePenLine size={17} aria-hidden="true" /> Add Entry</a>
+          <a className="button-link action-with-icon" href="/jobs/import-url"><Link2 size={17} aria-hidden="true" /> Use Job URL</a>
+          <a className="button-link action-with-icon" href="/jobs/manual"><FilePenLine size={17} aria-hidden="true" /> Paste Job Description</a>
         </div>
       </section>
 
@@ -1063,10 +1065,11 @@ function JobsManagerPreview() {
       <section className="profile-card job-add-card">
         <div>
           <h2>Add a new Job Entry</h2>
-          <p className="metadata">Add a job entry using a pasted title and description.</p>
+          <p className="metadata">Import a posting from its URL or add an entry using a pasted title and description.</p>
         </div>
         <div className="job-create-actions" aria-label="Preview job creation options">
-          <a className="button-link" href="/jobs/manual">Add Entry</a>
+          <a className="button-link action-with-icon" href="/jobs/import-url"><Link2 size={17} aria-hidden="true" /> Use Job URL</a>
+          <a className="button-link" href="/jobs/manual">Paste Job Description</a>
         </div>
       </section>
 

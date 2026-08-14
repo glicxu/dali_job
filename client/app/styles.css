@@ -1814,7 +1814,7 @@ li span {
 }
 
 .indeed-search-row {
-  grid-template-columns: 64px minmax(0, 1fr) 140px 100px;
+  grid-template-columns: 64px minmax(0, 1fr);
 }
 
 .bulk-import-row:last-child {

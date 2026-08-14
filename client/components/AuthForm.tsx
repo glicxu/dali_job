@@ -99,7 +99,7 @@ export function AuthForm({ onAuthChange }: { onAuthChange?: (user: CurrentUser |
     } finally {
       setUser(null);
       onAuthChange?.(null);
-      setStatus("Signed out.");
+      window.location.replace("/");
     }
   }
 

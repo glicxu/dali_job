@@ -186,8 +186,21 @@ test("first-run tutorial requires ordered steps and only completion unlocks the 
   assert.match(overhaul, /\.tutorial-step-overview li > div > span/);
   assert.doesNotMatch(overhaul, /\.tutorial-step-overview span\s*\{/);
   assert.match(jobSearch, /isTutorialActive/);
+  assert.match(jobSearch, /const RESULTS_PER_PAGE = 5;/);
   assert.match(jobSearch, /runMatching: !tutorialActive && runMatching/);
   assert.match(jobSearch, /\{!tutorialActive \? \([\s\S]*Run matching after import/);
+});
+
+test("job search results open from the row without redundant status or view controls", () => {
+  assert.doesNotMatch(jobSearch, /<span>Status<\/span>/);
+  assert.doesNotMatch(jobSearch, /<span>Actions<\/span>/);
+  assert.doesNotMatch(jobSearch, />View<\/Button>/);
+  assert.match(jobSearch, /role="button"[\s\S]*aria-label=\{`View \$\{item\.title/);
+  assert.match(jobSearch, /onClick=\{\(\) => setActiveResult\(item\)\}/);
+  assert.match(jobSearch, /onClick=\{\(event\) => event\.stopPropagation\(\)\}/);
+  assert.match(jobSearch, /icon=\{X\}[\s\S]*onClick=\{onClose\}>Close<\/Button>/);
+  assert.match(overhaul, /\.indeed-search-row:not\(\.bulk-import-header\):focus-visible/);
+  assert.match(overhaul, /\.job-search-detail-card \.job-description-text \{[\s\S]*?max-height: min\(52vh, 520px\);[\s\S]*?overflow-y: auto;/);
 });
 
 test("dashboard and jobs use the shared feedback and hierarchy components", () => {
@@ -225,9 +238,11 @@ test("dashboard and jobs use the shared feedback and hierarchy components", () =
   assert.match(jobs, /const hasMatch = Boolean\(job\.match_data\)/);
   assert.match(jobs, />\s*Re-match\s*<\/Button>/);
   assert.match(jobs, />Select Jobs<\/Button>/);
-  assert.doesNotMatch(jobs, /href="\/jobs\/import-url"/);
+  assert.match(jobs, /href="\/jobs\/import-url"/);
+  assert.match(jobs, /> Use Job URL<\/a>/);
+  assert.match(jobs, /> Paste Job Description<\/a>/);
   assert.doesNotMatch(jobs, /href="\/jobs\/import"/);
-  assert.match(admin, /href="\/jobs\/import-url"/);
+  assert.doesNotMatch(admin, /href="\/jobs\/import-url"/);
   assert.match(admin, /href="\/jobs\/import"/);
   assert.match(jobs, /updateSelectedArchiveState/);
   assert.match(jobs, /toggleSelectAllJobs/);
@@ -241,6 +256,8 @@ test("dashboard and jobs use the shared feedback and hierarchy components", () =
 
 test("Ask Scout, authentication, administration, and diagnostics use shared semantic controls", () => {
   assert.match(askScout, /Scout provides navigation guidance only/);
+  assert.match(shell, /async function signOut\(\)[\s\S]*window\.location\.replace\("\/"\);/);
+  assert.match(auth, /async function signOut\(\)[\s\S]*window\.location\.replace\("\/"\);/);
   assert.match(auth, /await deleteAccount\(deletePassword\);[\s\S]*window\.location\.replace\("\/"\);/);
   assert.match(userReports, /Report a problem or share feedback\./);
   assert.match(userReports, /Your report was submitted\./);

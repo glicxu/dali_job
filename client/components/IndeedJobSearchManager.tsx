@@ -17,11 +17,9 @@ import {
 } from "../lib/api";
 import {
   AlertBanner,
-  Badge,
   Button,
   EmptyState,
   Field,
-  IconButton,
   MatchScoreBadge,
   SectionHeader,
   ToastRegion,
@@ -29,7 +27,7 @@ import {
 } from "./ui";
 import { isTutorialActive } from "./TutorialGuide";
 
-const RESULTS_PER_PAGE = 2;
+const RESULTS_PER_PAGE = 5;
 
 function resultKey(result: IndeedJobSearchResult): string {
   return result.source_url || result.external_id || `${result.title}|${result.company}|${result.location}`;
@@ -376,20 +374,33 @@ function AuthenticatedIndeedJobSearchManager() {
               <div className="bulk-import-row bulk-import-header indeed-search-row">
                 <span>Select</span>
                 <span>Job</span>
-                <span>Status</span>
-                <span>Actions</span>
               </div>
               {visibleResults.map((item) => {
                 const key = resultKey(item);
                 const isActive = activeResult ? resultKey(activeResult) === key : false;
                 return (
-                  <div className={`bulk-import-row indeed-search-row${isActive ? " selected" : ""}`} key={key}>
+                  <div
+                    className={`bulk-import-row indeed-search-row${isActive ? " selected" : ""}`}
+                    key={key}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`View ${item.title || "Untitled job"}`}
+                    onClick={() => setActiveResult(item)}
+                    onKeyDown={(event) => {
+                      if (event.target !== event.currentTarget) return;
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setActiveResult(item);
+                      }
+                    }}
+                  >
                     {isActive ? <span className="sr-only">Viewed job</span> : null}
-                    <span>
+                    <span onClick={(event) => event.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={selectedKeys.has(key)}
                         onChange={() => toggleResult(item)}
+                        aria-label={`Select ${item.title || "Untitled job"}`}
                       />
                     </span>
                     <span>
@@ -398,10 +409,6 @@ function AuthenticatedIndeedJobSearchManager() {
                         {item.company || "Unknown company"} {item.location ? `| ${item.location}` : ""}
                       </span>
                       <span className="metadata">{item.source_url || "No source URL returned"}</span>
-                    </span>
-                    <Badge tone={item.status === "new" ? "info" : "neutral"}>{item.status.replace("_", " ")}</Badge>
-                    <span>
-                      <Button type="button" size="compact" variant="secondary" icon={Eye} onClick={() => setActiveResult(item)}>View</Button>
                     </span>
                   </div>
                 );
@@ -462,7 +469,7 @@ function AuthenticatedIndeedJobSearchManager() {
             {activeResult ? (
               <JobSearchResultDetail result={activeResult} onClose={() => setActiveResult(null)} />
             ) : (
-              <EmptyState icon={Eye} title="Job Description" description="Select View from a search result to open the full description here." />
+              <EmptyState icon={Eye} title="Job Description" description="Select a search result to open the full description here." />
             )}
           </div>
         </section>
@@ -524,7 +531,7 @@ function JobSearchResultDetail({
             {result.company || "Unknown company"} {result.location ? `| ${result.location}` : ""}
           </p>
         </div>
-        <IconButton icon={X} label="Close job description" variant="secondary" onClick={onClose} />
+        <Button type="button" size="compact" variant="secondary" icon={X} onClick={onClose}>Close</Button>
       </div>
       {result.source_url ? <p className="metadata">{result.source_url}</p> : null}
       {result.summary ? <p className="summary">{result.summary}</p> : null}
@@ -575,8 +582,6 @@ function IndeedJobSearchPreview() {
           <div className="bulk-import-row bulk-import-header indeed-search-row">
             <span>Select</span>
             <span>Job</span>
-            <span>Status</span>
-            <span>Actions</span>
           </div>
           {["Software Engineer", "Data Platform Engineer"].map((title) => (
             <div className="bulk-import-row indeed-search-row" key={title}>
@@ -586,12 +591,6 @@ function IndeedJobSearchPreview() {
               <span>
                 <strong>{title}</strong>
                 <span className="metadata">Example Company | Remote</span>
-              </span>
-              <span className="score-badge">new</span>
-              <span>
-                <button type="button" className="secondary-button" disabled>
-                  View
-                </button>
               </span>
             </div>
           ))}

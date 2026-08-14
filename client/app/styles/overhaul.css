@@ -1570,7 +1570,8 @@ h2 {
   padding: 14px;
 }
 
-.job-description-details .job-description-text {
+.job-description-details .job-description-text,
+.job-search-detail-card .job-description-text {
   max-height: min(52vh, 520px);
   overflow-y: auto;
   padding-right: 10px;
@@ -1661,6 +1662,16 @@ button.job-notes-preview:focus-visible {
 
 .bulk-import-row:hover:not(.bulk-import-header, .selected) {
   background: var(--brand-100);
+}
+
+.indeed-search-row:not(.bulk-import-header) {
+  cursor: pointer;
+}
+
+.indeed-search-row:not(.bulk-import-header):focus-visible {
+  border-radius: var(--radius-control);
+  outline: 3px solid var(--focus-ring);
+  outline-offset: -3px;
 }
 
 .bulk-import-row.selected {

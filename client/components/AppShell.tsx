@@ -105,6 +105,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       setUser(null);
       setAuthState("anonymous");
       setMobileNavOpen(false);
+      window.location.replace("/");
     }
   }
 

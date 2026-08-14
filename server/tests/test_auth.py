@@ -23,8 +23,9 @@ from app.modules.applications.models import (
     ApplicationStatusHistory,
     ApplicationTask,
 )
-from app.modules.auth.models import AuthActionToken, AuthSession
+from app.modules.auth.models import AuthActionToken, AuthSession, MobileRefreshToken
 from app.modules.audit.models import AuditEvent
+from app.modules.automation.models import SearchRun, SearchSchedule, UsageLedger, UserSubscription
 from app.modules.auth.dependencies import get_auth_db_session
 from app.modules.auth.policy import validate_route_authorization
 from app.modules.auth.rate_limit import AuthRateLimiter, AuthRateLimitPolicy
@@ -144,6 +145,11 @@ def test_registration_requires_email_verification(tmp_path: Path) -> None:
     client = create_local_auth_client(tmp_path)
     _register(client)
 
+    with client.app.state.test_session_factory() as db:
+        subscription = db.execute(select(UserSubscription)).scalar_one()
+        assert subscription.tier_code == "free"
+        assert subscription.status == "active"
+
     login = client.post(
         "/api/v1/auth/login",
         json={"email": "user@example.com", "password": "strong-password"},
@@ -244,6 +250,14 @@ def test_password_reset_is_generic_single_use_and_revokes_sessions(tmp_path: Pat
     client = create_local_auth_client(tmp_path)
     _register(client)
     _verify(client)
+    mobile = client.post(
+        "/api/v1/auth/mobile/sessions",
+        json={
+            "email": "user@example.com",
+            "password": "strong-password",
+            "device_label": "Password reset device",
+        },
+    ).json()
 
     unknown = client.post("/api/v1/auth/forgot-password", json={"email": "unknown@example.com"})
     known = client.post("/api/v1/auth/forgot-password", json={"email": "user@example.com"})
@@ -257,6 +271,14 @@ def test_password_reset_is_generic_single_use_and_revokes_sessions(tmp_path: Pat
     )
     assert reset.status_code == 200
     assert client.get("/api/v1/me").status_code == 401
+    assert client.get(
+        "/api/v1/me",
+        headers={"Authorization": f"Bearer {mobile['access_token']}"},
+    ).status_code == 401
+    assert client.post(
+        "/api/v1/auth/mobile/sessions/refresh",
+        json={"refresh_token": mobile["refresh_token"]},
+    ).status_code == 401
     assert client.post(
         "/api/v1/auth/reset-password",
         json={"token": reset_token, "new_password": "another-password"},
@@ -291,6 +313,102 @@ def test_session_expiry_is_enforced(tmp_path: Path) -> None:
     assert client.get("/api/v1/me").status_code == 401
 
 
+def test_mobile_session_rotates_tokens_and_detects_refresh_reuse(tmp_path: Path) -> None:
+    client = create_local_auth_client(tmp_path)
+    _register(client)
+    _verify(client)
+
+    opened = client.post(
+        "/api/v1/auth/mobile/sessions",
+        json={
+            "email": "user@example.com",
+            "password": "strong-password",
+            "device_label": "Pixel test device",
+        },
+    )
+    assert opened.status_code == 201
+    first = opened.json()
+    first_access = first["access_token"]
+    first_refresh = first["refresh_token"]
+    assert first["token_type"] == "Bearer"
+    assert first["session"]["device_label"] == "Pixel test device"
+    first_headers = {"Authorization": f"Bearer {first_access}"}
+    assert client.get("/api/v1/me", headers=first_headers).status_code == 200
+    assert client.get("/api/v1/me", headers={"Authorization": "Basic invalid"}).status_code == 401
+    sessions = client.get("/api/v1/auth/mobile/sessions", headers=first_headers)
+    assert sessions.status_code == 200
+    assert sessions.json()["sessions"][0]["is_current"] is True
+
+    # Bearer-authenticated writes do not rely on browser CSRF state.
+    client.cookies.delete("dalijob_csrf")
+    assert client.post("/api/v1/me/tutorial/complete", headers=first_headers).status_code == 200
+
+    rotated = client.post(
+        "/api/v1/auth/mobile/sessions/refresh",
+        json={"refresh_token": first_refresh},
+    )
+    assert rotated.status_code == 200
+    second = rotated.json()
+    second_headers = {"Authorization": f"Bearer {second['access_token']}"}
+    assert second["refresh_token"] != first_refresh
+    assert client.get("/api/v1/me", headers=first_headers).status_code == 401
+    assert client.get("/api/v1/me", headers=second_headers).status_code == 200
+
+    reused = client.post(
+        "/api/v1/auth/mobile/sessions/refresh",
+        json={"refresh_token": first_refresh},
+    )
+    assert reused.status_code == 401
+    assert "reuse" in reused.json()["detail"]
+    assert client.get("/api/v1/me", headers=second_headers).status_code == 401
+    assert client.post(
+        "/api/v1/auth/mobile/sessions/refresh",
+        json={"refresh_token": second["refresh_token"]},
+    ).status_code == 401
+
+    with client.app.state.test_session_factory() as db:
+        mobile_session = db.scalar(select(AuthSession).where(AuthSession.session_type == "mobile"))
+        refresh_tokens = list(db.scalars(select(MobileRefreshToken)).all())
+        assert mobile_session is not None
+        assert mobile_session.revoked_at is not None
+        assert mobile_session.token_hash not in {first_access, second["access_token"]}
+        assert len(refresh_tokens) == 2
+        assert all(token.token_hash not in {first_refresh, second["refresh_token"]} for token in refresh_tokens)
+        assert all(token.revoked_at is not None for token in refresh_tokens)
+
+
+def test_mobile_session_can_be_revoked_from_browser_device_management(tmp_path: Path) -> None:
+    client = create_local_auth_client(tmp_path)
+    _register(client)
+    _verify(client)
+    opened = client.post(
+        "/api/v1/auth/mobile/sessions",
+        json={
+            "email": "user@example.com",
+            "password": "strong-password",
+            "device_label": "iPhone test device",
+        },
+    ).json()
+    session_id = opened["session"]["id"]
+
+    listed = client.get("/api/v1/auth/mobile/sessions")
+    assert listed.status_code == 200
+    assert listed.json()["sessions"][0]["is_current"] is False
+    revoked = client.delete(
+        f"/api/v1/auth/mobile/sessions/{session_id}",
+        headers=_csrf_headers(client),
+    )
+    assert revoked.status_code == 204
+    assert client.get(
+        "/api/v1/me",
+        headers={"Authorization": f"Bearer {opened['access_token']}"},
+    ).status_code == 401
+    assert client.get("/api/v1/auth/mobile/sessions").json() == {
+        "sessions": [],
+        "next_cursor": None,
+    }
+
+
 def test_account_soft_delete_revokes_every_session(tmp_path: Path) -> None:
     client = create_local_auth_client(tmp_path)
     _register(client)
@@ -299,6 +417,9 @@ def test_account_soft_delete_revokes_every_session(tmp_path: Path) -> None:
     with session_factory() as db:
         user = db.execute(select(User).where(User.email == "user@example.com")).scalar_one()
         workspace = db.execute(select(Workspace).where(Workspace.owner_user_id == user.id)).scalar_one()
+        subscription = db.execute(
+            select(UserSubscription).where(UserSubscription.user_id == user.id)
+        ).scalar_one()
         original_user_id = user.id
 
         document = Document(workspace_id=workspace.id, user_id=user.id, title="Private resume")
@@ -403,6 +524,37 @@ def test_account_soft_delete_revokes_every_session(tmp_path: Path) -> None:
         )
         db.add_all([match, criterion, application, operation, report])
         db.flush()
+        schedule = SearchSchedule(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            criterion_id=criterion.id,
+            resume_profile_id=profile.id,
+            interval_minutes=10_080,
+            minimum_match_score=5,
+            next_run_at=datetime.now(timezone.utc),
+        )
+        db.add(schedule)
+        db.flush()
+        search_run = SearchRun(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            schedule_id=schedule.id,
+            managed_operation_id=operation.id,
+            scheduled_for=datetime.now(timezone.utc),
+        )
+        db.add(search_run)
+        db.flush()
+        usage = UsageLedger(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            subscription_id=subscription.id,
+            search_run_id=search_run.id,
+            idempotency_key="account-delete-usage",
+            entitlement_version="test-v1",
+            tier_code_snapshot="free",
+            allowance_snapshot=4,
+        )
+        db.add(usage)
         status_history = ApplicationStatusHistory(
             application_id=application.id,
             from_status=None,
@@ -498,6 +650,10 @@ def test_account_soft_delete_revokes_every_session(tmp_path: Path) -> None:
             material,
             material_version,
             report,
+            subscription,
+            schedule,
+            search_run,
+            usage,
         ]
         owned_record_ids = [(type(record), record.id) for record in owned_records]
         cache_id = cache.id
@@ -506,6 +662,9 @@ def test_account_soft_delete_revokes_every_session(tmp_path: Path) -> None:
         application_document_id = application_document.id
         application_task_id = application_task.id
         operation_id = operation.id
+        subscription_id = subscription.id
+        schedule_id = schedule.id
+        search_run_id = search_run.id
 
     assert client.post(
         "/api/v1/auth/forgot-password",
@@ -534,6 +693,9 @@ def test_account_soft_delete_revokes_every_session(tmp_path: Path) -> None:
         assert db.get(ApplicationDocument, application_document_id).detached_at is not None
         assert db.get(ApplicationTask, application_task_id).reminder_dismissed_at is not None
         assert db.get(ManagedOperation, operation_id).status == "cancelled"
+        assert db.get(UserSubscription, subscription_id).status == "cancelled"
+        assert db.get(SearchSchedule, schedule_id).enabled is False
+        assert db.get(SearchRun, search_run_id).status == "cancelled"
         assert db.get(JobCache, cache_id).deleted_at is None
         assert db.get(AuditEvent, audit_event_id) is not None
         assert all(session.revoked_at is not None for session in db.scalars(select(AuthSession)).all())

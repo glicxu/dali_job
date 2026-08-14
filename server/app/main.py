@@ -17,8 +17,10 @@ from app.db.session import dispose_db_engines
 from app.modules.applications.router import router as applications_router
 from app.modules.analytics.router import router as analytics_router
 from app.modules.auth.router import auth_router, router as auth_base_router
+from app.modules.auth.mobile_router import router as mobile_auth_router
 from app.modules.auth.policy import validate_route_authorization
 from app.modules.auth.rate_limit import AuthRateLimiter, AuthRateLimitPolicy
+from app.modules.automation.router import router as automation_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.documents.router import router as documents_router
 from app.modules.health.router import router as health_router
@@ -26,6 +28,7 @@ from app.modules.job_search.router import router as job_search_router
 from app.modules.interviews.router import router as interviews_router
 from app.modules.jobs.router import router as jobs_router
 from app.modules.materials.router import router as materials_router
+from app.modules.notifications.router import router as notifications_router
 from app.modules.operations.router import router as operations_router
 from app.modules.profiles.router import resume_profiles_router, router as profile_router
 from app.modules.reports.router import router as reports_router
@@ -36,6 +39,8 @@ LOGGER = logging.getLogger(__name__)
 API_ROUTERS = (
     auth_base_router,
     auth_router,
+    mobile_auth_router,
+    automation_router,
     applications_router,
     analytics_router,
     dashboard_router,
@@ -45,6 +50,7 @@ API_ROUTERS = (
     interviews_router,
     jobs_router,
     materials_router,
+    notifications_router,
     operations_router,
     profile_router,
     resume_profiles_router,
@@ -77,6 +83,7 @@ def create_app(config_path: Optional[str] = None) -> FastAPI:
 
     app = FastAPI(title="DaliJob API", version="0.1.0", lifespan=lifespan)
     app.state.runtime = runtime
+    app.state.tier_entitlements = runtime.tier_entitlements
     app.state.provider_rate_limiter = ProviderRateLimiter()
     app.state.auth_rate_limiter = AuthRateLimiter(
         AuthRateLimitPolicy(
@@ -97,11 +104,13 @@ def create_app(config_path: Optional[str] = None) -> FastAPI:
         allow_origin_regex=runtime.client_origin_regex or None,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "Idempotency-Key", "X-CSRF-Token", "X-Request-ID"],
+        allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-CSRF-Token", "X-Request-ID"],
     )
 
     app.include_router(auth_base_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
+    app.include_router(mobile_auth_router, prefix="/api/v1")
+    app.include_router(automation_router, prefix="/api/v1")
     app.include_router(applications_router, prefix="/api/v1")
     app.include_router(analytics_router, prefix="/api/v1")
     app.include_router(dashboard_router, prefix="/api/v1")
@@ -111,6 +120,7 @@ def create_app(config_path: Optional[str] = None) -> FastAPI:
     app.include_router(interviews_router, prefix="/api/v1")
     app.include_router(jobs_router, prefix="/api/v1")
     app.include_router(materials_router, prefix="/api/v1")
+    app.include_router(notifications_router, prefix="/api/v1")
     app.include_router(operations_router, prefix="/api/v1")
     app.include_router(profile_router, prefix="/api/v1")
     app.include_router(resume_profiles_router, prefix="/api/v1")

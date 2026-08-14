@@ -318,6 +318,38 @@ def test_bulk_saved_job_match_matches_selected_jobs_with_resume_profile() -> Non
     assert payload["matched"][0]["saved_match_id"] is not None
     jobs = client.get("/api/v1/jobs").json()
     assert {job["match_score"] for job in jobs} == {7}
+    first_job_id = first_job.json()["id"]
+    history = client.get(f"/api/v1/jobs/{first_job_id}/matches").json()["matches"]
+    assert len(history) == 1
+    assert history[0]["match_origin"] == "manual_rerun"
+    assert client.get("/api/v1/account/usage").json()["entries"] == []
+    assert client.get("/api/v1/match-inbox").json()["items"] == []
+
+    revised_resume = profile_response.json()["resume_data"]
+    revised_resume["skills"] = ["Python", "FastAPI", "Kubernetes"]
+    assert client.patch(
+        f"/api/v1/resume-profiles/{profile_response.json()['id']}",
+        json={"resume_data": revised_resume},
+    ).status_code == 200
+    rerun = client.post(
+        "/api/v1/resume-job-matches/saved-jobs",
+        json={
+            "user_job_ids": [first_job_id],
+            "resume_profile_id": profile_response.json()["id"],
+        },
+    )
+    assert rerun.status_code == 200
+    rerun_history = client.get(f"/api/v1/jobs/{first_job_id}/matches").json()["matches"]
+    assert len(rerun_history) == 2
+    assert rerun_history[0]["match_origin"] == "manual_rerun"
+    assert rerun_history[0]["resume_data_snapshot"]["skills"] == [
+        "Python",
+        "FastAPI",
+        "Kubernetes",
+    ]
+    assert rerun_history[1]["resume_data_snapshot"]["skills"] == ["Python", "FastAPI"]
+    assert client.get("/api/v1/account/usage").json()["entries"] == []
+    assert client.get("/api/v1/match-inbox").json()["items"] == []
 
 
 def test_manual_saved_job_is_user_owned_editable_and_matchable() -> None:
@@ -1710,6 +1742,7 @@ def test_match_history_preserves_snapshots_and_detects_resume_staleness() -> Non
     history = client.get(f"/api/v1/jobs/{job_id}/matches").json()["matches"]
     assert len(history) == 1
     assert history[0]["resume_data_snapshot"]["skills"] == ["Python", "FastAPI"]
+    assert history[0]["match_origin"] == "direct_match"
     assert history[0]["job_data_snapshot"]["required_skills"] == ["PostgreSQL"]
     assert history[0]["is_stale"] is False
 

@@ -299,6 +299,7 @@ class JobResumeMatchResponse(BaseModel):
     resume_profile_id: int | None = None
     resume_document_id: int | None = None
     resume_source: str
+    match_origin: str
     match_score: int = Field(..., ge=0, le=10)
     match_data: dict
     resume_data_snapshot: dict

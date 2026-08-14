@@ -25,6 +25,20 @@ def test_health_endpoint_is_in_openapi_contract() -> None:
     assert "/api/v1/reports" in schema["paths"]
     assert "/api/v1/admin/reports" in schema["paths"]
     assert "/api/v1/me/tutorial/complete" in schema["paths"]
+    assert "/api/v1/account/entitlements" in schema["paths"]
+    assert "/api/v1/account/usage" in schema["paths"]
+    assert "/api/v1/automation/schedules" in schema["paths"]
+    assert "/api/v1/automation/schedules/{schedule_id}" in schema["paths"]
+    assert "/api/v1/automation/runs" in schema["paths"]
+    assert "/api/v1/automation/runs/{run_id}" in schema["paths"]
+    assert "/api/v1/notification-preferences" in schema["paths"]
+    assert "/api/v1/match-inbox" in schema["paths"]
+    assert "/api/v1/match-inbox/{match_id}" in schema["paths"]
+    assert "/api/v1/match-inbox/{match_id}/read" in schema["paths"]
+    assert "/api/v1/auth/mobile/sessions" in schema["paths"]
+    assert "/api/v1/auth/mobile/sessions/refresh" in schema["paths"]
+    assert "/api/v1/auth/mobile/sessions/{session_id}" in schema["paths"]
+    assert "/api/v1/auth/mobile/sessions/current" in schema["paths"]
 
 
 def test_health_endpoint_returns_ok() -> None:

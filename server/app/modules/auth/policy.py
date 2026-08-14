@@ -15,6 +15,8 @@ PUBLIC_API_ROUTES = {
     ("POST", "/auth/resend-verification"),
     ("POST", "/auth/forgot-password"),
     ("POST", "/auth/reset-password"),
+    ("POST", "/auth/mobile/sessions"),
+    ("POST", "/auth/mobile/sessions/refresh"),
     ("GET", "/health"),
     ("GET", "/health/db"),
     ("GET", "/documents/downloads/{token}"),

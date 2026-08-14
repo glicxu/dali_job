@@ -12,6 +12,7 @@ from app.modules.accounts.dev_identity import (
 )
 from app.modules.accounts.models import User, Workspace
 from app.modules.auth.dependencies import AuthenticatedIdentity, get_dev_identity
+from app.modules.automation.repository import ensure_free_subscription
 from app.modules.profiles.models import ResumeProfile, default_resume_data
 from app.modules.profiles.schemas import ResumeData, ResumeProfileCreateRequest, ResumeProfileUpdateRequest
 
@@ -37,6 +38,7 @@ def ensure_dev_account(db: Session) -> tuple[User, Workspace]:
         db.add(workspace)
 
     db.flush()
+    ensure_free_subscription(db, workspace_id=workspace.id, user_id=user.id)
     return user, workspace
 
 
@@ -65,6 +67,7 @@ def ensure_account_for_identity(db: Session, identity: AuthenticatedIdentity) ->
         db.add(workspace)
 
     db.flush()
+    ensure_free_subscription(db, workspace_id=workspace.id, user_id=user.id)
     return user, workspace
 
 

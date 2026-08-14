@@ -149,6 +149,8 @@ public_client_url = http://127.0.0.1:3000
 [dali_job_auth]
 session_idle_seconds = 43200
 session_absolute_seconds = 604800
+mobile_access_token_seconds = 900
+mobile_refresh_token_seconds = 2592000
 email_action_ttl_seconds = 3600
 ```
 

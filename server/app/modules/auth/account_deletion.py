@@ -18,6 +18,14 @@ from app.modules.applications.models import (
 from app.modules.auth.models import AuthActionToken
 from app.modules.auth.security import hash_password
 from app.modules.auth.service import revoke_all_sessions
+from app.modules.automation.models import (
+    NotificationDelivery,
+    NotificationPreference,
+    SearchRun,
+    SearchSchedule,
+    UsageLedger,
+    UserSubscription,
+)
 from app.modules.documents.models import Document, DocumentDownloadTicket, DocumentVersion
 from app.modules.interviews.models import Interview, InterviewNote, InterviewPrepGuide
 from app.modules.job_search.models import JobSearchCriterion
@@ -55,6 +63,45 @@ def soft_delete_account(db: Session, user: User, *, deleted_at: datetime | None 
     _mark_deleted(db, UserSavedJob, UserSavedJob.user_id == user_id, now)
     _mark_deleted(db, JobResumeMatch, JobResumeMatch.user_id == user_id, now)
     _mark_deleted(db, JobSearchCriterion, JobSearchCriterion.user_id == user_id, now)
+
+    db.execute(
+        update(UserSubscription)
+        .where(UserSubscription.user_id == user_id)
+        .values(status="cancelled", cancelled_at=now, deleted_at=now)
+    )
+    db.execute(
+        update(SearchSchedule)
+        .where(SearchSchedule.user_id == user_id)
+        .values(enabled=False, paused_reason="Account deleted", deleted_at=now)
+    )
+    db.execute(
+        update(SearchRun)
+        .where(SearchRun.user_id == user_id, SearchRun.status.in_(("queued", "running")))
+        .values(
+            status="cancelled",
+            completed_at=now,
+            error_code="account_deleted",
+            error_message="Cancelled because the account was deleted.",
+        )
+    )
+    _mark_deleted(db, SearchRun, SearchRun.user_id == user_id, now)
+    _mark_deleted(db, UsageLedger, UsageLedger.user_id == user_id, now)
+    db.execute(
+        update(NotificationDelivery)
+        .where(
+            NotificationDelivery.user_id == user_id,
+            NotificationDelivery.status.in_(("pending", "sending")),
+        )
+        .values(
+            status="suppressed",
+            error_code="account_deleted",
+            error_message=None,
+            lease_owner=None,
+            lease_expires_at=None,
+        )
+    )
+    _mark_deleted(db, NotificationDelivery, NotificationDelivery.user_id == user_id, now)
+    _mark_deleted(db, NotificationPreference, NotificationPreference.user_id == user_id, now)
 
     _mark_deleted(
         db,

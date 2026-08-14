@@ -369,6 +369,618 @@
         }
       }
     },
+    "/api/v1/auth/mobile/sessions": {
+      "post": {
+        "tags": [
+          "auth",
+          "mobile"
+        ],
+        "summary": "Open Mobile Session",
+        "operationId": "open_mobile_session_api_v1_auth_mobile_sessions_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MobileSessionCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MobileTokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "auth",
+          "mobile"
+        ],
+        "summary": "Get Mobile Sessions",
+        "operationId": "get_mobile_sessions_api_v1_auth_mobile_sessions_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "before_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MobileSessionListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/mobile/sessions/refresh": {
+      "post": {
+        "tags": [
+          "auth",
+          "mobile"
+        ],
+        "summary": "Refresh Mobile Session",
+        "operationId": "refresh_mobile_session_api_v1_auth_mobile_sessions_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MobileSessionRefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MobileTokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/mobile/sessions/current": {
+      "delete": {
+        "tags": [
+          "auth",
+          "mobile"
+        ],
+        "summary": "Close Current Mobile Session",
+        "operationId": "close_current_mobile_session_api_v1_auth_mobile_sessions_current_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/mobile/sessions/{session_id}": {
+      "delete": {
+        "tags": [
+          "auth",
+          "mobile"
+        ],
+        "summary": "Close Mobile Session",
+        "operationId": "close_mobile_session_api_v1_auth_mobile_sessions__session_id__delete",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/account/entitlements": {
+      "get": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Get Entitlements",
+        "operationId": "get_entitlements_api_v1_account_entitlements_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntitlementResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/account/usage": {
+      "get": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Get Account Usage",
+        "operationId": "get_account_usage_api_v1_account_usage_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "before_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountUsageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/automation/schedules": {
+      "get": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "List Search Schedules",
+        "operationId": "list_search_schedules_api_v1_automation_schedules_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchScheduleListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Create Search Schedule",
+        "operationId": "create_search_schedule_api_v1_automation_schedules_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchScheduleCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchScheduleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/automation/schedules/{schedule_id}": {
+      "patch": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Update Search Schedule",
+        "operationId": "update_search_schedule_api_v1_automation_schedules__schedule_id__patch",
+        "parameters": [
+          {
+            "name": "schedule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Schedule Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchScheduleUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchScheduleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Delete Search Schedule",
+        "operationId": "delete_search_schedule_api_v1_automation_schedules__schedule_id__delete",
+        "parameters": [
+          {
+            "name": "schedule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Schedule Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/automation/schedules/{schedule_id}/pause": {
+      "post": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Pause Search Schedule",
+        "operationId": "pause_search_schedule_api_v1_automation_schedules__schedule_id__pause_post",
+        "parameters": [
+          {
+            "name": "schedule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Schedule Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchScheduleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/automation/schedules/{schedule_id}/resume": {
+      "post": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Resume Search Schedule",
+        "operationId": "resume_search_schedule_api_v1_automation_schedules__schedule_id__resume_post",
+        "parameters": [
+          {
+            "name": "schedule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Schedule Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchScheduleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/automation/runs": {
+      "get": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "List Search Runs",
+        "operationId": "list_search_runs_api_v1_automation_runs_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "before_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchRunListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/automation/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Get Search Run",
+        "operationId": "get_search_run_api_v1_automation_runs__run_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchRunResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/applications": {
       "get": {
         "tags": [
@@ -3037,6 +3649,212 @@
         }
       }
     },
+    "/api/v1/notification-preferences": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Get Notification Preferences",
+        "operationId": "get_notification_preferences_api_v1_notification_preferences_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferenceResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Put Notification Preferences",
+        "operationId": "put_notification_preferences_api_v1_notification_preferences_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationPreferenceUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferenceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/match-inbox": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "List Match Inbox",
+        "operationId": "list_match_inbox_api_v1_match_inbox_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "before_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchInboxListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/match-inbox/{match_id}": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Get Match Inbox Item",
+        "operationId": "get_match_inbox_item_api_v1_match_inbox__match_id__get",
+        "parameters": [
+          {
+            "name": "match_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Match Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchInboxItemResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/match-inbox/{match_id}/read": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Mark Match Inbox Item Read",
+        "operationId": "mark_match_inbox_item_read_api_v1_match_inbox__match_id__read_post",
+        "parameters": [
+          {
+            "name": "match_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Match Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchInboxItemResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/operations/job-search": {
       "post": {
         "tags": [
@@ -4849,6 +5667,74 @@
   },
   "components": {
     "schemas": {
+      "AccountUsageResponse": {
+        "properties": {
+          "tier_code": {
+            "type": "string",
+            "title": "Tier Code"
+          },
+          "entitlement_version": {
+            "type": "string",
+            "title": "Entitlement Version"
+          },
+          "period_started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Period Started At"
+          },
+          "period_ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Period Ends At"
+          },
+          "searches_per_period": {
+            "type": "integer",
+            "title": "Searches Per Period"
+          },
+          "searches_reserved": {
+            "type": "integer",
+            "title": "Searches Reserved"
+          },
+          "searches_consumed": {
+            "type": "integer",
+            "title": "Searches Consumed"
+          },
+          "searches_available": {
+            "type": "integer",
+            "title": "Searches Available"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/UsageLedgerEntryResponse"
+            },
+            "type": "array",
+            "title": "Entries"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tier_code",
+          "entitlement_version",
+          "period_started_at",
+          "period_ends_at",
+          "searches_per_period",
+          "searches_reserved",
+          "searches_consumed",
+          "searches_available"
+        ],
+        "title": "AccountUsageResponse"
+      },
       "AdminReportResponse": {
         "properties": {
           "id": {
@@ -7484,6 +8370,71 @@
         ],
         "title": "EmailRequest"
       },
+      "EntitlementResponse": {
+        "properties": {
+          "tier_code": {
+            "type": "string",
+            "title": "Tier Code"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "entitlement_version": {
+            "type": "string",
+            "title": "Entitlement Version"
+          },
+          "period_started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Period Started At"
+          },
+          "period_ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Period Ends At"
+          },
+          "searches_per_period": {
+            "type": "integer",
+            "title": "Searches Per Period"
+          },
+          "searches_reserved": {
+            "type": "integer",
+            "title": "Searches Reserved"
+          },
+          "searches_consumed": {
+            "type": "integer",
+            "title": "Searches Consumed"
+          },
+          "searches_available": {
+            "type": "integer",
+            "title": "Searches Available"
+          },
+          "maximum_active_criteria": {
+            "type": "integer",
+            "title": "Maximum Active Criteria"
+          },
+          "minimum_interval_minutes": {
+            "type": "integer",
+            "title": "Minimum Interval Minutes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tier_code",
+          "status",
+          "entitlement_version",
+          "period_started_at",
+          "period_ends_at",
+          "searches_per_period",
+          "searches_reserved",
+          "searches_consumed",
+          "searches_available",
+          "maximum_active_criteria",
+          "minimum_interval_minutes"
+        ],
+        "title": "EntitlementResponse"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -9244,6 +10195,10 @@
             "type": "string",
             "title": "Resume Source"
           },
+          "match_origin": {
+            "type": "string",
+            "title": "Match Origin"
+          },
           "match_score": {
             "type": "integer",
             "maximum": 10.0,
@@ -9327,6 +10282,7 @@
           "user_id",
           "user_job_id",
           "resume_source",
+          "match_origin",
           "match_score",
           "match_data",
           "resume_data_snapshot",
@@ -9937,6 +10893,133 @@
         "type": "object",
         "title": "ManagedOperationSummaryResponse"
       },
+      "MatchInboxItemResponse": {
+        "properties": {
+          "match_id": {
+            "type": "integer",
+            "title": "Match Id"
+          },
+          "delivery_id": {
+            "type": "integer",
+            "title": "Delivery Id"
+          },
+          "user_job_id": {
+            "type": "integer",
+            "title": "User Job Id"
+          },
+          "search_schedule_id": {
+            "type": "integer",
+            "title": "Search Schedule Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "company": {
+            "type": "string",
+            "title": "Company"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "match_score": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Match Score"
+          },
+          "match_data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Match Data"
+          },
+          "job_data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Job Data"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "sent_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent At"
+          },
+          "read_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "match_id",
+          "delivery_id",
+          "user_job_id",
+          "search_schedule_id",
+          "title",
+          "company",
+          "match_score",
+          "match_data",
+          "job_data",
+          "status",
+          "created_at"
+        ],
+        "title": "MatchInboxItemResponse"
+      },
+      "MatchInboxListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MatchInboxItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "type": "object",
+        "title": "MatchInboxListResponse"
+      },
       "MaterialListResponse": {
         "properties": {
           "materials": {
@@ -10210,6 +11293,277 @@
           "message"
         ],
         "title": "MessageResponse"
+      },
+      "MobileSessionCreateRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Password"
+          },
+          "device_label": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Device Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password",
+          "device_label"
+        ],
+        "title": "MobileSessionCreateRequest"
+      },
+      "MobileSessionListResponse": {
+        "properties": {
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/MobileSessionResponse"
+            },
+            "type": "array",
+            "title": "Sessions"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "type": "object",
+        "title": "MobileSessionListResponse"
+      },
+      "MobileSessionRefreshRequest": {
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 40,
+            "title": "Refresh Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "refresh_token"
+        ],
+        "title": "MobileSessionRefreshRequest"
+      },
+      "MobileSessionResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "device_label": {
+            "type": "string",
+            "title": "Device Label"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "last_used_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Used At"
+          },
+          "refresh_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Refresh Expires At"
+          },
+          "is_current": {
+            "type": "boolean",
+            "title": "Is Current",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "device_label",
+          "created_at",
+          "last_used_at",
+          "refresh_expires_at"
+        ],
+        "title": "MobileSessionResponse"
+      },
+      "MobileTokenResponse": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "refresh_token": {
+            "type": "string",
+            "title": "Refresh Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "default": "Bearer"
+          },
+          "access_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Access Expires At"
+          },
+          "refresh_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Refresh Expires At"
+          },
+          "session": {
+            "$ref": "#/components/schemas/MobileSessionResponse"
+          },
+          "user": {
+            "$ref": "#/components/schemas/CurrentUserResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "refresh_token",
+          "access_expires_at",
+          "refresh_expires_at",
+          "session",
+          "user"
+        ],
+        "title": "MobileTokenResponse"
+      },
+      "NotificationPreferenceResponse": {
+        "properties": {
+          "email_enabled": {
+            "type": "boolean",
+            "title": "Email Enabled"
+          },
+          "digest_mode": {
+            "type": "string",
+            "title": "Digest Mode"
+          },
+          "minimum_match_score": {
+            "type": "integer",
+            "title": "Minimum Match Score"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone"
+          },
+          "quiet_hours_start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Hours Start"
+          },
+          "quiet_hours_end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Hours End"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email_enabled",
+          "digest_mode",
+          "minimum_match_score",
+          "timezone",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "NotificationPreferenceResponse"
+      },
+      "NotificationPreferenceUpdateRequest": {
+        "properties": {
+          "email_enabled": {
+            "type": "boolean",
+            "title": "Email Enabled",
+            "default": true
+          },
+          "digest_mode": {
+            "type": "string",
+            "pattern": "^(immediate|daily)$",
+            "title": "Digest Mode",
+            "default": "daily"
+          },
+          "minimum_match_score": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Minimum Match Score",
+            "default": 0
+          },
+          "timezone": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Timezone",
+            "default": "UTC"
+          },
+          "quiet_hours_start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Hours Start"
+          },
+          "quiet_hours_end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Hours End"
+          }
+        },
+        "type": "object",
+        "title": "NotificationPreferenceUpdateRequest"
       },
       "PasswordResetRequest": {
         "properties": {
@@ -11259,6 +12613,434 @@
         ],
         "title": "SavePendingMatchedJobResponse"
       },
+      "SearchRunListResponse": {
+        "properties": {
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/SearchRunResponse"
+            },
+            "type": "array",
+            "title": "Runs"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "type": "object",
+        "title": "SearchRunListResponse"
+      },
+      "SearchRunResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "schedule_id": {
+            "type": "integer",
+            "title": "Schedule Id"
+          },
+          "managed_operation_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Managed Operation Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "attempt_count": {
+            "type": "integer",
+            "title": "Attempt Count"
+          },
+          "max_attempts": {
+            "type": "integer",
+            "title": "Max Attempts"
+          },
+          "lease_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Expires At"
+          },
+          "heartbeat_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heartbeat At"
+          },
+          "scheduled_for": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Scheduled For"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "jobs_discovered": {
+            "type": "integer",
+            "title": "Jobs Discovered"
+          },
+          "jobs_new": {
+            "type": "integer",
+            "title": "Jobs New"
+          },
+          "jobs_matched": {
+            "type": "integer",
+            "title": "Jobs Matched"
+          },
+          "matches_notified": {
+            "type": "integer",
+            "title": "Matches Notified"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "schedule_id",
+          "status",
+          "attempt_count",
+          "max_attempts",
+          "scheduled_for",
+          "jobs_discovered",
+          "jobs_new",
+          "jobs_matched",
+          "matches_notified",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SearchRunResponse"
+      },
+      "SearchScheduleCreateRequest": {
+        "properties": {
+          "criterion_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Criterion Id"
+          },
+          "resume_profile_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Resume Profile Id"
+          },
+          "interval_minutes": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Interval Minutes"
+          },
+          "minimum_match_score": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum Match Score"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "next_run_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "criterion_id",
+          "resume_profile_id",
+          "interval_minutes"
+        ],
+        "title": "SearchScheduleCreateRequest"
+      },
+      "SearchScheduleListResponse": {
+        "properties": {
+          "schedules": {
+            "items": {
+              "$ref": "#/components/schemas/SearchScheduleResponse"
+            },
+            "type": "array",
+            "title": "Schedules"
+          }
+        },
+        "type": "object",
+        "title": "SearchScheduleListResponse"
+      },
+      "SearchScheduleResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "workspace_id": {
+            "type": "integer",
+            "title": "Workspace Id"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "criterion_id": {
+            "type": "integer",
+            "title": "Criterion Id"
+          },
+          "resume_profile_id": {
+            "type": "integer",
+            "title": "Resume Profile Id"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "interval_minutes": {
+            "type": "integer",
+            "title": "Interval Minutes"
+          },
+          "minimum_match_score": {
+            "type": "integer",
+            "title": "Minimum Match Score"
+          },
+          "next_run_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Next Run At"
+          },
+          "last_claimed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Claimed At"
+          },
+          "last_completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Completed At"
+          },
+          "consecutive_failure_count": {
+            "type": "integer",
+            "title": "Consecutive Failure Count"
+          },
+          "paused_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paused Reason"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "workspace_id",
+          "user_id",
+          "criterion_id",
+          "resume_profile_id",
+          "enabled",
+          "interval_minutes",
+          "minimum_match_score",
+          "next_run_at",
+          "consecutive_failure_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SearchScheduleResponse"
+      },
+      "SearchScheduleUpdateRequest": {
+        "properties": {
+          "resume_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Profile Id"
+          },
+          "interval_minutes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Minutes"
+          },
+          "minimum_match_score": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum Match Score"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "next_run_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run At"
+          }
+        },
+        "type": "object",
+        "title": "SearchScheduleUpdateRequest"
+      },
       "SupportedRequirement": {
         "properties": {
           "requirement": {
@@ -11348,6 +13130,101 @@
           "reason"
         ],
         "title": "UnsupportedRequirement"
+      },
+      "UsageLedgerEntryResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "search_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Run Id"
+          },
+          "usage_type": {
+            "type": "string",
+            "title": "Usage Type"
+          },
+          "units": {
+            "type": "integer",
+            "title": "Units"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "entitlement_version": {
+            "type": "string",
+            "title": "Entitlement Version"
+          },
+          "tier_code_snapshot": {
+            "type": "string",
+            "title": "Tier Code Snapshot"
+          },
+          "allowance_snapshot": {
+            "type": "integer",
+            "title": "Allowance Snapshot"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "reserved_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Reserved At"
+          },
+          "consumed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumed At"
+          },
+          "released_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Released At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "usage_type",
+          "units",
+          "state",
+          "entitlement_version",
+          "tier_code_snapshot",
+          "allowance_snapshot",
+          "reserved_at"
+        ],
+        "title": "UsageLedgerEntryResponse"
       },
       "UserReportCreateRequest": {
         "properties": {

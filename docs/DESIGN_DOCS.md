@@ -11,6 +11,7 @@ DaliJob is designed as a long-term career operating system, not a job board and 
 - [ER_MODEL_OVERVIEW.md](ER_MODEL_OVERVIEW.md) - plain-English explanation of current entities, relationships, and database design rules.
 - [ARCHITECTURE_REVIEW.md](ARCHITECTURE_REVIEW.md) - functional and architectural review of current risks, gaps, low-value areas, and recommended next steps.
 - [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) - use-case-first delivery plan with dependencies, work packages, acceptance criteria, and release boundaries.
+- [MOBILE_AUTOMATED_MATCHING_IMPLEMENTATION_PLAN.md](MOBILE_AUTOMATED_MATCHING_IMPLEMENTATION_PLAN.md) - mobile-first account onboarding, tier-based recurring searches, automatic resume matching, quotas, notifications, and phased delivery plan.
 - [ASK_SCOUT_IMPLEMENTATION_PLAN.md](ASK_SCOUT_IMPLEMENTATION_PLAN.md) - passive AI navigation assistant design, capability catalog, API contract, security boundaries, phased implementation, and tests.
 - [ASK_SCOUT_V2_IMPROVEMENT_PLAN.md](ASK_SCOUT_V2_IMPROVEMENT_PLAN.md) - proposed product-knowledge registry, safe account context, bounded follow-ups, deterministic intent routing, feedback, evaluations, and phased rollout for more accurate Ask Scout guidance.
 - [JOB_SCRAPER_GENERALIZATION_PLAN.md](JOB_SCRAPER_GENERALIZATION_PLAN.md) - quality-aware job URL extraction, structured-data and DOM strategies, rendered fallback, ATS adapters, security constraints, and phased implementation.

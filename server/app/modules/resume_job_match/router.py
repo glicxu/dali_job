@@ -331,6 +331,7 @@ def create_bulk_saved_job_matches(
                 resume_profile_id=resume_profile_id,
                 resume_document_id=resume_document_id,
                 resume_source=resume_source,
+                match_origin="manual_rerun",
                 match_score=result.match_score,
                 match_data=match_data_from_result(result),
                 resume_data_snapshot=resume_data,

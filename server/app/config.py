@@ -10,6 +10,8 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 from DaliCommonLib.dali_config import ProcessConfig
 
+from app.modules.automation.entitlements import EntitlementCatalog, load_entitlement_catalog
+
 LOGGER = logging.getLogger(__name__)
 
 DEFAULT_HOST = "127.0.0.1"
@@ -28,6 +30,8 @@ DEFAULT_AUTH_REGISTER_ACCOUNT_LIMIT = 5
 DEFAULT_AUTH_REGISTER_WINDOW_SECONDS = 3600
 DEFAULT_SESSION_IDLE_SECONDS = 60 * 60 * 12
 DEFAULT_SESSION_ABSOLUTE_SECONDS = 60 * 60 * 24 * 7
+DEFAULT_MOBILE_ACCESS_TOKEN_SECONDS = 60 * 15
+DEFAULT_MOBILE_REFRESH_TOKEN_SECONDS = 60 * 60 * 24 * 30
 DEFAULT_EMAIL_ACTION_TTL_SECONDS = 60 * 60
 DEFAULT_LOG_MAX_BYTES = 10 * 1024 * 1024
 DEFAULT_LOG_BACKUP_COUNT = 5
@@ -60,6 +64,8 @@ class RuntimeConfig:
     auth_register_window_seconds: int
     session_idle_seconds: int
     session_absolute_seconds: int
+    mobile_access_token_seconds: int
+    mobile_refresh_token_seconds: int
     email_action_ttl_seconds: int
     public_client_url: str
     email_delivery_mode: str
@@ -74,6 +80,7 @@ class RuntimeConfig:
     log_max_bytes: int
     log_backup_count: int
     audit_retention_days: int
+    tier_entitlements: EntitlementCatalog
 
 
 def _load_process_config(config_path: Optional[str]) -> Optional[str]:
@@ -144,6 +151,10 @@ def _split_csv(value: Optional[str], default: list[str]) -> list[str]:
 def _validate_runtime_config(runtime: RuntimeConfig) -> None:
     if runtime.auth_mode not in SUPPORTED_AUTH_MODES:
         raise RuntimeError(f"Unsupported DaliJob auth mode: {runtime.auth_mode}")
+    if runtime.session_idle_seconds > runtime.session_absolute_seconds:
+        raise RuntimeError("Session idle lifetime cannot exceed its absolute lifetime.")
+    if runtime.mobile_access_token_seconds >= runtime.mobile_refresh_token_seconds:
+        raise RuntimeError("Mobile access-token lifetime must be shorter than refresh-token lifetime.")
     if runtime.env_name.lower() not in PRODUCTION_ENV_NAMES:
         return
     if runtime.auth_mode in {"dev", "disabled"}:
@@ -169,8 +180,6 @@ def _validate_runtime_config(runtime: RuntimeConfig) -> None:
     public_url = urlparse(runtime.public_client_url)
     if public_url.scheme != "https" or not public_url.hostname:
         raise RuntimeError("Production DaliJob requires a public HTTPS client URL for account emails.")
-    if runtime.session_idle_seconds > runtime.session_absolute_seconds:
-        raise RuntimeError("Session idle lifetime cannot exceed its absolute lifetime.")
 
 
 def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
@@ -303,6 +312,24 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         ),
         DEFAULT_SESSION_ABSOLUTE_SECONDS,
     )
+    mobile_access_token_seconds = _coerce_int(
+        os.getenv("DALIJOB_MOBILE_ACCESS_TOKEN_SECONDS", "").strip()
+        or read_compatible_config_value(
+            ("dali_job_auth", "dali_jobs_auth"),
+            ("mobile_access_token_seconds",),
+            str(DEFAULT_MOBILE_ACCESS_TOKEN_SECONDS),
+        ),
+        DEFAULT_MOBILE_ACCESS_TOKEN_SECONDS,
+    )
+    mobile_refresh_token_seconds = _coerce_int(
+        os.getenv("DALIJOB_MOBILE_REFRESH_TOKEN_SECONDS", "").strip()
+        or read_compatible_config_value(
+            ("dali_job_auth", "dali_jobs_auth"),
+            ("mobile_refresh_token_seconds",),
+            str(DEFAULT_MOBILE_REFRESH_TOKEN_SECONDS),
+        ),
+        DEFAULT_MOBILE_REFRESH_TOKEN_SECONDS,
+    )
     email_action_ttl_seconds = _coerce_int(
         read_compatible_config_value(
             ("dali_job_auth", "dali_jobs_auth"),
@@ -363,6 +390,7 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         DEFAULT_LOG_BACKUP_COUNT,
     )
     audit_retention_days = _coerce_int(read_config_value("audit", "retention_days", "365"), 365)
+    tier_entitlements = load_entitlement_catalog()
 
     runtime = RuntimeConfig(
         config_path=loaded_path,
@@ -386,6 +414,8 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         auth_register_window_seconds=max(auth_register_window_seconds, 1),
         session_idle_seconds=max(session_idle_seconds, 60),
         session_absolute_seconds=max(session_absolute_seconds, 300),
+        mobile_access_token_seconds=max(mobile_access_token_seconds, 60),
+        mobile_refresh_token_seconds=max(mobile_refresh_token_seconds, 300),
         email_action_ttl_seconds=max(email_action_ttl_seconds, 300),
         public_client_url=public_client_url,
         email_delivery_mode=email_delivery_mode,
@@ -400,6 +430,7 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         log_max_bytes=max(log_max_bytes, 1024),
         log_backup_count=max(log_backup_count, 1),
         audit_retention_days=max(audit_retention_days, 1),
+        tier_entitlements=tier_entitlements,
     )
     _validate_runtime_config(runtime)
     return runtime

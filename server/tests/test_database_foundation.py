@@ -40,6 +40,10 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "auth_sessions",
         "auth_action_tokens",
         "audit_events",
+        "user_subscriptions",
+        "usage_ledger",
+        "search_schedules",
+        "search_runs",
     }.issubset(Base.metadata.tables.keys())
     assert "skills" not in Base.metadata.tables
     assert "experiences" not in Base.metadata.tables
@@ -237,6 +241,10 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "generated_application_materials",
         "generated_application_material_versions",
         "user_reports",
+        "user_subscriptions",
+        "usage_ledger",
+        "search_schedules",
+        "search_runs",
     ):
         assert "deleted_at" in Base.metadata.tables[table_name].columns, table_name
 
@@ -271,6 +279,10 @@ def test_foundation_metadata_can_create_tables() -> None:
     assert inspector.has_table("auth_sessions")
     assert inspector.has_table("auth_action_tokens")
     assert inspector.has_table("audit_events")
+    assert inspector.has_table("user_subscriptions")
+    assert inspector.has_table("usage_ledger")
+    assert inspector.has_table("search_schedules")
+    assert inspector.has_table("search_runs")
     assert not inspector.has_table("skills")
     assert not inspector.has_table("experiences")
     assert not inspector.has_table("profiles")
@@ -286,7 +298,7 @@ def test_alembic_has_initial_schema_revision() -> None:
     config.set_main_option("script_location", str(server_dir / "app" / "db" / "migrations"))
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == EXPECTED_ALEMBIC_HEAD == "20260814_0031"
+    assert script.get_current_head() == EXPECTED_ALEMBIC_HEAD == "20260814_0036"
 
 
 def test_phase3_migration_does_not_recreate_existing_document_version_constraint() -> None:

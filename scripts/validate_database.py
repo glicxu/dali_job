@@ -213,6 +213,29 @@ REQUIRED_TABLE_COLUMNS: dict[str, set[str]] = {
         "created_at",
         "updated_at",
     },
+    "user_subscriptions": {
+        "id", "workspace_id", "user_id", "tier_code", "status", "entitlement_version",
+        "period_started_at", "period_ends_at", "external_customer_reference",
+        "external_subscription_reference", "created_at", "updated_at", "cancelled_at",
+    },
+    "search_schedules": {
+        "id", "workspace_id", "user_id", "criterion_id", "resume_profile_id", "enabled",
+        "interval_minutes", "minimum_match_score", "next_run_at", "last_claimed_at",
+        "last_completed_at", "consecutive_failure_count", "paused_reason", "created_at", "updated_at",
+    },
+    "search_runs": {
+        "id", "workspace_id", "user_id", "schedule_id", "managed_operation_id", "status",
+        "attempt_count", "max_attempts", "lease_owner", "lease_expires_at", "heartbeat_at",
+        "scheduled_for", "provider", "jobs_discovered", "jobs_new", "jobs_matched",
+        "matches_notified", "error_code", "error_message", "started_at", "completed_at",
+        "created_at", "updated_at",
+    },
+    "usage_ledger": {
+        "id", "workspace_id", "user_id", "subscription_id", "search_run_id", "usage_type",
+        "units", "state", "idempotency_key", "entitlement_version", "tier_code_snapshot",
+        "allowance_snapshot", "reason", "reserved_at", "consumed_at", "released_at",
+        "created_at", "updated_at",
+    },
     "interviews": {
         "id",
         "workspace_id",
@@ -281,6 +304,10 @@ for table_name in (
     "generated_application_materials",
     "generated_application_material_versions",
     "user_reports",
+    "user_subscriptions",
+    "search_schedules",
+    "search_runs",
+    "usage_ledger",
 ):
     REQUIRED_TABLE_COLUMNS[table_name].add("deleted_at")
 

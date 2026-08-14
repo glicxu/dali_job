@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.config import RuntimeConfig
 from app.modules.accounts.models import User
 from app.modules.auth.email_delivery import send_account_email
-from app.modules.auth.models import AuthActionToken, AuthSession
+from app.modules.auth.models import AuthActionToken, AuthSession, MobileRefreshToken
 
 SESSION_COOKIE_NAME = "dalijob_session"
 CSRF_COOKIE_NAME = "dalijob_csrf"
@@ -80,7 +80,12 @@ def clear_session_cookies(response: Response) -> None:
 
 
 def resolve_session(db: Session, request: Request, runtime: RuntimeConfig) -> tuple[AuthSession, User]:
-    raw_token = request.cookies.get(SESSION_COOKIE_NAME, "")
+    authorization = request.headers.get("Authorization", "")
+    scheme, separator, bearer_value = authorization.partition(" ")
+    uses_bearer = bool(separator and scheme.lower() == "bearer" and bearer_value.strip())
+    if authorization and not uses_bearer:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid authorization header")
+    raw_token = bearer_value.strip() if uses_bearer else request.cookies.get(SESSION_COOKIE_NAME, "")
     if not raw_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
     session = db.execute(
@@ -89,6 +94,7 @@ def resolve_session(db: Session, request: Request, runtime: RuntimeConfig) -> tu
     now = utc_now()
     if (
         session is None
+        or session.session_type != ("mobile" if uses_bearer else "browser")
         or session.revoked_at is not None
         or _as_utc(session.idle_expires_at) <= now
         or _as_utc(session.absolute_expires_at) <= now
@@ -103,7 +109,7 @@ def resolve_session(db: Session, request: Request, runtime: RuntimeConfig) -> tu
         session.revoked_at = now
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="email verification required")
 
-    if request.method.upper() in UNSAFE_METHODS:
+    if not uses_bearer and request.method.upper() in UNSAFE_METHODS:
         cookie_csrf = request.cookies.get(CSRF_COOKIE_NAME, "")
         header_csrf = request.headers.get(CSRF_HEADER_NAME, "")
         if (
@@ -114,7 +120,9 @@ def resolve_session(db: Session, request: Request, runtime: RuntimeConfig) -> tu
         ):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF validation failed")
 
-    if (now - _as_utc(session.last_seen_at)).total_seconds() >= 300:
+    if uses_bearer:
+        session.last_seen_at = now
+    elif (now - _as_utc(session.last_seen_at)).total_seconds() >= 300:
         session.last_seen_at = now
         session.idle_expires_at = min(
             now + timedelta(seconds=runtime.session_idle_seconds),
@@ -135,10 +143,23 @@ def revoke_session_from_request(db: Session, request: Request) -> None:
 
 
 def revoke_all_sessions(db: Session, user_id: int) -> None:
+    mobile_session_ids = select(AuthSession.id).where(
+        AuthSession.user_id == user_id,
+        AuthSession.session_type == "mobile",
+    )
+    now = utc_now()
     db.execute(
         update(AuthSession)
         .where(AuthSession.user_id == user_id, AuthSession.revoked_at.is_(None))
-        .values(revoked_at=utc_now())
+        .values(revoked_at=now)
+    )
+    db.execute(
+        update(MobileRefreshToken)
+        .where(
+            MobileRefreshToken.session_id.in_(mobile_session_ids),
+            MobileRefreshToken.revoked_at.is_(None),
+        )
+        .values(revoked_at=now)
     )
 
 

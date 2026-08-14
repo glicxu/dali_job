@@ -1,229 +1,375 @@
 # DaliJob Architecture Review
 
-This review captures the current functional and architectural state of DaliJob and highlights useful next steps, risks, and low-value areas to avoid overbuilding.
+- **Review date:** August 14, 2026
+- **Reviewed revision:** `79e3464f35a444ecfdf38742e000fc5c23745edc` (`main`)
+- **Environment:** US3 production deployment
+- **Audience:** Engineering and operations
+- **Status:** Action required on critical findings
 
-The use-case split, phased delivery order, dependencies, and acceptance criteria are maintained in the [DaliJob Implementation Plan](IMPLEMENTATION_PLAN.md).
+## Executive Summary
 
-## Current Assessment
+DaliJob has a sound modular-monolith foundation. The FastAPI backend is organized by business domain, the Next.js client has a coherent API boundary, authentication includes production startup validation, and the data model distinguishes shared job-source data from user-owned edits and decisions. Application tracking, document provenance, managed-operation records, and migration/readiness checks are all meaningful strengths.
 
-DaliJob has a reasonable MVP foundation:
+The review found two critical production risks:
 
-- Server/client separation with FastAPI under `server/` and Next.js under `client/`.
-- Local DaliJob authentication with signed-out read-only previews.
-- Resume PDF upload, document storage, and parsed resume profiles.
-- Multiple resume profiles with one default used for ordering.
-- Shared `jobs_cache` for reusable URL-backed job source data.
-- `user_saved_jobs` for user ownership, notes, and saved-job relationships.
-- `user_edited_jobs` for manual jobs and user-specific corrections.
-- Lazy OpenAI parsing of job descriptions.
-- Resume-to-job matching with stored match results in `job_resume_matches`.
-- Job search through a provider-backed import path.
-- Dashboard with setup alerts, next step, best matches, and recently saved jobs.
+1. The deployed client bundle was built without `NEXT_PUBLIC_API_BASE_URL` and contains the fallback `http://127.0.0.1:5010/api/v1`. A production browser will therefore attempt authenticated API calls against its own loopback interface instead of the DaliJob API.
+2. The database connection URI is written to production logs at `INFO` level by DaliCommonLib. Because the URI contains credentials, the credential should be treated as exposed.
 
-The current architecture is directionally sound. The next improvements should focus less on adding more scraping behavior and more on tightening data ownership, authentication safety, long-running work, and true application tracking.
+The next highest priorities are to make managed operations truly durable, reduce database-session pressure, ensure account deletion covers stored files, and make builds reproducible. These changes should precede broad feature expansion.
 
-## Main Risks
+## Scope and Method
 
-### Shared Cache Integrity
+This review covered:
 
-`jobs_cache` is intended to store shared source data that can be reused across users. User-specific job corrections should live in `user_edited_jobs`.
+- Application structure and module boundaries.
+- Client-to-server configuration and the deployed client bundle.
+- Authentication and database-session behavior.
+- Long-running managed operations.
+- Data ownership, tenant isolation, deletion, and file lifecycle.
+- Build, CI, release, migration, deployment, and rollback mechanics.
+- Code concentration and maintainability hotspots.
 
-The backend should enforce this boundary. It should not rely only on a client-provided flag to decide whether submitted job data is safe to write into `jobs_cache`. If the server accepts user-edited title, company, raw text, or `job_data` as shared cache data, one user's corrections could affect other users who later import the same URL.
+The assessment combined source inspection, build artifact inspection, test results, migration/readiness checks, and US3 deployment verification. It did not include penetration testing, load testing, disaster-recovery testing, or a cloud infrastructure audit.
 
-Recommended fix:
+## Architecture at a Glance
 
-- Treat `jobs_cache` as source-owned or system-owned data.
-- Only write scraped/provider-returned source data to `jobs_cache`.
-- Write manual entries and user corrections to `user_edited_jobs`.
-- If a draft is editable before save, compare it server-side to the source draft before deciding where it belongs.
+```text
+Browser / Next.js client
+        |
+        | HTTPS JSON API + session/CSRF cookies
+        v
+Apache reverse proxy
+        |
+        +--> FastAPI modular monolith
+                |
+                +--> Auth and domain repositories
+                +--> Managed-operation execution
+                +--> Provider integrations (OpenAI, Apify, URL import)
+                +--> SQLAlchemy / Alembic
+                |       |
+                |       +--> Relational database
+                |
+                +--> Local document storage
+```
 
-### Production Auth Safety
+The design is appropriate for the current product stage, provided that deployment configuration, secret handling, and background execution are hardened.
 
-The server supports development identity modes. This is useful locally but risky in production.
+## Findings Summary
 
-Recommended fix:
+| Priority | Finding | Primary consequence |
+|---|---|---|
+| Critical | Production client bundle targets loopback API | Authenticated production workflows can fail in the browser |
+| Critical | Database credentials are emitted to logs | Credential exposure and unauthorized database access risk |
+| High | Managed operations are not durably dispatched | Work can be lost on restart, deploy, or process failure |
+| High | Protected requests can open two database sessions | Pool exhaustion and inconsistent transaction boundaries |
+| High | Account deletion does not purge stored files | Sensitive user documents may remain after deletion |
+| High | Python dependencies and release inputs are not reproducible | Builds can drift and deployments can fail unexpectedly |
+| Medium | Tenant integrity relies primarily on repository filters | A missed filter can create cross-tenant references |
+| Medium | Several modules are oversized and tightly coupled | Changes are harder to review, test, and evolve safely |
 
-- Fail startup in production if `auth_mode` is `dev` or `disabled`.
-- Require production SMTP, verified accounts, and opaque revocable cookie sessions; do not use browser-readable bearer credentials.
-- Keep signed-out previews in the client, but require authenticated API calls for AI, scraping, uploads, saved jobs, profile writes, and dashboard data.
+## Detailed Findings
 
-### Long-Running Requests
+### 1. Production Client Bundle Targets a Loopback API
 
-OpenAI parsing, matching, bulk matching, Apify searches, and URL scraping currently happen inside API request lifecycles. This is acceptable for early MVP testing, but it will become fragile as imports get larger.
+**Priority:** Critical
 
-Recommended fix:
+The client build in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs `npm run build` without defining `NEXT_PUBLIC_API_BASE_URL`. In [`client/lib/config.ts`](../client/lib/config.ts), the non-local fallback is still `http://127.0.0.1:5010/api/v1`. Inspection of the deployed JavaScript bundle confirmed that the loopback URL was compiled into the production artifact and that the production API URL was absent.
 
-- Introduce background jobs for bulk import, bulk match, provider searches, and large parsing tasks.
-- Store job status, progress, failures, and retry state.
-- Let the UI poll or subscribe for progress.
+**Impact**
 
-### Match Result Versioning
+- The HTML shell and static assets can load successfully while authenticated API calls fail.
+- Each user's browser attempts to contact port `5010` on the user's own computer.
+- A local service listening on that port could receive requests intended for DaliJob.
+- A successful server-side health check does not detect this client-side failure mode.
 
-`job_resume_matches` stores score and match details, but a match can become misleading if the related resume profile or job data changes later.
+**Recommendation**
 
-Recommended fix:
+- Make the browser use a same-origin path such as `/api/v1` where possible, with Apache routing that path to FastAPI.
+- If an absolute URL is required, provide `NEXT_PUBLIC_API_BASE_URL` explicitly in the release build job.
+- Fail the production build when the value is missing or resolves to localhost/loopback.
+- Add an artifact test that scans emitted JavaScript for `localhost`, `127.0.0.1`, and other forbidden development endpoints.
+- Rebuild and redeploy after correcting the configuration.
 
-- Add match-time snapshots of the resume JSON and job JSON, or
-- Add version tables for resume profiles and user-edited jobs, then link matches to exact versions.
+**Exit criteria**
 
-This becomes more important once match history is used for analytics or decision-making.
+- The production bundle contains only the intended production or same-origin API target.
+- An authenticated browser smoke test succeeds from a machine other than the server.
+- CI rejects production bundles containing loopback API URLs.
 
-### Provider Coupling
+### 2. Database Credentials Are Emitted to Production Logs
 
-The UI now uses generic job-search wording, but the backend implementation is currently shaped around one provider.
+**Priority:** Critical
 
-Recommended fix:
+Production logs contain the full database connection URI because the application logs at `INFO` and DaliCommonLib logs engine creation using the unredacted URI. The credential value is intentionally omitted from this document.
 
-- Define a `JobSearchProvider` interface.
-- Normalize every provider result into DaliJob's internal job-search result schema.
-- Keep provider details out of client-facing contracts where practical.
+**Impact**
 
-## Functional Gaps
+- Anyone with access to the affected logs may obtain database credentials.
+- Log forwarding, backups, support bundles, or copied diagnostics can broaden exposure.
+- Retention of old logs can preserve access after application code is fixed.
 
-### Application Tracking
+**Recommendation**
 
-Saved jobs and matches are not the same as applications. The original product vision needs a dedicated application-tracking model.
+1. Change the shared database library to render credentials as redacted before logging, or remove the URI from the log message entirely.
+2. Rotate the affected production database credential after the logging fix is deployed.
+3. Identify, purge, or tightly restrict access to existing logs and copies that contain the old value.
+4. Add an automated log-safety test using a credential-shaped sentinel value.
+5. Review other configuration logging for API keys, tokens, session secrets, and provider credentials.
 
-Recommended future table:
+**Exit criteria**
 
-- `applications`
+- Database startup logs contain no password, token, or complete credential-bearing URI.
+- The exposed credential has been rotated and the old credential no longer authenticates.
+- Retained log locations have been reviewed and remediated.
 
-Useful fields:
+### 3. Managed Operations Are Persisted but Not Durably Dispatched
 
-- `id`
-- `workspace_id`
-- `user_id`
-- `user_saved_job_id`
-- `status`
-- `applied_at`
-- `deadline`
-- `next_action_at`
-- `contact_name`
-- `contact_email`
-- `interview_at`
-- `offer_status`
-- `rejection_at`
-- `notes`
-- `created_at`
-- `updated_at`
-- `deleted_at`
+**Priority:** High
 
-This should be added separately instead of overloading `user_saved_jobs`.
+[`server/app/modules/operations/router.py`](../server/app/modules/operations/router.py) records operations in the database and then schedules execution through FastAPI `BackgroundTasks`. This improves status visibility but does not provide a durable queue. If the API process restarts after the operation is committed but before or during execution, no independent worker is responsible for resuming it. Stale-operation handling marks abandoned work as failed rather than providing durable delivery.
 
-### Reminders And Deadlines
+The execution path in [`server/app/modules/operations/service.py`](../server/app/modules/operations/service.py) also keeps a database session open while provider and network work runs. That makes long operations consume scarce database connections.
 
-Deadline data is useful only if the app can act on it.
+**Impact**
 
-Recommended features:
+- Deploys, crashes, and process recycling can lose accepted work.
+- Scaling API replicas creates ambiguous work ownership.
+- Slow provider calls can hold database connections for long periods.
+- Retry and cancellation semantics are limited by in-process execution.
 
-- Deadline reminders.
-- Follow-up reminders.
-- Interview reminders.
-- Next action reminders.
+**Recommendation**
 
-### Email Status Ingestion
+- Introduce a durable queue and a separately supervised worker process.
+- Commit the operation record and enqueue it using an outbox pattern or another atomic handoff.
+- Use short database transactions: claim work, release the connection, perform external work, then persist progress/result in a new transaction.
+- Add leases, heartbeats, idempotency, bounded retries, and dead-letter handling.
+- Keep the existing managed-operation API as the user-facing status contract.
 
-Email reading was part of the original vision but should wait until application tracking exists.
+**Exit criteria**
 
-Recommended approach:
+- An accepted operation survives an API restart and is completed or retried by a worker.
+- Provider wait time does not hold a database connection.
+- Duplicate delivery produces one logical result.
 
-- First implement application statuses.
-- Then add email classification that maps messages to application events such as interview request, rejection, assessment, offer, or follow-up.
-- Require user approval before automatic state changes, at least in the first version.
+### 4. Protected Requests Can Open Two Database Sessions
 
-### Interview Preparation
+**Priority:** High
 
-After matching, the next strong AI feature is interview preparation from the saved job, resume profile, and company context.
+Authentication obtains a session through `get_auth_db_session` in [`server/app/modules/auth/dependencies.py`](../server/app/modules/auth/dependencies.py), while most domain handlers independently request `get_db_session` from [`server/app/db/session.py`](../server/app/db/session.py). A single protected request can therefore hold two database sessions and connections.
 
-Useful outputs:
+**Impact**
 
-- Study guide.
-- Likely interview questions.
-- Resume talking points.
-- Skill gaps to review.
-- Company/product research notes.
+- Effective connection demand can approach twice the request concurrency.
+- The small production connection pool is more likely to exhaust under load.
+- Authentication and domain changes do not naturally share one transaction boundary.
 
-### Privacy And Account Controls
+**Recommendation**
 
-DaliJob stores sensitive resume and career data.
+- Establish one request-scoped session dependency and reuse it for authentication and domain work.
+- Make transaction ownership explicit at the service boundary.
+- Add pool metrics and a concurrency test that includes authenticated requests.
 
-Recommended features:
+**Exit criteria**
 
-- Full account export.
-- Full account deletion.
-- Document deletion.
-- Saved job deletion or archive.
-- Clear storage policy for raw scraped text, uploaded documents, and AI outputs.
+- A protected request uses one request-scoped session unless a documented exception requires otherwise.
+- Load testing shows bounded pool use with acceptable wait time and no pool timeouts.
 
-### Cost And Rate Controls
+### 5. Account Deletion Does Not Purge Stored Files
 
-OpenAI and Apify usage should be controlled before broader use.
+**Priority:** High
 
-Recommended features:
+[`server/app/modules/auth/account_deletion.py`](../server/app/modules/auth/account_deletion.py) comprehensively anonymizes and soft-deletes relational records, but it does not remove the underlying uploaded document files from storage. File/database failures can also create orphaned files because the filesystem and database are not transactional together.
 
-- Per-user usage counters.
-- Provider call logging.
-- Daily or monthly caps.
-- Clear UI feedback when a feature will spend credits.
+**Impact**
 
-## Low-Value Or Deferrable Areas
+- Resume and career documents may remain on disk after the account is presented as deleted.
+- Orphaned files can accumulate outside normal access paths.
+- Privacy and retention behavior may differ from user expectations.
 
-### Universal Scraping
+**Recommendation**
 
-Generic scraping is useful as a fallback, but trying to make it reliable across every job board is likely low return. Some sites require login, block automation, or render content inconsistently.
+- Define whether account deletion means immediate purge, delayed purge, or recoverable soft deletion.
+- Queue file deletion only after the database transaction commits successfully.
+- Track purge state and retries in durable storage.
+- Add a reconciliation task that detects database rows with missing files and unreferenced files on disk.
+- Document backup retention and deletion guarantees.
 
-Recommended direction:
+**Exit criteria**
 
-- Keep URL scraping and URL Debug as fallback/developer tools.
-- Prefer provider APIs, manual paste, and supported source integrations.
+- Account deletion has an explicit, tested file-retention policy.
+- Stored files reach a verifiable purged state within the documented period.
+- Reconciliation reports and safely handles orphaned files.
 
-### URL Debug In Normal Navigation
+### 6. Build and Release Inputs Are Not Fully Reproducible
 
-`URL Debug` is useful for development but not a normal user feature.
+**Priority:** High
 
-Recommended fix:
+[`requirements-runtime.txt`](../requirements-runtime.txt) lists top-level Python dependencies without version pins or hashes. A release built later can therefore resolve different packages from the same commit. The release workflow also depends on a separate private DaliCommonLib checkout; current GitHub checks cannot obtain it because the required `DALI_COMMON_LIB_TOKEN` secret is unavailable. The release artifact does not carry every operational dependency, including the readiness script and the shared library itself.
 
-- Hide it behind a development flag or move it to an admin/developer area.
+The client lockfile is now synchronized, but the broader release dependency graph remains split across repositories and runtime assumptions.
 
-### Workspace Sharing
+**Impact**
 
-Private workspaces are useful as an ownership boundary. Collaboration roles are not currently needed.
+- Identical source commits can produce different runtime behavior.
+- CI can fail before application tests run.
+- Deployment may depend on mutable or preinstalled server state.
+- Rollback validation is harder because artifacts are not fully self-contained.
 
-Recommended direction:
+**Recommendation**
 
-- Keep the private workspace model.
-- Defer shared workspaces, admins, members, and viewers until a real collaboration feature is designed.
+- Generate locked, hashed Python dependency files from an intentional source manifest.
+- Pin the exact DaliCommonLib revision and make CI credentials available through the approved secret mechanism.
+- Prefer an immutable, self-contained release artifact or container image.
+- Include readiness/migration tooling required by the deployment runbook.
+- Record source revisions, dependency lock digests, configuration schema version, and SBOMs in the release manifest.
 
-### Complex Document Versioning UI
+**Exit criteria**
 
-Documents and resume profiles are important. A large document-versioning interface is probably not worth building before application tracking and resume tailoring are mature.
+- Two clean builds of the same revision resolve identical dependency versions and produce equivalent artifacts.
+- All required CI jobs pass using repository-managed configuration and approved secrets.
+- A fresh host can deploy the artifact without relying on an undocumented shared-library installation.
 
-Recommended direction:
+### 7. Tenant Integrity Relies Primarily on Repository Filters
 
-- Keep source document links.
-- Add deeper version UI only when generated resume versions and application-specific documents are implemented.
+**Priority:** Medium
 
-## Recommended Next Build Order
+Repositories consistently scope queries by user or workspace, which is good application-layer discipline. However, many relationships are enforced through independent foreign keys rather than composite constraints that guarantee all linked records belong to the same tenant.
 
-The detailed build order now lives in the [implementation plan](IMPLEMENTATION_PLAN.md). At a high level:
+**Impact**
 
-1. Establish a safe, reproducible baseline for the implemented resume, jobs, and matching use cases.
-2. Add user-controlled deletion/archive and historically meaningful match inputs.
-3. Deliver application tracking as a separate end-to-end product slice.
-4. Add immutable application documents and next actions.
-5. Move expensive provider work behind a durable background execution boundary.
-6. Add interview preparation and outcome analytics only after application history exists.
-7. Add email, calendar, and generation integrations only after the manual core loop is stable.
+- A missed ownership predicate or future maintenance error can create cross-tenant references that remain valid to the database.
+- Repairing inconsistent tenant relationships becomes operationally difficult.
 
-## Architectural Principle
+**Recommendation**
 
-DaliJob should separate shared source facts from user-owned decisions.
+- Inventory all tenant-owned relationships and define the required ownership invariant for each one.
+- Add composite unique keys and foreign keys where practical, or use database triggers for invariants that cannot be expressed directly.
+- Retain repository-level authorization checks for defense in depth.
+- Add negative tests that attempt to join records across users and workspaces.
 
-- `jobs_cache` should represent reusable source data.
-- `user_saved_jobs` should represent a user's relationship to a job.
-- `user_edited_jobs` should represent private user corrections or manual jobs.
-- `resume_profiles` should represent user-owned resume JSON.
-- `job_resume_matches` should represent a comparison result for a specific user, job, and resume.
-- Future `applications` should represent actual application progress.
+**Exit criteria**
 
-Keeping those boundaries clear will make the app easier to extend without corrupting shared data or mixing product concepts together.
+- Critical cross-tenant relationships are rejected by the database as well as by application code.
+
+### 8. Large Modules Increase Coupling and Review Risk
+
+**Priority:** Medium
+
+Several files concentrate a large amount of behavior:
+
+- [`client/lib/api.ts`](../client/lib/api.ts): approximately 1,844 lines.
+- [`client/components/JobsManager.tsx`](../client/components/JobsManager.tsx): approximately 1,723 lines.
+- [`client/components/ApplicationTracker.tsx`](../client/components/ApplicationTracker.tsx): approximately 1,331 lines.
+- [`server/app/modules/resume_job_match/job_url_import.py`](../server/app/modules/resume_job_match/job_url_import.py): approximately 2,730 lines.
+
+Some server-side workflows also call router-level functions, which blurs the boundary between HTTP handling and reusable application services.
+
+**Impact**
+
+- Unrelated changes collide in the same files.
+- Unit testing requires more setup and mocking.
+- HTTP concerns, orchestration, persistence, and provider-specific logic are harder to evolve independently.
+
+**Recommendation**
+
+- Split the client API layer by domain while preserving a small shared transport module.
+- Extract stateful UI workflows into domain hooks and smaller presentational components.
+- Separate URL safety, fetching, extraction, normalization, and provider adapters in job import.
+- Move orchestration into application services; routers should validate HTTP input, invoke a service, and map the result to HTTP output.
+- Refactor incrementally alongside feature work rather than through a single broad rewrite.
+
+## Architectural Strengths
+
+The review also identified important strengths worth preserving:
+
+- **Domain-oriented backend structure.** Modules for jobs, applications, interviews, documents, profiles, reports, operations, and authentication provide a clear starting boundary.
+- **Production authentication guardrails.** Startup validation rejects unsafe production authentication modes and cookie/session policies are intentionally handled.
+- **Clear job-data ownership model.** Shared cached source data is separated from private saved-job state and user edits.
+- **Historical provenance.** Match snapshots and generated-material versioning improve auditability and prevent later edits from silently rewriting history.
+- **Allowlisted assistant actions.** Ask Scout limits executable behaviors instead of treating arbitrary model output as trusted commands.
+- **URL import defenses.** The importer includes SSRF-oriented validation and security tests.
+- **Migration and readiness discipline.** Alembic history, readiness validation, release metadata, and rollback retention provide a useful operational baseline.
+- **Broad automated coverage.** The deployed revision passed the available server, client, lint, build, audit, migration, readiness, and route checks outside the CI secret failure.
+
+## Target Architecture
+
+The recommended near-term architecture remains a modular monolith, with two operational additions: a durable worker and immutable releases.
+
+```text
+                         +----------------------+
+Browser ---------------->| Apache / same origin |
+                         +----------+-----------+
+                                    |
+                      +-------------+-------------+
+                      |                           |
+                      v                           v
+             Next.js static assets       FastAPI application
+                                                  |
+                         +------------------------+------------------+
+                         |                        |                  |
+                         v                        v                  v
+                 Relational database       Durable queue      File/object store
+                         ^                        |
+                         |                        v
+                         +---------------- Worker process
+                                  short transactions
+```
+
+Recommended boundaries:
+
+- **HTTP layer:** authentication, input validation, status codes, and response mapping.
+- **Application services:** use-case orchestration and transaction boundaries.
+- **Domain/repository layer:** tenant-scoped persistence and invariants.
+- **Provider adapters:** OpenAI, Apify, URL fetching, email, and future integrations.
+- **Worker:** durable execution of provider-backed or otherwise long-running operations.
+- **Release artifact:** compiled client, server code, locked dependencies, migrations, readiness tooling, and provenance metadata.
+
+## Remediation Roadmap
+
+### Phase 0: Immediate Production Safety
+
+1. Correct the client API base URL and rebuild/redeploy US3.
+2. Redact the database URI at the shared-library boundary.
+3. Rotate the exposed database credential.
+4. Review and remediate affected log retention locations.
+5. Add a browser-level authenticated production smoke test.
+
+### Phase 1: Release Reliability
+
+1. Restore the DaliCommonLib credential or replace the cross-repository dependency mechanism.
+2. Pin Python dependencies and capture the exact shared-library revision.
+3. Make the release artifact self-contained.
+4. Add forbidden-development-endpoint and secret-leak scans to CI.
+5. Require all release checks before deployment.
+
+### Phase 2: Runtime Resilience
+
+1. Consolidate authentication and domain access onto one request-scoped database session.
+2. Add connection-pool telemetry and authenticated concurrency tests.
+3. Introduce a durable queue and worker for managed operations.
+4. Release database connections while waiting on external providers.
+5. Add leases, heartbeats, idempotency, retry limits, and recovery tests.
+
+### Phase 3: Data Lifecycle and Integrity
+
+1. Implement durable file purge and orphan reconciliation.
+2. Document account, file, log, and backup retention behavior.
+3. Add database-enforced tenant relationship constraints where practical.
+4. Expand negative cross-tenant tests.
+
+### Phase 4: Maintainability
+
+1. Split the client API module by domain.
+2. Decompose the largest UI managers into hooks and focused components.
+3. Extract URL-import responsibilities into small services/adapters.
+4. Remove router-to-router calls in favor of application services.
+
+## Decision Guidance
+
+Feature development can continue after Phase 0, but provider-heavy capabilities should not expand until durable execution is in place. Any feature that stores additional sensitive documents should also wait for an explicit, tested purge lifecycle. The modular-monolith deployment model itself does not need to change; the priority is to make its configuration, background work, connection use, and release inputs reliable.
+
+## Conclusion
+
+DaliJob is structurally capable of supporting its current scope. Its primary risks are operational rather than a fundamental domain-design failure. Fixing the compiled API endpoint and credential logging should be treated as immediate production work. The next engineering investment should create reproducible releases and a durable execution boundary, followed by data-lifecycle enforcement and incremental module decomposition.
+
+No source-code changes were made as part of this review.

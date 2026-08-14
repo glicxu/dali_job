@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../auth/session_controller.dart';
 import '../../config/app_environment.dart';
+import '../../matching/matching_repository.dart';
+import '../automation/automation_screen.dart';
+import '../matches/matches_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -19,20 +22,22 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _index = 0;
+  late final MatchingRepository _repository;
+
+  @override
+  void initState() {
+    super.initState();
+    _repository = MatchingRepository(
+      widget.session.repository.api,
+      widget.session,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final pages = [
-      const _EmptyState(
-        icon: Icons.auto_awesome,
-        title: 'Your matches',
-        message: 'High-quality job matches will appear here.',
-      ),
-      const _EmptyState(
-        icon: Icons.schedule,
-        title: 'Automatic matching',
-        message: 'Resume, search criteria, and weekly schedule setup are next.',
-      ),
+      MatchesScreen(repository: _repository),
+      AutomationScreen(repository: _repository),
       _AccountPage(session: widget.session, environment: widget.environment),
     ];
     return Scaffold(
@@ -61,34 +66,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({
-    required this.icon,
-    required this.title,
-    required this.message,
-  });
-  final IconData icon;
-  final String title;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 64, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(height: 16),
-          Text(title, style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 8),
-          Text(message, textAlign: TextAlign.center),
-        ],
-      ),
-    ),
-  );
 }
 
 class _AccountPage extends StatelessWidget {

@@ -2,7 +2,9 @@
 
 Flutter client for Android and iOS. It currently provides account registration,
 password-reset requests, mobile sign-in, secure refresh-token storage, session
-restoration, sign-out, and the initial Matches/Automation/Account shell.
+restoration, and sign-out. The authenticated experience includes PDF/TXT resume
+upload, manual resume entry, search criteria, weekly automatic matching,
+tier usage, schedule controls, and the match inbox.
 
 ## Run locally
 

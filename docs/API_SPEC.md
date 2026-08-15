@@ -183,6 +183,10 @@ Creates a structured resume profile. The server validates the expected JSON shap
 
 Returns one structured resume profile.
 
+### `GET /resume-profiles/{resumeProfileId}/readiness`
+
+Evaluates whether the owned profile contains enough candidate evidence for a defensible job match. The deterministic `profile-readiness-v1` policy supports experienced and early-career profiles, ignores search preferences such as target roles, and returns aggregate evidence counts plus actionable missing requirements and non-blocking warnings. It does not invoke a provider or consume search quota.
+
 ### `PATCH /resume-profiles/{resumeProfileId}`
 
 Updates title, structured resume JSON, or default state. Setting `is_default = true` must unset the previous default resume for that user because only one resume profile can be default.
@@ -218,6 +222,68 @@ Uploads a master resume PDF, cleans extracted text, redacts common personal cont
 ### `POST /profile/resume-imports/apply`
 
 Applies reviewed resume import suggestions by creating a new `resume_profiles` row or updating a selected existing resume profile.
+
+## 3A. Guest Trials
+
+Guest APIs use `Authorization: Guest <public_id>.<secret>`. The secret is returned only by trial creation and stored only as a SHA-256 hash. Guest credentials are intentionally separate from account bearer tokens.
+
+### `POST /guest-trials`
+
+Creates a private, account-free trial with a sliding 24-hour active lifetime. Returns `public_id`, `guest_secret`, the combined `guest_credential`, status, and expiry. Clients must store the credential in platform secure storage and must not log it.
+
+### `GET /guest-trials/current`
+
+Restores the authenticated guest trial, including its status, provider-search state, transient resume-import metadata and redacted preview, confirmed structured profile, readiness result, and search criteria. It never returns the guest secret or a storage path.
+
+### `POST /guest-trials/current/resume-import`
+
+Uploads one transient PDF or UTF-8 text resume, limited to 8 MB, beneath an isolated guest storage prefix. It replaces any earlier upload for the same trial, extracts and contact-redacts text, and asks the production resume parser for structured suggestions. The response includes safe metadata, a bounded preview, `parse_status`, suggestions, and a generic warning when parsing fails. Suggestions never become the confirmed guest profile until the user submits them through the profile endpoint.
+
+Guest creation is limited by client IP. Parsing is limited independently by guest trial and client IP before the normal provider limit is applied. These process-local controls match the current single-instance deployment and should move to shared infrastructure before horizontal scaling.
+
+### `POST /guest-trials/current/resume-import/retry`
+
+Retries parsing against the retained, contact-redacted extracted text without re-uploading the document. A provider failure preserves the document and returns an empty suggestion plus a safe manual-workflow warning. Parser provenance stores the parser version, provider, model, outcome, and safe HTTP failure category; it never stores provider error text.
+
+### `PUT /guest-trials/current/profile`
+
+Creates or replaces the trial's structured profile and returns the shared deterministic readiness evaluation. This operation does not invoke a provider.
+
+### `GET /guest-trials/current/readiness`
+
+Returns `profile-readiness-v1` for the guest profile, or actionable missing requirements when no profile has been supplied.
+
+### `PUT /guest-trials/current/criteria`
+
+Creates or replaces the target role/keyword and location. Both values are required, and neither contributes candidate evidence to profile readiness.
+
+### `DELETE /guest-trials/current`
+
+Immediately deletes the guest trial, transient resume file, extracted text, profile, and criteria data. Expired trials are also eligible for server-side purge.
+
+### `POST /guest-trials/current/match`
+
+Requires a ready confirmed profile, saved target role/location, a valid guest credential, and an `Idempotency-Key` of 1-64 characters. The server durably reserves the guest's single provider search before calling the production search interface. A provider failure, timeout, malformed/unusable response, or zero candidates with source URLs releases the reservation and does not consume the trial.
+
+A usable response retains at most five normalized candidates in guest-scoped storage and consumes the single search allowance. The production matcher evaluates retained candidates and persists partial successful evaluations. Matcher failure leaves the search consumed but retryable against retained candidates, so it never repeats the search call. Reservations left by an interrupted request become recoverable after ten minutes.
+
+The successful response contains exactly one result: the highest-scoring usable candidate, with job identity, source URL, 0-10 score, rationale, matched/missing skills, supported/unsupported requirements, and recommended resume updates. It does not expose the other candidates. Repeating the completed request returns the same immutable result without another provider call.
+
+### `GET /guest-trials/current/match`
+
+Restores durable status (`not_started`, `searching`, `matching`, `failed`, or `result_ready`), provider-search state, safe error code, retryability, and the single result when ready. It performs no provider work.
+
+The guest `POST` is an immediate, synchronous trial operation. It does not enter or wait for the weekly account scheduler.
+
+## 3B. Automated Matching
+
+### `GET /account/entitlements`
+
+Returns the signed-in account's weekly allowance and schedule limits. `searches_per_period` and `searches_available` are null only when `unlimited_searches` is true for an operator-assigned internal super account.
+
+### `POST /automation/schedules/{scheduleId}/run-now`
+
+Queues one immediate run through the durable automation worker without changing the next recurring run. The endpoint returns `409 super_account_required` for every customer subscription tier and is intentionally available only to internal super accounts.
 
 ## 4. Companies And Recruiters
 

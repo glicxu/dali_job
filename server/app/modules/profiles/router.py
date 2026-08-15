@@ -24,7 +24,9 @@ from app.modules.profiles.resume_import import (
     ResumeImportResponse,
     ResumeProfileParser,
 )
+from app.modules.profiles.readiness import evaluate_profile_readiness
 from app.modules.profiles.schemas import (
+    ProfileReadinessResponse,
     ResumeData,
     ResumeImportApplyRequest,
     ResumeProfileCreateRequest,
@@ -163,6 +165,21 @@ def create_resume_profile(
     identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> ResumeProfileResponse:
     return repository.create_resume_profile(db, payload, identity)
+
+
+@resume_profiles_router.get(
+    "/{resume_profile_id}/readiness",
+    response_model=ProfileReadinessResponse,
+)
+def get_resume_profile_readiness(
+    resume_profile_id: int,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> ProfileReadinessResponse:
+    resume_profile = repository.get_resume_profile_for_identity(db, identity, resume_profile_id)
+    if resume_profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume profile not found.")
+    return evaluate_profile_readiness(resume_profile.resume_data)
 
 
 @resume_profiles_router.get("/{resume_profile_id}", response_model=ResumeProfileResponse)

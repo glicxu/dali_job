@@ -13,7 +13,9 @@ CI produces one versioned ZIP named with the DaliJob commit. It contains the com
 5. Run `alembic -x config=<production.ini> upgrade head` before switching traffic to code that requires the new schema.
 6. Start the API and client from the new release directory.
 7. Run `scripts/check_readiness.py` and retain its output with the release record.
-8. Switch the `current` release pointer only after readiness passes.
+8. Run the guest purge module with `--dry-run`, confirm its document storage root matches the API, and retain the report.
+9. Switch the `current` release pointer only after readiness passes.
+10. Enable or update the scheduled one-pass guest purge only after the new release is active.
 
 ## Rollback
 

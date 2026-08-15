@@ -231,6 +231,14 @@ For MVP, a workspace is a private data container owned by one user. It is not a 
 | created_at | timestamptz | Required |
 | updated_at | timestamptz | Required |
 
+### guest_trials, guest_documents, guest_resume_profiles, and guest_search_criteria
+
+Account-free trials are stored separately from account-owned data. `guest_trials` stores an opaque public ID, only the hash of the guest secret, lifecycle and provider-search states, activity/expiry timestamps, and nullable claim metadata. `guest_documents`, `guest_resume_profiles`, and `guest_search_criteria` each have a unique cascading foreign key to one trial for the MVP. Guest documents store transient file metadata, contact-redacted extracted text, unconfirmed structured suggestions, parse status, and safe parser provenance; physical files live beneath an isolated `guest_trials/{public_id}` storage prefix. Structured profiles may reference the transient source document after the user confirms suggestions. This separation avoids nullable user ownership on permanent records and allows expired or explicitly deleted private guest content and files to be purged together.
+
+Guest API credentials use a distinct `Guest` authorization scheme and cannot authenticate account routes. Active access extends the default expiry to 24 hours after last use. Claim-pending retention and account mapping will be added with the claim workflow.
+
+`guest_match_operations` stores the durable one-result workflow state. `guest_provider_attempts` records idempotency keys and reserved/consumed/released search accounting with safe outcome categories. `guest_match_candidates` retains at most five guest-scoped normalized job snapshots and partial matcher results so matcher retries do not repeat a consumed search. `guest_match_results` stores exactly one immutable best-result profile/job snapshot and structured rationale per trial. None of these rows become shared or account-owned data until the claim transaction is implemented.
+
 ### resume_profiles
 
 Stores each structured resume profile as one JSON document. A user can have multiple parsed or manually created resume profiles, such as a backend-focused resume, data-focused resume, federal resume, or internship resume.

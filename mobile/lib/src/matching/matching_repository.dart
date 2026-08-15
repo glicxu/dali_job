@@ -171,6 +171,14 @@ class MatchingRepository {
     ),
   );
 
+  Future<Map<String, dynamic>> runScheduleNow(SearchSchedule schedule) =>
+      session.authorized((token) {
+        return api.post(
+          'automation/schedules/${schedule.id}/run-now',
+          accessToken: token,
+        );
+      });
+
   Future<List<MatchInboxItem>> listMatches() => session.authorized((
     token,
   ) async {

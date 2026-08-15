@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.modules.automation.entitlements import EntitlementCatalog
+from app.modules.automation.entitlements import EntitlementCatalog, SUPER_TIER_CODE
 from app.modules.automation.models import SearchRun, SearchSchedule, UserSubscription
 from app.modules.automation.repository import QuotaExceeded, SubscriptionUnavailable, reserve_provider_search
 from app.modules.operations.models import ManagedOperation
@@ -153,6 +153,79 @@ def dispatch_due_schedules(
 
     db.flush()
     return summary
+
+
+def dispatch_schedule_now(
+    db: Session,
+    catalog: EntitlementCatalog,
+    schedule: SearchSchedule,
+    *,
+    now: datetime | None = None,
+) -> SearchRun:
+    """Queue an immediate one-off run without moving the recurring schedule."""
+    current = _utc(now or datetime.now(timezone.utc))
+    subscription = db.scalar(
+        select(UserSubscription).where(
+            UserSubscription.user_id == schedule.user_id,
+            UserSubscription.deleted_at.is_(None),
+        )
+    )
+    if subscription is None or subscription.status != "active":
+        raise SubscriptionUnavailable("user has no active subscription")
+    if subscription.tier_code != SUPER_TIER_CODE:
+        raise PermissionError("Run now is available only to internal super accounts.")
+    if schedule.deleted_at is not None:
+        raise LookupError("search schedule not found")
+
+    # A timestamp with microsecond precision makes each explicit test run a
+    # separate occurrence while retaining ledger idempotency for exact retries.
+    scheduled_for = current
+    idempotency_key = _occurrence_key(schedule.id, scheduled_for)
+    ledger, _created = reserve_provider_search(
+        db,
+        user_id=schedule.user_id,
+        idempotency_key=idempotency_key,
+        reason=f"Immediate super-account search {schedule.id}",
+        catalog=catalog,
+        now=current,
+    )
+    operation = ManagedOperation(
+        workspace_id=schedule.workspace_id,
+        user_id=schedule.user_id,
+        operation_type=AUTOMATED_SEARCH_OPERATION,
+        idempotency_key=idempotency_key,
+        status="queued",
+        request_payload={
+            "schedule_id": schedule.id,
+            "criterion_id": schedule.criterion_id,
+            "resume_profile_id": schedule.resume_profile_id,
+            "minimum_match_score": schedule.minimum_match_score,
+            "max_results": 10,
+            "scheduled_for": scheduled_for.isoformat(),
+            "trigger": "super_run_now",
+        },
+        provider="apify+openai",
+        prompt_version="resume-job-match-v1",
+        progress_message="Waiting for automation worker",
+    )
+    db.add(operation)
+    db.flush()
+    run = SearchRun(
+        workspace_id=schedule.workspace_id,
+        user_id=schedule.user_id,
+        schedule_id=schedule.id,
+        managed_operation_id=operation.id,
+        status="queued",
+        scheduled_for=scheduled_for,
+        provider="apify+openai",
+    )
+    db.add(run)
+    db.flush()
+    ledger.search_run_id = run.id
+    schedule.last_claimed_at = current
+    schedule.paused_reason = None
+    db.flush()
+    return run
 
 
 def _occurrence_key(schedule_id: int, scheduled_for: datetime) -> str:

@@ -12,7 +12,7 @@ from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.automation.dispatcher import dispatch_due_schedules
 from app.modules.automation.entitlements import EntitlementCatalog, TierEntitlement
-from app.modules.automation.models import SearchRun, SearchSchedule, UsageLedger
+from app.modules.automation.models import SearchRun, SearchSchedule, UsageLedger, UserSubscription
 from app.modules.operations.models import ManagedOperation
 
 
@@ -318,6 +318,50 @@ def test_dispatcher_defers_at_quota_and_delete_releases_queued_usage() -> None:
         assert run.status == "cancelled"
         assert ledger.state == "released"
         assert operation.status == "cancelled"
+
+
+def test_run_now_requires_super_and_does_not_consume_a_finite_quota() -> None:
+    catalog = EntitlementCatalog(
+        version="super-tests-v1",
+        tiers={
+            "free": TierEntitlement(1, 1, 60),
+            "starter": TierEntitlement(3, 3, 30),
+            "plus": TierEntitlement(5, 10, 15),
+            "super": TierEntitlement(None, 100, 1),
+        },
+    )
+    client, session_factory = create_test_client(catalog=catalog)
+    resume_id, criterion_id = _create_resume_and_criterion(client)
+    created = _create_schedule(client, resume_id, criterion_id)
+
+    forbidden = client.post(f"/api/v1/automation/schedules/{created['id']}/run-now")
+    assert forbidden.status_code == 409
+    assert forbidden.json()["detail"]["code"] == "super_account_required"
+
+    with session_factory() as db:
+        subscription = db.execute(select(UserSubscription)).scalar_one()
+        subscription.tier_code = "super"
+        db.commit()
+
+    first = client.post(f"/api/v1/automation/schedules/{created['id']}/run-now")
+    second = client.post(f"/api/v1/automation/schedules/{created['id']}/run-now")
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["id"] != second.json()["id"]
+
+    usage = client.get("/api/v1/account/usage")
+    assert usage.status_code == 200
+    assert usage.json()["unlimited_searches"] is True
+    assert usage.json()["searches_per_period"] is None
+    assert usage.json()["searches_available"] is None
+    assert usage.json()["searches_reserved"] == 2
+
+    with session_factory() as db:
+        operations = list(db.scalars(select(ManagedOperation).order_by(ManagedOperation.id)))
+        assert [item.request_payload["trigger"] for item in operations] == [
+            "super_run_now",
+            "super_run_now",
+        ]
 
 
 def test_schedule_requires_owned_resume_and_criterion() -> None:

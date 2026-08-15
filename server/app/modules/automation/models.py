@@ -15,7 +15,7 @@ def utc_now() -> datetime:
 class UserSubscription(Base):
     __tablename__ = "user_subscriptions"
     __table_args__ = (
-        CheckConstraint("tier_code IN ('free', 'starter', 'plus')", name="ck_user_subscriptions_tier"),
+        CheckConstraint("tier_code IN ('free', 'starter', 'plus', 'super')", name="ck_user_subscriptions_tier"),
         CheckConstraint(
             "status IN ('active', 'past_due', 'cancelled', 'expired')",
             name="ck_user_subscriptions_status",

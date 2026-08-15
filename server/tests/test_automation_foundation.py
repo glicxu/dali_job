@@ -65,6 +65,8 @@ def test_default_entitlements_use_approved_weekly_search_allowances() -> None:
     assert catalog.for_tier("free").searches_per_period == 1
     assert catalog.for_tier("starter").searches_per_period == 3
     assert catalog.for_tier("plus").searches_per_period == 5
+    assert catalog.for_tier("super").searches_per_period is None
+    assert catalog.for_tier("super").minimum_interval_minutes == 1
 
 
 def test_entitlement_json_must_define_every_supported_tier() -> None:
@@ -91,6 +93,7 @@ def test_entitlement_json_loads_validated_values() -> None:
     assert catalog.version == "approved-v1"
     assert catalog.for_tier("starter").searches_per_period == 30
     assert catalog.for_tier("plus").minimum_interval_minutes == 480
+    assert catalog.for_tier("super").searches_per_period is None
 
 
 def test_ensure_free_subscription_is_idempotent(db: Session) -> None:
@@ -252,3 +255,33 @@ def test_new_period_excludes_prior_usage(db: Session) -> None:
     assert subscription.period_started_at == NOW + timedelta(days=7)
     assert subscription.period_ends_at == NOW + timedelta(days=14)
     assert len(db.scalars(select(UsageLedger)).all()) == 2
+
+
+def test_super_subscription_has_unlimited_provider_searches(db: Session) -> None:
+    user, workspace = _account(db)
+    catalog = load_entitlement_catalog("", version="internal-test-v1")
+    subscription = ensure_free_subscription(
+        db,
+        workspace_id=workspace.id,
+        user_id=user.id,
+        catalog=catalog,
+        now=NOW,
+    )
+    subscription.tier_code = "super"
+    db.flush()
+
+    for index in range(20):
+        ledger, created = reserve_provider_search(
+            db,
+            user_id=user.id,
+            idempotency_key=f"super-run-{index}",
+            catalog=catalog,
+            now=NOW,
+        )
+        assert created is True
+        assert ledger.allowance_snapshot == -1
+
+    summary = usage_summary(db, user_id=user.id, catalog=catalog, now=NOW)
+    assert summary.allowance is None
+    assert summary.available is None
+    assert summary.reserved == 20

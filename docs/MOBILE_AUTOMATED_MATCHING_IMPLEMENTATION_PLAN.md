@@ -17,6 +17,13 @@
 - Extended account deletion to cancel subscriptions and runs, pause schedules, and soft-delete automation records.
 - Added focused automation tests.
 
+### Immediate trial and internal testing controls — implemented August 15, 2026
+
+- Guest trials run synchronously and return the single best usable result without entering the weekly scheduler.
+- Added an internal-only `super` entitlement with unlimited provider searches, one-minute schedule intervals, and a super-only `run-now` endpoint/UI action.
+- Super runs use the same durable operation, worker, provider-failure, and match-persistence paths as scheduled searches, but do not move the next recurring run.
+- Added the audited `scripts/set_subscription_tier.py` operator command. Apple/Google subscription claims remain limited to the customer-facing Free, Starter, and Plus tiers.
+
 ### Schedule and dispatcher slice — implemented August 14, 2026
 
 - Added authenticated entitlement, schedule CRUD, pause/resume/delete, run-list, and usage-summary API contracts.

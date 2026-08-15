@@ -3,9 +3,22 @@ import 'package:flutter/material.dart';
 import '../../auth/session_controller.dart';
 
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key, required this.session});
+  const AuthScreen({
+    super.key,
+    required this.session,
+    required this.onTryMatch,
+    this.initiallyRegistering = false,
+    this.onResumeTrial,
+    this.tryBusy = false,
+    this.tryError,
+  });
 
   final SessionController session;
+  final Future<void> Function() onTryMatch;
+  final bool initiallyRegistering;
+  final Future<void> Function()? onResumeTrial;
+  final bool tryBusy;
+  final String? tryError;
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
@@ -16,9 +29,15 @@ class _AuthScreenState extends State<AuthScreen> {
   final _name = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
-  bool _registering = false;
+  late bool _registering;
   bool _busy = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _registering = widget.initiallyRegistering;
+  }
 
   @override
   void dispose() {
@@ -60,6 +79,32 @@ class _AuthScreenState extends State<AuthScreen> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 32),
+                  if (!_registering) ...[
+                    FilledButton.icon(
+                      onPressed: _busy || widget.tryBusy
+                          ? null
+                          : widget.onTryMatch,
+                      icon: const Icon(Icons.auto_awesome),
+                      label: const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Text('Try a match without an account'),
+                      ),
+                    ),
+                    if (widget.onResumeTrial != null)
+                      TextButton(
+                        onPressed: _busy ? null : widget.onResumeTrial,
+                        child: const Text('Resume my private trial'),
+                      ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Text(
+                        'Your trial profile is private and automatically deleted if you do not save it.',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const Divider(),
+                    const SizedBox(height: 12),
+                  ],
                   if (_registering) ...[
                     TextFormField(
                       controller: _name,
@@ -92,10 +137,10 @@ class _AuthScreenState extends State<AuthScreen> {
                         ? null
                         : 'Use at least 8 characters',
                   ),
-                  if (_error != null) ...[
+                  if (_error != null || widget.tryError != null) ...[
                     const SizedBox(height: 12),
                     Text(
-                      _error!,
+                      _error ?? widget.tryError!,
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.error,
                       ),

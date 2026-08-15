@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -71,3 +72,25 @@ class ResumeProfileDependency(BaseModel):
 class ResumeProfileDependencyResponse(BaseModel):
     can_delete_without_warning: bool
     dependencies: list[ResumeProfileDependency] = Field(default_factory=list)
+
+
+class ProfileReadinessIssue(BaseModel):
+    code: str
+    message: str
+
+
+class ProfileReadinessEvidenceSummary(BaseModel):
+    experience_items: int = 0
+    supporting_items: int = 0
+    responsibility_items: int = 0
+    outcome_items: int = 0
+    skill_items: int = 0
+
+
+class ProfileReadinessResponse(BaseModel):
+    ready: bool
+    readiness_version: str
+    pathway: Literal["experienced", "early_career", "undetermined"]
+    evidence_summary: ProfileReadinessEvidenceSummary
+    missing_requirements: list[ProfileReadinessIssue] = Field(default_factory=list)
+    warnings: list[ProfileReadinessIssue] = Field(default_factory=list)

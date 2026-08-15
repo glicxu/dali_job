@@ -136,6 +136,12 @@ class _AutomationScreenState extends State<AutomationScreen> {
                           ? null
                           : (value) => _setEnabled(schedule, value),
                     ),
+                    if (snapshot.entitlement.tierCode == 'super')
+                      FilledButton.icon(
+                        onPressed: _busy ? null : () => _runNow(schedule),
+                        icon: const Icon(Icons.flash_on),
+                        label: const Text('Run now'),
+                      ),
                   ]
                 : const [],
           ),
@@ -271,6 +277,15 @@ class _AutomationScreenState extends State<AutomationScreen> {
 
   Future<void> _setEnabled(SearchSchedule schedule, bool enabled) async {
     await _run(() => widget.repository.setScheduleEnabled(schedule, enabled));
+  }
+
+  Future<void> _runNow(SearchSchedule schedule) async {
+    await _run(() => widget.repository.runScheduleNow(schedule));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Immediate matching run queued.')),
+      );
+    }
   }
 
   Future<void> _run(Future<Object> Function() action) async {
@@ -447,7 +462,9 @@ class _EntitlementCard extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 Text(
-                  '${entitlement.searchesAvailable} of ${entitlement.searchesPerPeriod} searches available this week',
+                  entitlement.searchesPerPeriod == null
+                      ? 'Unlimited searches · internal testing'
+                      : '${entitlement.searchesAvailable} of ${entitlement.searchesPerPeriod} searches available this week',
                 ),
               ],
             ),

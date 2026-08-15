@@ -11,10 +11,11 @@ class EntitlementResponse(BaseModel):
     entitlement_version: str
     period_started_at: datetime
     period_ends_at: datetime
-    searches_per_period: int
+    searches_per_period: int | None
     searches_reserved: int
     searches_consumed: int
-    searches_available: int
+    searches_available: int | None
+    unlimited_searches: bool
     maximum_active_criteria: int
     minimum_interval_minutes: int
 
@@ -41,10 +42,11 @@ class AccountUsageResponse(BaseModel):
     entitlement_version: str
     period_started_at: datetime
     period_ends_at: datetime
-    searches_per_period: int
+    searches_per_period: int | None
     searches_reserved: int
     searches_consumed: int
-    searches_available: int
+    searches_available: int | None
+    unlimited_searches: bool
     entries: list[UsageLedgerEntryResponse] = Field(default_factory=list)
     next_cursor: int | None = None
 

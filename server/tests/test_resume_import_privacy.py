@@ -57,3 +57,8 @@ def test_resume_parse_prompt_requires_generated_headline_and_summary() -> None:
     assert "12 words or fewer" in SYSTEM_PROMPT
     assert "2-3 short sentences" in SYSTEM_PROMPT
     assert "unsupported claims" in SYSTEM_PROMPT
+
+
+def test_resume_parse_prompt_requests_evidence_based_target_roles() -> None:
+    assert 'Generate 3-5 realistic "target_roles"' in SYSTEM_PROMPT
+    assert "Do not recommend unsupported seniority" in SYSTEM_PROMPT

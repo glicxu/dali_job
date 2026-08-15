@@ -20,12 +20,22 @@ PUBLIC_API_ROUTES = {
     ("GET", "/health"),
     ("GET", "/health/db"),
     ("GET", "/documents/downloads/{token}"),
+    ("POST", "/guest-trials"),
 }
 
 
 def _has_identity_dependency(dependant: Dependant) -> bool:
     for dependency in dependant.dependencies:
         if dependency.call is get_current_identity or _has_identity_dependency(dependency):
+            return True
+    return False
+
+
+def _has_guest_dependency(dependant: Dependant) -> bool:
+    from app.modules.guest_trials.dependencies import get_current_guest_trial
+
+    for dependency in dependant.dependencies:
+        if dependency.call is get_current_guest_trial or _has_guest_dependency(dependency):
             return True
     return False
 
@@ -40,7 +50,7 @@ def validate_route_authorization(routers: Iterable[APIRouter]) -> None:
                 route_key = (method, route.path)
                 if route_key in PUBLIC_API_ROUTES:
                     continue
-                if not _has_identity_dependency(route.dependant):
+                if not _has_identity_dependency(route.dependant) and not _has_guest_dependency(route.dependant):
                     unprotected.append(f"{method} /api/v1{route.path}")
     if unprotected:
         routes = ", ".join(sorted(unprotected))

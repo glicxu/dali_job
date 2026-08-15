@@ -24,6 +24,8 @@ from app.modules.automation.router import router as automation_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.documents.router import router as documents_router
 from app.modules.health.router import router as health_router
+from app.modules.guest_trials.router import router as guest_trials_router
+from app.modules.guest_trials.rate_limit import GuestRateLimiter
 from app.modules.job_search.router import router as job_search_router
 from app.modules.interviews.router import router as interviews_router
 from app.modules.jobs.router import router as jobs_router
@@ -46,6 +48,7 @@ API_ROUTERS = (
     dashboard_router,
     documents_router,
     health_router,
+    guest_trials_router,
     job_search_router,
     interviews_router,
     jobs_router,
@@ -85,6 +88,7 @@ def create_app(config_path: Optional[str] = None) -> FastAPI:
     app.state.runtime = runtime
     app.state.tier_entitlements = runtime.tier_entitlements
     app.state.provider_rate_limiter = ProviderRateLimiter()
+    app.state.guest_rate_limiter = GuestRateLimiter()
     app.state.auth_rate_limiter = AuthRateLimiter(
         AuthRateLimitPolicy(
             login_ip_limit=runtime.auth_login_ip_limit,
@@ -116,6 +120,7 @@ def create_app(config_path: Optional[str] = None) -> FastAPI:
     app.include_router(dashboard_router, prefix="/api/v1")
     app.include_router(documents_router, prefix="/api/v1")
     app.include_router(health_router, prefix="/api/v1")
+    app.include_router(guest_trials_router, prefix="/api/v1")
     app.include_router(job_search_router, prefix="/api/v1")
     app.include_router(interviews_router, prefix="/api/v1")
     app.include_router(jobs_router, prefix="/api/v1")

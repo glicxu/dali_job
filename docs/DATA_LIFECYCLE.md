@@ -2,6 +2,8 @@
 
 This document defines the Phase 1 lifecycle contract for user-owned records, shared cache data, uploaded files, and AI results. It distinguishes behavior implemented now from account-level cleanup that requires a background worker.
 
+Account-free guest trials are an implemented exception to the deferred account-level purge. Active guest access uses a sliding 24-hour expiry. The bounded `app.modules.guest_trials.purge_service` command removes expired guest database content and transient files and reports safe failures for retry. Missing files are treated as already removed; paths outside the configured guest root block database deletion and produce a failed-trial result.
+
 ## Implemented Record Lifecycle
 
 ### Saved jobs

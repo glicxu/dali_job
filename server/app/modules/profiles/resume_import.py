@@ -50,6 +50,13 @@ contact details, residential location, or unsupported claims in either field. Us
 when the resume text does not provide enough evidence to make a useful privacy-safe headline
 or summary.
 
+Generate 3-5 realistic "target_roles" as common job titles that fit the supported experience,
+skills, education, and accomplishments. Treat these as recommendations, not extracted facts.
+Do not recommend unsupported seniority, management responsibility, licenses, or specialties.
+Prefer specific recognizable titles over broad categories, order them from strongest to weakest
+fit, and avoid near-duplicates. Return an empty array only when the evidence is too thin to make
+a responsible recommendation.
+
 Return exactly this JSON schema:
 {
   "headline": string or null,
@@ -67,8 +74,8 @@ Return exactly this JSON schema:
   "notes": array of strings
 }
 
-Use empty arrays when a section is not present. Put ambiguous or missing items that need
-user review in "notes".
+Use empty arrays when an extracted section is not present. Put ambiguous or missing items that
+need user review in "notes".
 """.strip()
 
 

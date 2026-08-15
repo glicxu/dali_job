@@ -51,15 +51,15 @@ class Entitlement {
   });
 
   final String tierCode;
-  final int searchesPerPeriod;
-  final int searchesAvailable;
+  final int? searchesPerPeriod;
+  final int? searchesAvailable;
   final int minimumIntervalMinutes;
   final DateTime periodEndsAt;
 
   factory Entitlement.fromJson(Map<String, dynamic> json) => Entitlement(
     tierCode: json['tier_code'] as String,
-    searchesPerPeriod: json['searches_per_period'] as int,
-    searchesAvailable: json['searches_available'] as int,
+    searchesPerPeriod: json['searches_per_period'] as int?,
+    searchesAvailable: json['searches_available'] as int?,
     minimumIntervalMinutes: json['minimum_interval_minutes'] as int,
     periodEndsAt: DateTime.parse(json['period_ends_at'] as String),
   );

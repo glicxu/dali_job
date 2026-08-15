@@ -52,6 +52,7 @@ def entitlement_details(
         "searches_reserved": summary.reserved,
         "searches_consumed": summary.consumed,
         "searches_available": summary.available,
+        "unlimited_searches": summary.allowance is None,
         "maximum_active_criteria": entitlement.maximum_active_criteria,
         "minimum_interval_minutes": entitlement.minimum_interval_minutes,
     }
@@ -312,6 +313,26 @@ def get_run(
     )
 
 
+def run_schedule_now(
+    db: Session,
+    identity: AuthenticatedIdentity,
+    schedule: SearchSchedule,
+    catalog: EntitlementCatalog,
+) -> SearchRun:
+    # Identity ownership has already been established by get_schedule. Keep
+    # dispatching in the durable automation queue so the normal worker,
+    # provider-failure accounting, and match persistence paths are reused.
+    from app.modules.automation.dispatcher import dispatch_schedule_now
+
+    user, _workspace = ensure_account_for_identity(db, identity)
+    if user.id != schedule.user_id:
+        raise ScheduleValidationError("schedule_not_found", "Search schedule not found.")
+    try:
+        return dispatch_schedule_now(db, catalog, schedule)
+    except PermissionError as exc:
+        raise ScheduleValidationError("super_account_required", str(exc)) from exc
+
+
 def account_usage_details(
     db: Session,
     identity: AuthenticatedIdentity,
@@ -343,6 +364,7 @@ def account_usage_details(
         "searches_reserved": summary.reserved,
         "searches_consumed": summary.consumed,
         "searches_available": summary.available,
+        "unlimited_searches": summary.allowance is None,
         "entries": entries,
         "next_cursor": entries[-1].id if has_more and entries else None,
     }

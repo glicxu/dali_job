@@ -24,6 +24,9 @@ from app.modules.profiles.models import ResumeProfile
 from app.modules.profiles.repository import ensure_account_for_identity
 
 
+SEED_TIME = datetime(2026, 8, 15, 7, 0, tzinfo=timezone.utc)
+
+
 def create_test_client() -> tuple[TestClient, sessionmaker]:
     engine = create_engine(
         "sqlite://",
@@ -137,6 +140,7 @@ def _seed_inbox(session_factory: sessionmaker, *, count: int = 2) -> list[int]:
             assert created is True
             assert repeated_created is False
             assert repeated.id == first.id
+            first.created_at = SEED_TIME + timedelta(minutes=index)
             email, email_created = create_email_delivery_if_enabled(
                 db,
                 workspace_id=workspace.id,
@@ -147,6 +151,7 @@ def _seed_inbox(session_factory: sessionmaker, *, count: int = 2) -> list[int]:
             )
             assert email_created is True
             assert email is not None
+            email.created_at = SEED_TIME + timedelta(minutes=index)
             match_ids.append(match.id)
         db.commit()
     return match_ids

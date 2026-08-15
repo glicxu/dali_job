@@ -21,3 +21,26 @@ class FlutterSecureTokenStore implements RefreshTokenStore {
   @override
   Future<void> clear() => storage.delete(key: _key);
 }
+
+abstract interface class GuestCredentialStore {
+  Future<String?> read();
+  Future<void> write(String credential);
+  Future<void> clear();
+}
+
+class FlutterSecureGuestCredentialStore implements GuestCredentialStore {
+  const FlutterSecureGuestCredentialStore(this.storage);
+
+  static const _key = 'dalijob_guest_credential';
+  final FlutterSecureStorage storage;
+
+  @override
+  Future<String?> read() => storage.read(key: _key);
+
+  @override
+  Future<void> write(String credential) =>
+      storage.write(key: _key, value: credential);
+
+  @override
+  Future<void> clear() => storage.delete(key: _key);
+}

@@ -877,6 +877,48 @@
         }
       }
     },
+    "/api/v1/automation/schedules/{schedule_id}/run-now": {
+      "post": {
+        "tags": [
+          "automation"
+        ],
+        "summary": "Run Search Schedule Now",
+        "operationId": "run_search_schedule_now_api_v1_automation_schedules__schedule_id__run_now_post",
+        "parameters": [
+          {
+            "name": "schedule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Schedule Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchRunResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/automation/runs": {
       "get": {
         "tags": [
@@ -2382,6 +2424,504 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guest-trials": {
+      "post": {
+        "tags": [
+          "guest-trials"
+        ],
+        "summary": "Create Trial",
+        "operationId": "create_trial_api_v1_guest_trials_post",
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestTrialCreateResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guest-trials/current": {
+      "get": {
+        "tags": [
+          "guest-trials"
+        ],
+        "summary": "Get Current Trial",
+        "operationId": "get_current_trial_api_v1_guest_trials_current_get",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestTrialCurrentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "guest-trials"
+        ],
+        "summary": "Delete Current Trial",
+        "operationId": "delete_current_trial_api_v1_guest_trials_current_delete",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guest-trials/current/resume-import": {
+      "post": {
+        "tags": [
+          "guest-trials"
+        ],
+        "summary": "Import Current Resume",
+        "operationId": "import_current_resume_api_v1_guest_trials_current_resume_import_post",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_current_resume_api_v1_guest_trials_current_resume_import_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestResumeImportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guest-trials/current/resume-import/retry": {
+      "post": {
+        "tags": [
+          "guest-trials"
+        ],
+        "summary": "Retry Current Resume Parse",
+        "operationId": "retry_current_resume_parse_api_v1_guest_trials_current_resume_import_retry_post",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestResumeImportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guest-trials/current/profile": {
+      "put": {
+        "tags": [
+          "guest-trials"
+        ],
+        "summary": "Update Current Profile",
+        "operationId": "update_current_profile_api_v1_guest_trials_current_profile_put",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuestProfileUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestProfileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guest-trials/current/readiness": {
+      "get": {
+        "tags": [
+          "guest-trials"
+        ],
+        "summary": "Get Current Readiness",
+        "operationId": "get_current_readiness_api_v1_guest_trials_current_readiness_get",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileReadinessResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guest-trials/current/criteria": {
+      "put": {
+        "tags": [
+          "guest-trials"
+        ],
+        "summary": "Update Current Criteria",
+        "operationId": "update_current_criteria_api_v1_guest_trials_current_criteria_put",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuestCriteriaUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestCriteriaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guest-trials/current/match": {
+      "get": {
+        "tags": [
+          "guest-trials"
+        ],
+        "summary": "Get Current Match",
+        "operationId": "get_current_match_api_v1_guest_trials_current_match_get",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestMatchStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "guest-trials"
+        ],
+        "summary": "Run an immediate guest match",
+        "description": "Searches and matches synchronously in the trial request; the guest does not wait for the weekly automation scheduler. Returns only the best usable match.",
+        "operationId": "create_current_match_api_v1_guest_trials_current_match_post",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestMatchStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -5148,6 +5688,48 @@
         }
       }
     },
+    "/api/v1/resume-profiles/{resume_profile_id}/readiness": {
+      "get": {
+        "tags": [
+          "resume-profiles"
+        ],
+        "summary": "Get Resume Profile Readiness",
+        "operationId": "get_resume_profile_readiness_api_v1_resume_profiles__resume_profile_id__readiness_get",
+        "parameters": [
+          {
+            "name": "resume_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Resume Profile Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileReadinessResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/resume-profiles/{resume_profile_id}": {
       "get": {
         "tags": [
@@ -5688,7 +6270,14 @@
             "title": "Period Ends At"
           },
           "searches_per_period": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Searches Per Period"
           },
           "searches_reserved": {
@@ -5700,8 +6289,19 @@
             "title": "Searches Consumed"
           },
           "searches_available": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Searches Available"
+          },
+          "unlimited_searches": {
+            "type": "boolean",
+            "title": "Unlimited Searches"
           },
           "entries": {
             "items": {
@@ -5731,7 +6331,8 @@
           "searches_per_period",
           "searches_reserved",
           "searches_consumed",
-          "searches_available"
+          "searches_available",
+          "unlimited_searches"
         ],
         "title": "AccountUsageResponse"
       },
@@ -7535,6 +8136,20 @@
         ],
         "title": "Body_enqueue_resume_parse_api_v1_operations_resume_parse_post"
       },
+      "Body_import_current_resume_api_v1_guest_trials_current_resume_import_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_current_resume_api_v1_guest_trials_current_resume_import_post"
+      },
       "Body_import_resume_pdf_api_v1_profile_resume_imports_post": {
         "properties": {
           "file": {
@@ -8395,7 +9010,14 @@
             "title": "Period Ends At"
           },
           "searches_per_period": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Searches Per Period"
           },
           "searches_reserved": {
@@ -8407,8 +9029,19 @@
             "title": "Searches Consumed"
           },
           "searches_available": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Searches Available"
+          },
+          "unlimited_searches": {
+            "type": "boolean",
+            "title": "Unlimited Searches"
           },
           "maximum_active_criteria": {
             "type": "integer",
@@ -8430,10 +9063,401 @@
           "searches_reserved",
           "searches_consumed",
           "searches_available",
+          "unlimited_searches",
           "maximum_active_criteria",
           "minimum_interval_minutes"
         ],
         "title": "EntitlementResponse"
+      },
+      "GuestBestMatchResponse": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "company": {
+            "type": "string",
+            "title": "Company"
+          },
+          "location": {
+            "type": "string",
+            "title": "Location",
+            "default": ""
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "match_score": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Match Score"
+          },
+          "score_scale": {
+            "type": "string",
+            "title": "Score Scale",
+            "default": "0-10"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "matched_skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Matched Skills"
+          },
+          "missing_skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Skills"
+          },
+          "supported_requirements": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Supported Requirements"
+          },
+          "unsupported_requirements": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Unsupported Requirements"
+          },
+          "recommended_resume_updates": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recommended Resume Updates"
+          },
+          "result_context": {
+            "type": "string",
+            "title": "Result Context",
+            "default": "Best usable match from this guest search"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "company",
+          "match_score",
+          "summary"
+        ],
+        "title": "GuestBestMatchResponse"
+      },
+      "GuestCriteriaResponse": {
+        "properties": {
+          "keyword": {
+            "type": "string",
+            "title": "Keyword"
+          },
+          "location": {
+            "type": "string",
+            "title": "Location"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "keyword",
+          "location",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "GuestCriteriaResponse"
+      },
+      "GuestCriteriaUpdateRequest": {
+        "properties": {
+          "keyword": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Keyword"
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Location"
+          }
+        },
+        "type": "object",
+        "required": [
+          "keyword",
+          "location"
+        ],
+        "title": "GuestCriteriaUpdateRequest"
+      },
+      "GuestMatchStatusResponse": {
+        "properties": {
+          "operation_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "provider_search_state": {
+            "type": "string",
+            "title": "Provider Search State"
+          },
+          "retryable": {
+            "type": "boolean",
+            "title": "Retryable",
+            "default": false
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuestBestMatchResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "provider_search_state"
+        ],
+        "title": "GuestMatchStatusResponse"
+      },
+      "GuestProfileResponse": {
+        "properties": {
+          "resume_data": {
+            "$ref": "#/components/schemas/ResumeData"
+          },
+          "readiness": {
+            "$ref": "#/components/schemas/ProfileReadinessResponse"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "resume_data",
+          "readiness",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "GuestProfileResponse"
+      },
+      "GuestProfileUpdateRequest": {
+        "properties": {
+          "resume_data": {
+            "$ref": "#/components/schemas/ResumeData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "resume_data"
+        ],
+        "title": "GuestProfileUpdateRequest"
+      },
+      "GuestResumeImportResponse": {
+        "properties": {
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "file_name": {
+            "type": "string",
+            "title": "File Name"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "extracted_text_preview": {
+            "type": "string",
+            "title": "Extracted Text Preview"
+          },
+          "parse_status": {
+            "type": "string",
+            "title": "Parse Status"
+          },
+          "suggestions": {
+            "$ref": "#/components/schemas/ResumeData"
+          },
+          "requires_profile_confirmation": {
+            "type": "boolean",
+            "title": "Requires Profile Confirmation",
+            "default": true
+          },
+          "parse_warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parse Warning"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "file_name",
+          "content_type",
+          "size_bytes",
+          "extracted_text_preview",
+          "parse_status"
+        ],
+        "title": "GuestResumeImportResponse"
+      },
+      "GuestTrialCreateResponse": {
+        "properties": {
+          "public_id": {
+            "type": "string",
+            "title": "Public Id"
+          },
+          "guest_secret": {
+            "type": "string",
+            "title": "Guest Secret"
+          },
+          "guest_credential": {
+            "type": "string",
+            "title": "Guest Credential"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "public_id",
+          "guest_secret",
+          "guest_credential",
+          "status",
+          "expires_at"
+        ],
+        "title": "GuestTrialCreateResponse"
+      },
+      "GuestTrialCurrentResponse": {
+        "properties": {
+          "public_id": {
+            "type": "string",
+            "title": "Public Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "provider_search_state": {
+            "type": "string",
+            "title": "Provider Search State"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuestProfileResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "criteria": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuestCriteriaResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resume_import": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuestResumeImportResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "public_id",
+          "status",
+          "provider_search_state",
+          "expires_at"
+        ],
+        "title": "GuestTrialCurrentResponse"
       },
       "HTTPValidationError": {
         "properties": {
@@ -11802,6 +12826,101 @@
           "resume_evidence"
         ],
         "title": "PrepTalkingPoint"
+      },
+      "ProfileReadinessEvidenceSummary": {
+        "properties": {
+          "experience_items": {
+            "type": "integer",
+            "title": "Experience Items",
+            "default": 0
+          },
+          "supporting_items": {
+            "type": "integer",
+            "title": "Supporting Items",
+            "default": 0
+          },
+          "responsibility_items": {
+            "type": "integer",
+            "title": "Responsibility Items",
+            "default": 0
+          },
+          "outcome_items": {
+            "type": "integer",
+            "title": "Outcome Items",
+            "default": 0
+          },
+          "skill_items": {
+            "type": "integer",
+            "title": "Skill Items",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "ProfileReadinessEvidenceSummary"
+      },
+      "ProfileReadinessIssue": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ProfileReadinessIssue"
+      },
+      "ProfileReadinessResponse": {
+        "properties": {
+          "ready": {
+            "type": "boolean",
+            "title": "Ready"
+          },
+          "readiness_version": {
+            "type": "string",
+            "title": "Readiness Version"
+          },
+          "pathway": {
+            "type": "string",
+            "enum": [
+              "experienced",
+              "early_career",
+              "undetermined"
+            ],
+            "title": "Pathway"
+          },
+          "evidence_summary": {
+            "$ref": "#/components/schemas/ProfileReadinessEvidenceSummary"
+          },
+          "missing_requirements": {
+            "items": {
+              "$ref": "#/components/schemas/ProfileReadinessIssue"
+            },
+            "type": "array",
+            "title": "Missing Requirements"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ProfileReadinessIssue"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ready",
+          "readiness_version",
+          "pathway",
+          "evidence_summary"
+        ],
+        "title": "ProfileReadinessResponse"
       },
       "QuickFindRequest": {
         "properties": {

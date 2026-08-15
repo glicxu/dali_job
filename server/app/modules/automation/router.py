@@ -169,6 +169,29 @@ def resume_search_schedule(
         raise AssertionError("unreachable")
 
 
+@router.post(
+    "/automation/schedules/{schedule_id}/run-now",
+    response_model=SearchRunResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def run_search_schedule_now(
+    schedule_id: int,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> SearchRunResponse:
+    schedule = schedules.get_schedule(db, identity, schedule_id)
+    if schedule is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Search schedule not found.")
+    try:
+        return SearchRunResponse.model_validate(
+            schedules.run_schedule_now(db, identity, schedule, _catalog(request))
+        )
+    except (schedules.ScheduleValidationError, SubscriptionUnavailable) as exc:
+        _raise_schedule_error(exc)
+        raise AssertionError("unreachable")
+
+
 @router.delete("/automation/schedules/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_search_schedule(
     schedule_id: int,

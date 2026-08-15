@@ -26,6 +26,7 @@ Required:
 - FastAPI server.
 - MySQL-compatible SQL database accessed through `DaliCommonLib.dali_db_man.DbMan`.
 - Private server filesystem storage for the current single-instance document implementation.
+- A scheduler that runs the bounded guest-retention purge command against the same database and private filesystem.
 
 Future optional:
 
@@ -61,6 +62,30 @@ docker compose up -d redis
 cd server
 celery -A app.workers.celery_app worker --loglevel=info
 ```
+
+Run and verify guest retention locally:
+
+```powershell
+python scripts/purge_guest_trials.py --config local.ini --dry-run --limit 100
+python scripts/purge_guest_trials.py --config local.ini --limit 100
+```
+
+Assign the internal unlimited test entitlement only through the audited operator command. The account must already exist and have signed in once:
+
+```powershell
+python scripts/set_subscription_tier.py --config local.ini --email job@dalifin.local --tier super
+```
+
+Use the same command with `--tier free` to remove the override. Never map an Apple or Google subscription product to `super`; customer products remain Free, Starter, and Plus.
+
+In an immutable release, use the release-contained module instead:
+
+```powershell
+cd server
+python -m app.modules.guest_trials.purge_service --config production.ini --limit 100
+```
+
+Schedule that one-pass command at least every 15 minutes for the guest beta. It is bounded and idempotent, so the scheduler may invoke it again after interruption. Exit code `2` means at least one trial could not be safely purged; alert operators and retain the database record for retry. The purge process must mount the same document storage root as the API. Run `--dry-run` after deployment and before enabling the destructive schedule.
 
 ## 4. Configuration
 
@@ -258,6 +283,7 @@ Metrics:
 - Calendar sync latency.
 - Plugin failure rate.
 - Database connection pool saturation.
+- Guest trials eligible, purged, files deleted/missing, and purge failures.
 
 Logs:
 
@@ -283,6 +309,7 @@ Alerts:
 - Email sync failure spike.
 - Object storage failures.
 - Disk or memory pressure.
+- Guest purge failures or expired-trial backlog.
 
 ## 10. Backups And Recovery
 

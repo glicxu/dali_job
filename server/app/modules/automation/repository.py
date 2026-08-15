@@ -40,12 +40,14 @@ class UsageSummary:
     entitlement_version: str
     period_started_at: datetime
     period_ends_at: datetime
-    allowance: int
+    allowance: int | None
     reserved: int
     consumed: int
 
     @property
-    def available(self) -> int:
+    def available(self) -> int | None:
+        if self.allowance is None:
+            return None
         return max(self.allowance - self.reserved - self.consumed, 0)
 
 
@@ -121,7 +123,7 @@ def reserve_provider_search(
     entitlement = resolved_catalog.for_tier(subscription.tier_code)
     subscription.entitlement_version = resolved_catalog.version
     used = _active_usage_total(db, subscription, current)
-    if used + units > entitlement.searches_per_period:
+    if entitlement.searches_per_period is not None and used + units > entitlement.searches_per_period:
         raise QuotaExceeded(
             allowance=entitlement.searches_per_period,
             used=used,
@@ -138,7 +140,7 @@ def reserve_provider_search(
         idempotency_key=idempotency_key,
         entitlement_version=resolved_catalog.version,
         tier_code_snapshot=subscription.tier_code,
-        allowance_snapshot=entitlement.searches_per_period,
+        allowance_snapshot=entitlement.searches_per_period if entitlement.searches_per_period is not None else -1,
         reason=reason,
         reserved_at=current,
     )

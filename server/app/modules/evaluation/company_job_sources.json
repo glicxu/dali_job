@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "last_verified": "2026-08-15",
+  "policy": {
+    "purpose": "Internal matching-evaluation job discovery",
+    "detail_fetch_rule": "Discover from a listed employer source, then fetch and freeze an exact job detail URL.",
+    "aggregators_allowed": false
+  },
+  "companies": [
+    {
+      "company_id": "amazon",
+      "company_name": "Amazon",
+      "company_career_url": "https://amazon.jobs/",
+      "discovery_urls": [
+        "https://amazon.jobs/en/search",
+        "https://amazon.jobs/content/en-gb/teams/principal-engineering#jobs-search"
+      ],
+      "expected_detail_hosts": ["amazon.jobs", "www.amazon.jobs"],
+      "detail_url_template": "https://amazon.jobs/en/jobs/{job_id}",
+      "pilot_enabled": true
+    },
+    {
+      "company_id": "google",
+      "company_name": "Google",
+      "company_career_url": "https://www.google.com/about/careers/",
+      "discovery_urls": [
+        "https://www.google.com/about/careers/applications/jobs/results"
+      ],
+      "expected_detail_hosts": ["www.google.com"],
+      "detail_url_template": "https://www.google.com/about/careers/applications/jobs/results/{job_id}-{slug}",
+      "pilot_enabled": true
+    },
+    {
+      "company_id": "microsoft",
+      "company_name": "Microsoft",
+      "company_career_url": "https://careers.microsoft.com/",
+      "discovery_urls": [
+        "https://apply.careers.microsoft.com/careers"
+      ],
+      "expected_detail_hosts": ["apply.careers.microsoft.com"],
+      "detail_url_template": "https://apply.careers.microsoft.com/careers/job/{job_id}",
+      "pilot_enabled": true
+    },
+    {
+      "company_id": "apple",
+      "company_name": "Apple",
+      "company_career_url": "https://jobs.apple.com/",
+      "discovery_urls": [
+        "https://jobs.apple.com/en-us/search"
+      ],
+      "expected_detail_hosts": ["jobs.apple.com"],
+      "detail_url_template": "https://jobs.apple.com/en-us/details/{role_number}/{slug}",
+      "pilot_enabled": true
+    },
+    {
+      "company_id": "nvidia",
+      "company_name": "NVIDIA",
+      "company_career_url": "https://www.nvidia.com/en-us/about-nvidia/careers/",
+      "discovery_urls": [
+        "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite"
+      ],
+      "expected_detail_hosts": ["nvidia.wd5.myworkdayjobs.com"],
+      "detail_url_template": "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/{slug}_{requisition_id}",
+      "pilot_enabled": true
+    },
+    {
+      "company_id": "cloudflare",
+      "company_name": "Cloudflare",
+      "company_career_url": "https://www.cloudflare.com/careers/jobs/",
+      "discovery_urls": [
+        "https://job-boards.greenhouse.io/cloudflare"
+      ],
+      "expected_detail_hosts": ["job-boards.greenhouse.io"],
+      "detail_url_template": "https://job-boards.greenhouse.io/cloudflare/jobs/{job_id}",
+      "source_note": "Employer-controlled Cloudflare board hosted by its applicant-tracking provider.",
+      "pilot_enabled": true
+    },
+    {
+      "company_id": "tesla",
+      "company_name": "Tesla",
+      "company_career_url": "https://www.tesla.com/careers",
+      "discovery_urls": [
+        "https://www.tesla.com/careers/search/"
+      ],
+      "expected_detail_hosts": ["www.tesla.com"],
+      "detail_url_template": "https://www.tesla.com/careers/search/job/{slug}-{job_id}",
+      "pilot_enabled": false
+    },
+    {
+      "company_id": "meta",
+      "company_name": "Meta",
+      "company_career_url": "https://www.metacareers.com/",
+      "discovery_urls": [
+        "https://www.metacareers.com/jobs/"
+      ],
+      "expected_detail_hosts": ["www.metacareers.com"],
+      "detail_url_template": "https://www.metacareers.com/jobs/{job_id}/",
+      "pilot_enabled": false
+    }
+  ]
+}

@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.modules.auth.dependencies import AuthenticatedIdentity
-from app.modules.evaluation.models import EvaluationJobSnapshot, EvaluationRun
+from app.modules.evaluation.models import EvaluationAnnotation, EvaluationJobSnapshot, EvaluationRun
+from app.modules.evaluation.schemas import EvaluationRunManifestView
 from app.modules.jobs.models import JobCache
 from app.modules.jobs.repository import create_user_job
 from app.modules.profiles import repository as profile_repository
@@ -79,6 +81,23 @@ def get_snapshot(db: Session, *, public_id: str, workspace_id: int) -> Evaluatio
     ))
 
 
+def review_snapshot(
+    db: Session,
+    *,
+    snapshot: EvaluationJobSnapshot,
+    reviewer_user_id: int,
+    review_status: str,
+    review_notes: str,
+) -> EvaluationJobSnapshot:
+    snapshot.review_status = review_status
+    snapshot.review_notes = review_notes
+    snapshot.reviewed_by_user_id = reviewer_user_id
+    snapshot.reviewed_at = datetime.now(timezone.utc)
+    db.flush()
+    db.refresh(snapshot)
+    return snapshot
+
+
 def create_run(
     db: Session,
     *,
@@ -90,9 +109,11 @@ def create_run(
     job_profile_version_id: int,
     qualification_assessment_id: int,
     run_metadata: dict,
+    manifest: dict,
 ) -> EvaluationRun:
+    public_id = f"evr_{uuid.uuid4().hex}"
     run = EvaluationRun(
-        public_id=f"evr_{uuid.uuid4().hex}",
+        public_id=public_id,
         workspace_id=workspace_id,
         user_id=user_id,
         benchmark_release=snapshot.benchmark_release,
@@ -102,6 +123,9 @@ def create_run(
         job_profile_version_id=job_profile_version_id,
         qualification_assessment_id=qualification_assessment_id,
         run_metadata=run_metadata,
+        manifest=EvaluationRunManifestView.model_validate({
+            **manifest, "evaluation_run_id": public_id
+        }).model_dump(mode="json"),
     )
     db.add(run)
     db.flush()
@@ -120,3 +144,46 @@ def get_run(db: Session, *, public_id: str, workspace_id: int) -> EvaluationRun 
         EvaluationRun.public_id == public_id,
         EvaluationRun.workspace_id == workspace_id,
     ))
+
+
+def create_annotation(
+    db: Session,
+    *,
+    run: EvaluationRun,
+    reviewer_user_id: int,
+    stage: str,
+    target_ref: str,
+    review_kind: str,
+    verdict: str,
+    evidence_support: str,
+    expected_value: dict | None,
+    confidence: float,
+    severity: str,
+    error_taxonomy_code: str | None,
+    comment: str,
+) -> EvaluationAnnotation:
+    annotation = EvaluationAnnotation(
+        public_id=f"eva_{uuid.uuid4().hex}",
+        evaluation_run_id=run.id,
+        reviewer_user_id=reviewer_user_id,
+        stage=stage,
+        target_ref=target_ref,
+        review_kind=review_kind,
+        verdict=verdict,
+        evidence_support=evidence_support,
+        expected_value=expected_value,
+        confidence=confidence,
+        severity=severity,
+        error_taxonomy_code=error_taxonomy_code,
+        comment=comment,
+    )
+    db.add(annotation)
+    db.flush()
+    db.refresh(annotation)
+    return annotation
+
+
+def list_annotations(db: Session, *, run_id: int) -> list[EvaluationAnnotation]:
+    return list(db.scalars(select(EvaluationAnnotation).where(
+        EvaluationAnnotation.evaluation_run_id == run_id,
+    ).order_by(EvaluationAnnotation.created_at, EvaluationAnnotation.id)).all())

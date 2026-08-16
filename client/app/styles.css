@@ -106,9 +106,205 @@
   text-transform: capitalize;
 }
 
+.evaluation-compare-controls,
+.evaluation-metric-grid,
+.evaluation-annotation-form {
+  display: grid;
+  gap: 10px;
+}
+
+.evaluation-compare-controls {
+  align-items: end;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.evaluation-comparison-result {
+  border: 1px solid var(--border-default);
+  border-radius: 9px;
+  margin-top: 14px;
+  padding: 12px;
+}
+
+.evaluation-comparison-result.compatible {
+  border-color: var(--success-500);
+}
+
+.evaluation-comparison-result.incompatible {
+  border-color: var(--warning-500);
+}
+
+.evaluation-metric-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.evaluation-metric-grid article {
+  border: 1px solid var(--border-default);
+  border-radius: 9px;
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+}
+
+.evaluation-metric-grid article.passed {
+  border-color: var(--success-500);
+}
+
+.evaluation-metric-grid article.failed {
+  border-color: var(--danger-500);
+}
+
+.evaluation-metric-grid span {
+  font-weight: 700;
+}
+
+.evaluation-review-list {
+  background: var(--surface-subtle);
+  border-radius: 8px;
+  margin-top: 10px;
+  padding: 4px 10px;
+}
+
+.evaluation-annotation-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 10px;
+}
+
+.evaluation-annotation-form .evaluation-comment {
+  grid-column: 1 / -1;
+}
+
+.evaluation-coverage-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.evaluation-coverage-grid article,
+.evaluation-fact,
+.evaluation-disagreement-list article {
+  border: 1px solid var(--border-default);
+  border-radius: 9px;
+  padding: 10px;
+}
+
+.evaluation-coverage-grid article {
+  display: grid;
+  gap: 5px;
+}
+
+.evaluation-coverage-grid .coverage-filled {
+  border-color: var(--success-500);
+}
+
+.evaluation-coverage-grid .coverage-awaiting_review {
+  border-color: var(--warning-500);
+}
+
+.evaluation-fact-list,
+.evaluation-disagreement-list {
+  display: grid;
+  gap: 10px;
+}
+
+.evaluation-fact pre {
+  background: var(--surface-subtle);
+  max-height: 180px;
+  overflow: auto;
+  padding: 8px;
+  white-space: pre-wrap;
+}
+
+.evaluation-fact-form {
+  display: grid;
+  gap: 9px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 10px;
+}
+
+.evaluation-fact-form .evaluation-comment {
+  grid-column: 1 / -1;
+}
+
+.evaluation-disagreement-list article header {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.evaluation-paste-fixture {
+  display: grid;
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.evaluation-fixture-library,
+.evaluation-fixture-library section,
+.evaluation-library-list,
+.evaluation-pair-list {
+  display: grid;
+  gap: 10px;
+}
+
+.evaluation-library-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.evaluation-library-list {
+  max-height: 470px;
+  overflow: auto;
+}
+
+.evaluation-library-list article,
+.evaluation-pair-list article {
+  align-items: center;
+  border: 1px solid var(--border-default);
+  border-radius: 9px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 10px;
+}
+
+.evaluation-library-list article.selected {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-strong) 18%, transparent);
+}
+
+.evaluation-library-list article div,
+.evaluation-pair-list article div {
+  display: grid;
+  gap: 4px;
+}
+
+.evaluation-library-list small,
+.evaluation-pair-list small {
+  color: var(--text-muted);
+}
+
+.evaluation-input-preview {
+  margin-top: 8px;
+}
+
+.evaluation-input-preview > section {
+  border: 1px solid var(--border-default);
+  border-radius: 9px;
+  padding: 12px;
+}
+
 @media (max-width: 980px) {
   .evaluation-setup-grid,
-  .evaluation-source-grid {
+  .evaluation-source-grid,
+  .evaluation-metric-grid,
+  .evaluation-annotation-form,
+  .evaluation-compare-controls,
+  .evaluation-coverage-grid,
+  .evaluation-fact-form {
+    grid-template-columns: 1fr;
+  }
+
+  .evaluation-library-grid {
     grid-template-columns: 1fr;
   }
 }

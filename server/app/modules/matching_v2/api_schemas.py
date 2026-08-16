@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.modules.matching_v2.schemas import (
     CandidateExtractionResponse,
     JobExtractionResponse,
+    LegacyQualificationAssessmentResponse,
     QualificationAssessmentResponse,
 )
 
@@ -72,10 +73,9 @@ class JobRequirementView(BaseModel):
     scoring_dimension: str
     statement: str
     importance: str
-    hard_constraint: bool
     acceptable_evidence_contexts: list[str]
     minimum_years: float | None
-    explicit_alternatives: list[str]
+    alternative_groups: list[dict[str, object]]
     policy_alternative_group: str | None
     source_refs: list[str]
 
@@ -116,7 +116,7 @@ class QualificationAssessmentView(BaseModel):
     candidate_profile_id: str
     job_profile_id: str
     career_context: QualificationCareerContextView
-    assessment: QualificationAssessmentResponse
+    assessment: QualificationAssessmentResponse | LegacyQualificationAssessmentResponse
     input_quality: dict
     generation: dict[str, str | dict | None]
     created_at: datetime

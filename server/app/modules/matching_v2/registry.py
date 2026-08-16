@@ -2,20 +2,27 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Mapping
 
 from app.modules.matching_v2.schemas import (
     CandidateExtractionResponse,
-    JobExtractionResponse,
+    JobExtractionProviderResponse,
+    LegacyJobExtractionProviderResponse,
+    LegacyJobExtractionResponse,
+    LegacyQualificationAssessmentResponse,
     QualificationAssessmentResponse,
     normalized_json_schema,
 )
 from app.modules.matching_v2.prompts import (
     CANDIDATE_EXTRACTION_SYSTEM_PROMPT,
     JOB_EXTRACTION_SYSTEM_PROMPT,
+    JOB_EXTRACTION_SYSTEM_PROMPT_V1,
+    JOB_EXTRACTION_SYSTEM_PROMPT_V2,
     QUALIFICATION_SYSTEM_PROMPT,
+    QUALIFICATION_SYSTEM_PROMPT_V1,
 )
 
 
@@ -160,8 +167,11 @@ DEFAULT_REGISTRY = ImmutableRegistry()
 
 for model, version in (
     (CandidateExtractionResponse, "candidate-extract-response.v1"),
-    (JobExtractionResponse, "job-extract-response.v1"),
-    (QualificationAssessmentResponse, "qualification-assessment-response.v1"),
+    (LegacyJobExtractionResponse, "job-extract-response.v1"),
+    (LegacyJobExtractionProviderResponse, "job-extract-response.v2"),
+    (JobExtractionProviderResponse, "job-extract-response.v3"),
+    (LegacyQualificationAssessmentResponse, "qualification-assessment-response.v1"),
+    (QualificationAssessmentResponse, "qualification-assessment-response.v2"),
 ):
     DEFAULT_REGISTRY.register(
         RegistryEntry(
@@ -182,15 +192,36 @@ for version, content in (
     (
         "job-extract.v1",
         {
-            "system": JOB_EXTRACTION_SYSTEM_PROMPT,
+            "system": JOB_EXTRACTION_SYSTEM_PROMPT_V1,
             "user_template": "json-envelope.allowed_source_spans.v1",
+        },
+    ),
+    (
+        "job-extract.v2",
+        {
+            "system": JOB_EXTRACTION_SYSTEM_PROMPT_V2,
+            "user_template": "json-envelope.allowed_source_spans.with-full-replacement-repair.v2",
+        },
+    ),
+    (
+        "job-extract.v3",
+        {
+            "system": JOB_EXTRACTION_SYSTEM_PROMPT,
+            "user_template": "json-envelope.allowed_source_spans.with-full-replacement-repair.v3",
         },
     ),
     (
         "qualification-match.v1",
         {
-            "system": QUALIFICATION_SYSTEM_PROMPT,
+            "system": QUALIFICATION_SYSTEM_PROMPT_V1,
             "user_template": "json-envelope.candidate_evidence_job_requirements_alternatives.v1",
+        },
+    ),
+    (
+        "qualification-match.v2",
+        {
+            "system": QUALIFICATION_SYSTEM_PROMPT,
+            "user_template": "json-envelope.candidate_profile_evidence_job_requirements_alternatives.v2",
         },
     ),
 ):
@@ -234,6 +265,29 @@ DEFAULT_REGISTRY.register(
 
 DEFAULT_REGISTRY.register(
     RegistryEntry(
+        artifact_type="taxonomy",
+        version="matching-taxonomy.v2",
+        content={
+            "role_families": [
+                "software_engineering", "data_science", "financial_technology",
+                "technical_education", "product_management",
+                "machine_learning_engineering", "hardware_engineering",
+                "embedded_systems", "technical_program_management", "unknown",
+            ],
+            "tracks": [
+                "individual_contributor", "architect", "engineering_management", "research",
+                "technical_program", "technical_education", "product", "program", "unknown",
+            ],
+            "levels": [
+                "unknown", "student_or_intern", "entry", "junior", "mid", "senior",
+                "staff", "principal",
+            ],
+        },
+    )
+)
+
+DEFAULT_REGISTRY.register(
+    RegistryEntry(
         artifact_type="semantic_validator",
         version="matching-semantic-validator.v1",
         content={
@@ -246,6 +300,57 @@ DEFAULT_REGISTRY.register(
                 "approved_alternative_required",
                 "hard_constraint_single_owner",
             ]
+        },
+    )
+)
+
+DEFAULT_REGISTRY.register(
+    RegistryEntry(
+        artifact_type="semantic_validator",
+        version="matching-semantic-validator.v3",
+        content={
+            "rules": [
+                "source_reference_membership", "unique_local_references",
+                "required_optional_only", "application_constraint_single_owner",
+                "structured_explicit_alternatives", "provider_policy_field_must_be_null",
+                "deterministic_alternative_policy_assignment", "career_adjacency_consistency",
+                "explicit_employment_type", "qualification_section_coverage",
+                "responsibility_section_coverage", "one_full_replacement_repair_attempt",
+                "compensation_excluded_from_model_ownership",
+            ]
+        },
+    )
+)
+
+DEFAULT_REGISTRY.register(
+    RegistryEntry(
+        artifact_type="semantic_validator",
+        version="matching-semantic-validator.v2",
+        content={
+            "rules": [
+                "source_reference_membership",
+                "unique_local_references",
+                "primary_reference_membership",
+                "exact_requirement_coverage",
+                "positive_status_requires_evidence",
+                "approved_alternative_required",
+                "hard_constraint_single_owner",
+                "provider_policy_field_must_be_null",
+                "deterministic_alternative_policy_assignment",
+                "one_full_replacement_repair_attempt",
+            ]
+        },
+    )
+)
+
+DEFAULT_REGISTRY.register(
+    RegistryEntry(
+        artifact_type="deduplication_policy",
+        version="job-dedup.v2",
+        content={
+            "span_rule": "casefolded_whitespace_exact_match_first_occurrence_wins",
+            "requirement_rule": "casefolded_whitespace_exact_match_merge_or_reject_conflict",
+            "boilerplate_rule": "drop_only_spans_beginning_with_known_boilerplate_marker",
         },
     )
 )
@@ -310,6 +415,41 @@ DEFAULT_REGISTRY.register(
 
 DEFAULT_REGISTRY.register(
     RegistryEntry(
+        artifact_type="career_selection_policy",
+        version="career-selection-policy.v2",
+        content={
+            "compatible_tracks": {
+                "individual_contributor": ["architect", "research"],
+                "architect": ["individual_contributor"],
+                "engineering_management": ["technical_program", "program"],
+                "research": ["individual_contributor"],
+                "technical_program": ["engineering_management", "program"],
+                "technical_education": ["individual_contributor"],
+                "product": ["program", "technical_program"],
+                "program": ["product", "technical_program", "engineering_management"],
+            },
+            "adjacent_role_families": {
+                "software_engineering": ["financial_technology", "data_science"],
+                "data_science": ["software_engineering", "financial_technology", "machine_learning_engineering"],
+                "machine_learning_engineering": ["data_science", "software_engineering"],
+                "hardware_engineering": ["software_engineering", "embedded_systems"],
+                "embedded_systems": ["hardware_engineering", "software_engineering"],
+                "financial_technology": ["software_engineering", "data_science"],
+                "technical_education": ["software_engineering"],
+                "product_management": ["software_engineering", "technical_program_management"],
+                "technical_program_management": ["product_management", "software_engineering"],
+            },
+            "order": [
+                "exact_role_exact_track", "exact_role_compatible_track",
+                "adjacent_role_exact_track", "adjacent_role_compatible_track",
+                "primary_selection", "evidence_coverage", "confidence", "durable_id",
+            ],
+        },
+    )
+)
+
+DEFAULT_REGISTRY.register(
+    RegistryEntry(
         artifact_type="qualification_policy",
         version="qualification-policy.v1",
         content={
@@ -325,6 +465,21 @@ DEFAULT_REGISTRY.register(
 
 DEFAULT_REGISTRY.register(
     RegistryEntry(
+        artifact_type="qualification_policy",
+        version="qualification-policy.v2",
+        content={
+            "statuses": ["met", "met_by_alternative", "partially_met", "not_demonstrated"],
+            "required_optional_same_evidence_semantics": True,
+            "positive_statuses_require_evidence": True,
+            "not_demonstrated_has_no_evidence_refs": True,
+            "alternative_refs_only_for_met_by_alternative": True,
+            "scores_and_recommendations_allowed": False,
+        },
+    )
+)
+
+DEFAULT_REGISTRY.register(
+    RegistryEntry(
         artifact_type="input_policy",
         version="qualification-input.v1",
         content={
@@ -332,6 +487,42 @@ DEFAULT_REGISTRY.register(
             "requirements_are_never_omitted": True,
             "candidate_evidence_order": "canonical_source_span_ordinal",
             "derived_candidate_fields_allowed": False,
+        },
+    )
+)
+
+DEFAULT_REGISTRY.register(
+    RegistryEntry(
+        artifact_type="input_policy",
+        version="qualification-input.v2",
+        content={
+            "maximum_utf8_bytes": 100000,
+            "requirements_are_never_omitted": True,
+            "candidate_profile_non_derived_collections_included": True,
+            "candidate_evidence_order": "canonical_source_span_ordinal",
+            "derived_candidate_fields_allowed": False,
+            "job_alternatives": "structured_groups_with_legacy_adapter",
+        },
+    )
+)
+
+DEFAULT_REGISTRY.register(
+    RegistryEntry(
+        artifact_type="semantic_validator",
+        version="matching-semantic-validator.v4",
+        content={
+            "rules": [
+                "exact_single_collection_requirement_coverage",
+                "candidate_evidence_reference_membership",
+                "positive_status_requires_evidence",
+                "not_demonstrated_has_no_evidence_refs",
+                "partial_status_requires_missing_items",
+                "complete_status_has_no_missing_items",
+                "alternative_group_reference_membership",
+                "approved_alternative_policy_membership",
+                "alternative_references_only_for_met_by_alternative",
+                "no_score_weight_rank_eligibility_or_recommendation",
+            ]
         },
     )
 )
@@ -359,6 +550,50 @@ DEFAULT_REGISTRY.register(
         },
     )
 )
+
+DEFAULT_REGISTRY.register(
+    RegistryEntry(
+        artifact_type="alternative_policy",
+        version="general-purpose-programming-language.v2",
+        content={
+            "status": "approved",
+            "approval": "explicit-members-only",
+            "matching_rule": "exact_normalized_members_joined_by_or_slash_or_comma",
+            "minimum_distinct_members": 2,
+            "members": [
+                "C",
+                "C++",
+                "C#",
+                "Go",
+                "Java",
+                "JavaScript",
+                "Kotlin",
+                "Python",
+                "Rust",
+                "Swift",
+                "TypeScript",
+            ],
+        },
+    )
+)
+
+
+def match_explicit_alternative_policy(explicit_alternatives: list[str]) -> str | None:
+    """Return a policy only for an exact, explicit disjunction of registered members."""
+
+    version = "general-purpose-programming-language.v2"
+    entry = DEFAULT_REGISTRY.get("alternative_policy", version)
+    members = {str(member).casefold(): str(member) for member in entry.content["members"]}
+    for alternative in explicit_alternatives:
+        parts = [
+            part.strip().strip(".;:()[]{}\"").casefold()
+            for part in re.split(r"\s*(?:\bor\b|/|,)\s*", alternative, flags=re.IGNORECASE)
+            if part.strip()
+        ]
+        resolved = {members[part] for part in parts if part in members}
+        if len(parts) >= 2 and len(resolved) >= 2 and len(resolved) == len(parts):
+            return version
+    return None
 
 DEFAULT_REGISTRY.register(
     RegistryEntry(

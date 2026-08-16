@@ -87,9 +87,27 @@ def configure_logging(runtime: RuntimeConfig) -> None:
         handler.close()
         alerts.removeHandler(handler)
     alerts.addHandler(_file_handler(log_dir / "alerts.log", runtime))
+
+    prompt_debug = logging.getLogger("dalijob.matching_prompt_debug")
+    prompt_debug.setLevel(logging.INFO)
+    prompt_debug.propagate = False
+    for handler in list(prompt_debug.handlers):
+        handler.close()
+        prompt_debug.removeHandler(handler)
+    if runtime.matching_v2.prompt_debug_enabled:
+        prompt_handler = RotatingFileHandler(
+            log_dir / "matching_prompt_debug.jsonl",
+            maxBytes=runtime.log_max_bytes,
+            backupCount=runtime.log_backup_count,
+            encoding="utf-8",
+        )
+        prompt_handler.setFormatter(logging.Formatter("%(message)s"))
+        prompt_debug.addHandler(prompt_handler)
     try:
         os.chmod(log_dir / "api.log", 0o600)
         os.chmod(log_dir / "alerts.log", 0o600)
+        if runtime.matching_v2.prompt_debug_enabled:
+            os.chmod(log_dir / "matching_prompt_debug.jsonl", 0o600)
     except OSError:
         pass
 

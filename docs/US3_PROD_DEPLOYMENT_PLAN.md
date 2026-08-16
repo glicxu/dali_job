@@ -138,7 +138,7 @@ pool_timeout = 30
 storage_dir = /data/dali/prod/storage/dali_job/documents
 
 [openai]
-model = gpt-4.1-mini
+model = gpt-5.6-luna
 ```
 
 Secrets must not be committed in plaintext unless this follows an existing protected production-config convention in `DaliConfigFile`.

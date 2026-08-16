@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "pair_release": "matching-evaluation-pairs.v1",
+  "benchmark_release": "matching-benchmark-jobs.v1",
+  "candidate_fixture_release": "candidate-fixtures.synthetic.v1",
+  "labeling_policy": "Expectations were assigned before matcher results were observed.",
+  "pairs": [
+    {"pair_id": "pair_backend_strong", "coverage_slot": "software_backend", "candidate_fixture_id": "cand_backend_mid_01", "expectation": "strong", "rationale": "Direct backend and distributed-systems production evidence."},
+    {"pair_id": "pair_backend_adjacent", "coverage_slot": "software_backend", "candidate_fixture_id": "cand_sre_senior_01", "expectation": "adjacent_or_incomplete", "rationale": "Relevant distributed operations evidence but less application-backend depth."},
+    {"pair_id": "pair_backend_mismatch", "coverage_slot": "software_backend", "candidate_fixture_id": "cand_product_senior_01", "expectation": "mismatch", "rationale": "Product leadership does not demonstrate software implementation qualifications."},
+
+    {"pair_id": "pair_infrastructure_strong", "coverage_slot": "software_infrastructure", "candidate_fixture_id": "cand_sre_senior_01", "expectation": "strong", "rationale": "Direct SRE, cloud, incident response, and reliability evidence."},
+    {"pair_id": "pair_infrastructure_adjacent", "coverage_slot": "software_infrastructure", "candidate_fixture_id": "cand_backend_mid_01", "expectation": "adjacent_or_incomplete", "rationale": "Strong services background with incomplete infrastructure ownership evidence."},
+    {"pair_id": "pair_infrastructure_mismatch", "coverage_slot": "software_infrastructure", "candidate_fixture_id": "cand_asic_senior_01", "expectation": "mismatch", "rationale": "Silicon design evidence does not establish cloud or SRE qualifications."},
+
+    {"pair_id": "pair_mobile_strong", "coverage_slot": "software_mobile", "candidate_fixture_id": "cand_mobile_mid_01", "expectation": "strong", "rationale": "Direct native mobile delivery and client-platform evidence."},
+    {"pair_id": "pair_mobile_adjacent", "coverage_slot": "software_mobile", "candidate_fixture_id": "cand_junior_sparse_01", "expectation": "adjacent_or_incomplete", "rationale": "General programming exposure with no demonstrated mobile production work."},
+    {"pair_id": "pair_mobile_mismatch", "coverage_slot": "software_mobile", "candidate_fixture_id": "cand_tpm_senior_01", "expectation": "mismatch", "rationale": "Program delivery evidence does not establish mobile engineering capability."},
+
+    {"pair_id": "pair_ml_strong", "coverage_slot": "ml_data", "candidate_fixture_id": "cand_ml_mid_01", "expectation": "strong", "rationale": "Direct production ML, model evaluation, and data-pipeline evidence."},
+    {"pair_id": "pair_ml_adjacent", "coverage_slot": "ml_data", "candidate_fixture_id": "cand_backend_mid_01", "expectation": "adjacent_or_incomplete", "rationale": "Data-system engineering is relevant but lacks demonstrated ML model work."},
+    {"pair_id": "pair_ml_mismatch", "coverage_slot": "ml_data", "candidate_fixture_id": "cand_firmware_senior_01", "expectation": "mismatch", "rationale": "Embedded firmware evidence does not establish ML or data qualifications."},
+
+    {"pair_id": "pair_hardware_strong", "coverage_slot": "hardware_design", "candidate_fixture_id": "cand_asic_senior_01", "expectation": "strong", "rationale": "Direct ASIC, SoC, verification, timing, and silicon-delivery evidence."},
+    {"pair_id": "pair_hardware_adjacent", "coverage_slot": "hardware_design", "candidate_fixture_id": "cand_firmware_senior_01", "expectation": "adjacent_or_incomplete", "rationale": "Hardware-adjacent embedded work without silicon-design ownership."},
+    {"pair_id": "pair_hardware_mismatch", "coverage_slot": "hardware_design", "candidate_fixture_id": "cand_product_senior_01", "expectation": "mismatch", "rationale": "Product experience does not demonstrate electrical or silicon design."},
+
+    {"pair_id": "pair_firmware_strong", "coverage_slot": "embedded_firmware", "candidate_fixture_id": "cand_firmware_senior_01", "expectation": "strong", "rationale": "Direct RTOS, device-driver, debugging, and embedded delivery evidence."},
+    {"pair_id": "pair_firmware_adjacent", "coverage_slot": "embedded_firmware", "candidate_fixture_id": "cand_asic_senior_01", "expectation": "adjacent_or_incomplete", "rationale": "Close hardware context but incomplete production firmware evidence."},
+    {"pair_id": "pair_firmware_mismatch", "coverage_slot": "embedded_firmware", "candidate_fixture_id": "cand_ml_mid_01", "expectation": "mismatch", "rationale": "ML application evidence does not establish low-level embedded capability."},
+
+    {"pair_id": "pair_product_strong", "coverage_slot": "product_management", "candidate_fixture_id": "cand_product_senior_01", "expectation": "strong", "rationale": "Direct platform product strategy, discovery, prioritization, and launch evidence."},
+    {"pair_id": "pair_product_adjacent", "coverage_slot": "product_management", "candidate_fixture_id": "cand_tpm_senior_01", "expectation": "adjacent_or_incomplete", "rationale": "Cross-functional delivery is relevant but product discovery and ownership are incomplete."},
+    {"pair_id": "pair_product_mismatch", "coverage_slot": "product_management", "candidate_fixture_id": "cand_asic_senior_01", "expectation": "mismatch", "rationale": "Technical silicon evidence does not establish product-management qualifications."},
+
+    {"pair_id": "pair_tpm_strong", "coverage_slot": "technical_program", "candidate_fixture_id": "cand_tpm_senior_01", "expectation": "strong", "rationale": "Direct complex hardware/software program planning and dependency management evidence."},
+    {"pair_id": "pair_tpm_adjacent", "coverage_slot": "technical_program", "candidate_fixture_id": "cand_product_senior_01", "expectation": "adjacent_or_incomplete", "rationale": "Cross-functional leadership is relevant but formal program controls are incomplete."},
+    {"pair_id": "pair_tpm_mismatch", "coverage_slot": "technical_program", "candidate_fixture_id": "cand_junior_sparse_01", "expectation": "mismatch", "rationale": "Sparse junior engineering evidence does not establish senior program leadership."},
+
+    {"pair_id": "pair_manager_strong", "coverage_slot": "engineering_management", "candidate_fixture_id": "cand_manager_01", "expectation": "strong", "rationale": "Direct people management, hiring, delivery, and organizational leadership evidence."},
+    {"pair_id": "pair_manager_adjacent", "coverage_slot": "engineering_management", "candidate_fixture_id": "cand_principal_01", "expectation": "adjacent_or_incomplete", "rationale": "Senior technical leadership without clear line-management ownership."},
+    {"pair_id": "pair_manager_mismatch", "coverage_slot": "engineering_management", "candidate_fixture_id": "cand_mobile_mid_01", "expectation": "mismatch", "rationale": "Individual-contributor mobile delivery does not demonstrate people management."},
+
+    {"pair_id": "pair_principal_strong", "coverage_slot": "principal_architecture", "candidate_fixture_id": "cand_principal_01", "expectation": "strong", "rationale": "Direct principal-level architecture and organization-wide technical leadership evidence."},
+    {"pair_id": "pair_principal_adjacent", "coverage_slot": "principal_architecture", "candidate_fixture_id": "cand_sre_senior_01", "expectation": "adjacent_or_incomplete", "rationale": "Strong senior infrastructure scope without demonstrated principal-level breadth."},
+    {"pair_id": "pair_principal_mismatch", "coverage_slot": "principal_architecture", "candidate_fixture_id": "cand_junior_sparse_01", "expectation": "mismatch", "rationale": "Entry-level sparse evidence is incompatible with principal scope."}
+  ]
+}

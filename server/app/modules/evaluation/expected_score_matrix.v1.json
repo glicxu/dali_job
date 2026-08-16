@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "matrix_release": "matching-expected-scores.v1",
+  "benchmark_release": "matching-benchmark-jobs.v1",
+  "candidate_fixture_release": "candidate-fixtures.synthetic.v1",
+  "scale": {"minimum": 0, "maximum": 100},
+  "score_meaning": "Evidence-backed qualification fit for the frozen resume and job description.",
+  "excluded_factors": ["candidate preference", "location preference", "work authorization", "compensation", "company prestige", "hiring probability"],
+  "bands": [
+    {"minimum": 80, "maximum": 100, "label": "strong_direct_fit"},
+    {"minimum": 65, "maximum": 79, "label": "credible_fit_with_gaps"},
+    {"minimum": 45, "maximum": 64, "label": "adjacent_or_materially_incomplete"},
+    {"minimum": 25, "maximum": 44, "label": "weak_fit"},
+    {"minimum": 0, "maximum": 24, "label": "clear_mismatch"}
+  ],
+  "candidates": [
+    {"code": "C1", "fixture_id": "cand_junior_sparse_01"},
+    {"code": "C2", "fixture_id": "cand_backend_mid_01"},
+    {"code": "C3", "fixture_id": "cand_sre_senior_01"},
+    {"code": "C4", "fixture_id": "cand_mobile_mid_01"},
+    {"code": "C5", "fixture_id": "cand_ml_mid_01"},
+    {"code": "C6", "fixture_id": "cand_asic_senior_01"},
+    {"code": "C7", "fixture_id": "cand_firmware_senior_01"},
+    {"code": "C8", "fixture_id": "cand_product_senior_01"},
+    {"code": "C9", "fixture_id": "cand_tpm_senior_01"},
+    {"code": "C10", "fixture_id": "cand_manager_01"},
+    {"code": "C11", "fixture_id": "cand_principal_01"}
+  ],
+  "jobs": [
+    {
+      "coverage_slot": "software_backend",
+      "company": "Amazon",
+      "title": "Software Development Engineer, Transactional Services (Database & Distributed Systems)",
+      "initial_scores": {"C1": 24, "C2": 94, "C3": 65, "C4": 42, "C5": 49, "C6": 22, "C7": 35, "C8": 10, "C9": 10, "C10": 45, "C11": 78},
+      "expected_ranges": {"C1": [18, 30], "C2": [90, 97], "C3": [58, 72], "C4": [35, 48], "C5": [42, 55], "C6": [15, 28], "C7": [28, 42], "C8": [5, 15], "C9": [5, 15], "C10": [38, 52], "C11": [72, 84]}
+    },
+    {
+      "coverage_slot": "software_infrastructure",
+      "company": "Cloudflare",
+      "title": "Senior Distributed Systems Engineer",
+      "initial_scores": {"C1": 13, "C2": 72, "C3": 94, "C4": 35, "C5": 43, "C6": 10, "C7": 27, "C8": 13, "C9": 18, "C10": 57, "C11": 83},
+      "expected_ranges": {"C1": [8, 18], "C2": [66, 78], "C3": [91, 97], "C4": [28, 42], "C5": [35, 50], "C6": [5, 15], "C7": [20, 34], "C8": [8, 18], "C9": [12, 24], "C10": [50, 64], "C11": [78, 88]}
+    },
+    {
+      "coverage_slot": "software_mobile",
+      "company": "Apple",
+      "title": "iOS Software Engineer, G&A Solutions Engineering (GSE)",
+      "initial_scores": {"C1": 13, "C2": 27, "C3": 27, "C4": 95, "C5": 22, "C6": 13, "C7": 33, "C8": 13, "C9": 13, "C10": 25, "C11": 28},
+      "expected_ranges": {"C1": [8, 18], "C2": [20, 34], "C3": [20, 34], "C4": [92, 98], "C5": [15, 28], "C6": [8, 18], "C7": [25, 40], "C8": [8, 18], "C9": [8, 18], "C10": [18, 32], "C11": [20, 35]}
+    },
+    {
+      "coverage_slot": "ml_data",
+      "company": "NVIDIA",
+      "title": "Machine Learning Engineer, AI Safety",
+      "initial_scores": {"C1": 13, "C2": 52, "C3": 42, "C4": 24, "C5": 96, "C6": 13, "C7": 13, "C8": 25, "C9": 16, "C10": 28, "C11": 48},
+      "expected_ranges": {"C1": [8, 18], "C2": [45, 58], "C3": [35, 48], "C4": [18, 30], "C5": [93, 99], "C6": [8, 18], "C7": [8, 18], "C8": [18, 32], "C9": [10, 22], "C10": [20, 35], "C11": [40, 55]}
+    },
+    {
+      "coverage_slot": "hardware_design",
+      "company": "NVIDIA",
+      "title": "Senior ASIC Design Engineer",
+      "initial_scores": {"C1": 10, "C2": 13, "C3": 13, "C4": 10, "C5": 15, "C6": 97, "C7": 57, "C8": 10, "C9": 33, "C10": 16, "C11": 23},
+      "expected_ranges": {"C1": [5, 15], "C2": [8, 18], "C3": [8, 18], "C4": [5, 15], "C5": [10, 20], "C6": [94, 99], "C7": [50, 64], "C8": [5, 15], "C9": [25, 40], "C10": [10, 22], "C11": [15, 30]}
+    },
+    {
+      "coverage_slot": "embedded_firmware",
+      "company": "Google",
+      "title": "Software Developer, Embedded Systems/Firmware, DNN Frameworks",
+      "initial_scores": {"C1": 15, "C2": 38, "C3": 38, "C4": 28, "C5": 28, "C6": 55, "C7": 96, "C8": 10, "C9": 33, "C10": 33, "C11": 38},
+      "expected_ranges": {"C1": [10, 20], "C2": [30, 45], "C3": [30, 45], "C4": [20, 35], "C5": [20, 35], "C6": [48, 62], "C7": [93, 99], "C8": [5, 15], "C9": [25, 40], "C10": [25, 40], "C11": [30, 45]}
+    },
+    {
+      "coverage_slot": "product_management",
+      "company": "Google",
+      "title": "Product Manager, Google Global Infrastructure",
+      "initial_scores": {"C1": 10, "C2": 28, "C3": 33, "C4": 28, "C5": 38, "C6": 13, "C7": 13, "C8": 85, "C9": 59, "C10": 43, "C11": 53},
+      "expected_ranges": {"C1": [5, 15], "C2": [20, 35], "C3": [25, 40], "C4": [20, 35], "C5": [30, 45], "C6": [8, 18], "C7": [8, 18], "C8": [80, 90], "C9": [52, 66], "C10": [35, 50], "C11": [45, 60]}
+    },
+    {
+      "coverage_slot": "technical_program",
+      "company": "Apple",
+      "title": "Engineering Program Manager, Acoustics",
+      "initial_scores": {"C1": 7, "C2": 22, "C3": 27, "C4": 27, "C5": 27, "C6": 43, "C7": 48, "C8": 59, "C9": 97, "C10": 52, "C11": 42},
+      "expected_ranges": {"C1": [3, 10], "C2": [15, 28], "C3": [20, 34], "C4": [20, 34], "C5": [20, 34], "C6": [35, 50], "C7": [40, 55], "C8": [52, 66], "C9": [94, 99], "C10": [45, 58], "C11": [35, 48]}
+    },
+    {
+      "coverage_slot": "engineering_management",
+      "company": "Microsoft",
+      "title": "Principal Software Engineering Manager - Search",
+      "initial_scores": {"C1": 5, "C2": 28, "C3": 43, "C4": 20, "C5": 33, "C6": 13, "C7": 22, "C8": 28, "C9": 43, "C10": 97, "C11": 65},
+      "expected_ranges": {"C1": [2, 8], "C2": [20, 35], "C3": [35, 50], "C4": [15, 25], "C5": [25, 40], "C6": [8, 18], "C7": [15, 28], "C8": [20, 35], "C9": [35, 50], "C10": [94, 99], "C11": [58, 72]}
+    },
+    {
+      "coverage_slot": "principal_architecture",
+      "company": "Amazon",
+      "title": "Principal Software Engineer, Device Cloud Core Services",
+      "initial_scores": {"C1": 4, "C2": 53, "C3": 59, "C4": 28, "C5": 33, "C6": 13, "C7": 33, "C8": 33, "C9": 38, "C10": 59, "C11": 97},
+      "expected_ranges": {"C1": [0, 8], "C2": [45, 60], "C3": [52, 66], "C4": [20, 35], "C5": [25, 40], "C6": [8, 18], "C7": [25, 40], "C8": [25, 40], "C9": [30, 45], "C10": [52, 66], "C11": [95, 99]}
+    }
+  ]
+}

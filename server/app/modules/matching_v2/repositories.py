@@ -299,13 +299,13 @@ def create_or_get_job_profile(
     model_id: str,
     jobs_cache_id: int | None = None,
     provider_execution_reference: str | None = None,
-    schema_version: str = "job-profile.v1",
-    response_schema_version: str = "job-extract-response.v1",
-    prompt_version: str = "job-extract.v1",
-    taxonomy_version: str = "matching-taxonomy.v1",
+    schema_version: str = "job-profile.v3",
+    response_schema_version: str = "job-extract-response.v3",
+    prompt_version: str = "job-extract.v3",
+    taxonomy_version: str = "matching-taxonomy.v2",
     source_policy_version: str = "cached-job-reuse.v1",
-    deduplication_version: str = "job-dedup.v1",
-    semantic_validator_version: str = "matching-semantic-validator.v1",
+    deduplication_version: str = "job-dedup.v2",
+    semantic_validator_version: str = "matching-semantic-validator.v3",
 ) -> JobProfileVersion:
     from app.modules.jobs.models import JobCache
 
@@ -365,10 +365,13 @@ def create_or_get_job_profile(
             scoring_dimension=item.scoring_dimension,
             statement=item.statement,
             importance=item.importance,
-            hard_constraint=item.hard_constraint,
+            # Legacy storage/qualification adapter. Job Profile v3 has no hard constraints.
+            hard_constraint=False,
             acceptable_evidence_contexts=item.acceptable_evidence_contexts,
             minimum_years=item.minimum_years,
-            explicit_alternatives=item.explicit_alternatives,
+            explicit_alternatives=[
+                " or ".join(group.any_of) for group in item.alternative_groups
+            ],
             policy_alternative_group=item.policy_alternative_group,
             source_refs=item.source_refs,
         ))
@@ -381,13 +384,13 @@ def find_cached_job_profile(
     *,
     source: CanonicalSource,
     model_id: str,
-    schema_version: str = "job-profile.v1",
-    response_schema_version: str = "job-extract-response.v1",
-    prompt_version: str = "job-extract.v1",
-    taxonomy_version: str = "matching-taxonomy.v1",
+    schema_version: str = "job-profile.v3",
+    response_schema_version: str = "job-extract-response.v3",
+    prompt_version: str = "job-extract.v3",
+    taxonomy_version: str = "matching-taxonomy.v2",
     source_policy_version: str = "cached-job-reuse.v1",
-    deduplication_version: str = "job-dedup.v1",
-    semantic_validator_version: str = "matching-semantic-validator.v1",
+    deduplication_version: str = "job-dedup.v2",
+    semantic_validator_version: str = "matching-semantic-validator.v3",
 ) -> JobProfileVersion | None:
     cache_key, _ = job_profile_cache_identity(
         source=source,
@@ -461,13 +464,13 @@ def create_or_get_qualification_assessment(
     input_quality: dict,
     model_id: str,
     provider_execution_reference: str | None = None,
-    schema_version: str = "qualification-assessment.v1",
-    response_schema_version: str = "qualification-assessment-response.v1",
-    prompt_version: str = "qualification-match.v1",
-    selection_policy_version: str = "career-selection-policy.v1",
-    matching_policy_version: str = "qualification-policy.v1",
-    input_policy_version: str = "qualification-input.v1",
-    semantic_validator_version: str = "matching-semantic-validator.v1",
+    schema_version: str = "qualification-assessment.v2",
+    response_schema_version: str = "qualification-assessment-response.v2",
+    prompt_version: str = "qualification-match.v2",
+    selection_policy_version: str = "career-selection-policy.v2",
+    matching_policy_version: str = "qualification-policy.v2",
+    input_policy_version: str = "qualification-input.v2",
+    semantic_validator_version: str = "matching-semantic-validator.v4",
 ) -> QualificationAssessment:
     if owner.kind == "shared":
         raise ArtifactOwnershipError("Qualification Assessments must have a private owner.")
@@ -486,10 +489,7 @@ def create_or_get_qualification_assessment(
         JobRequirement.job_profile_version_id == job_profile.id
     )).all())
     by_public_id = {item.requirement_id: item for item in requirements}
-    returned_ids = {
-        item.requirement_id
-        for item in [*artifact.requirement_assessments, *artifact.hard_constraint_assessments]
-    }
+    returned_ids = {item.requirement_id for item in artifact.requirement_assessments}
     if returned_ids != set(by_public_id):
         raise ValueError("Qualification Assessment does not cover the Job Profile requirements.")
     cache_key, response_schema_hash, alternative_hashes = qualification_cache_identity(
@@ -541,24 +541,21 @@ def create_or_get_qualification_assessment(
     )
     db.add(assessment)
     db.flush()
-    for collection_kind, items in (
-        ("normal", artifact.requirement_assessments),
-        ("hard_constraint", artifact.hard_constraint_assessments),
-    ):
-        for item in items:
-            requirement = by_public_id[item.requirement_id]
-            db.add(RequirementAssessment(
-                qualification_assessment_id=assessment.id,
-                job_requirement_id=requirement.id,
-                requirement_id=item.requirement_id,
-                collection_kind=collection_kind,
-                status=item.status,
-                confidence=item.confidence,
-                evidence_refs=item.evidence_refs,
-                alternative_policy_ref=item.alternative_policy_ref,
-                reason=item.reason,
-                missing=item.missing,
-            ))
+    for item in artifact.requirement_assessments:
+        requirement = by_public_id[item.requirement_id]
+        db.add(RequirementAssessment(
+            qualification_assessment_id=assessment.id,
+            job_requirement_id=requirement.id,
+            requirement_id=item.requirement_id,
+            collection_kind="normal",
+            status=item.status,
+            confidence=item.confidence,
+            evidence_refs=item.evidence_refs,
+            alternative_group_refs=item.alternative_group_refs,
+            alternative_policy_ref=item.alternative_policy_ref,
+            reason=item.reason,
+            missing=item.missing,
+        ))
     db.flush()
     return assessment
 
@@ -570,13 +567,13 @@ def find_cached_qualification_assessment(
     selection_revision: int,
     job_profile: JobProfileVersion,
     model_id: str,
-    schema_version: str = "qualification-assessment.v1",
-    response_schema_version: str = "qualification-assessment-response.v1",
-    prompt_version: str = "qualification-match.v1",
-    selection_policy_version: str = "career-selection-policy.v1",
-    matching_policy_version: str = "qualification-policy.v1",
-    input_policy_version: str = "qualification-input.v1",
-    semantic_validator_version: str = "matching-semantic-validator.v1",
+    schema_version: str = "qualification-assessment.v2",
+    response_schema_version: str = "qualification-assessment-response.v2",
+    prompt_version: str = "qualification-match.v2",
+    selection_policy_version: str = "career-selection-policy.v2",
+    matching_policy_version: str = "qualification-policy.v2",
+    input_policy_version: str = "qualification-input.v2",
+    semantic_validator_version: str = "matching-semantic-validator.v4",
 ) -> QualificationAssessment | None:
     requirements = list(db.scalars(select(JobRequirement).where(
         JobRequirement.job_profile_version_id == job_profile.id

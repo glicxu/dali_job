@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "sample_release": "matching-agent-score-sample.v1",
+  "execution_environment": "us3",
+  "execution_policy": "One attempt per pair; no retry and no expected score supplied to the agent.",
+  "summary": {"attempted": 10, "completed": 2, "failed_validation": 8, "numeric_agent_scores_returned": 0},
+  "results": [
+    {"sample_id": "strong_ml", "initial_expected_score": 96, "outcome": "failed_validation", "agent_score": null, "error_code": "INVALID_QUALIFICATION_RESPONSE", "error": "met_by_alternative requires an explicit or approved alternative."},
+    {"sample_id": "strong_manager", "initial_expected_score": 97, "outcome": "failed_validation", "agent_score": null, "error_code": "INVALID_JOB_PROFILE_RESPONSE", "error": "The job-profile provider returned an invalid response."},
+    {"sample_id": "credible_backend_infra", "initial_expected_score": 72, "outcome": "failed_validation", "agent_score": null, "error_code": "INVALID_QUALIFICATION_RESPONSE", "error": "Alternative policy references are valid only for met_by_alternative."},
+    {"sample_id": "credible_principal_manager", "initial_expected_score": 65, "outcome": "failed_validation", "agent_score": null, "error_code": "INVALID_JOB_PROFILE_RESPONSE", "error": "The job-profile provider returned an invalid response."},
+    {"sample_id": "adjacent_firmware_asic", "initial_expected_score": 57, "outcome": "failed_validation", "agent_score": null, "error_code": "INVALID_QUALIFICATION_RESPONSE", "error": "not_demonstrated cannot cite evidence as support."},
+    {"sample_id": "adjacent_tpm_product", "initial_expected_score": 59, "outcome": "completed", "agent_score": null, "run_id": "evr_513eb95470714b1586478baf4027172d", "requirements": 9, "qualification_statuses": {"met": 4, "partially_met": 2, "not_demonstrated": 3}, "score_generated": false},
+    {"sample_id": "weak_firmware_mobile", "initial_expected_score": 33, "outcome": "failed_validation", "agent_score": null, "error_code": "INVALID_QUALIFICATION_RESPONSE", "error": "Qualification response must assess every normal requirement exactly once."},
+    {"sample_id": "weak_backend_embedded", "initial_expected_score": 38, "outcome": "completed", "agent_score": null, "run_id": "evr_54d56d554f0a4a279fddfe62513aabc1", "requirements": 8, "qualification_statuses": {"met": 1, "partially_met": 1, "not_demonstrated": 5, "needs_clarification": 1}, "score_generated": false},
+    {"sample_id": "mismatch_product_asic", "initial_expected_score": 10, "outcome": "failed_validation", "agent_score": null, "error_code": "INVALID_QUALIFICATION_RESPONSE", "error": "not_demonstrated cannot cite evidence as support."},
+    {"sample_id": "mismatch_junior_principal", "initial_expected_score": 4, "outcome": "failed_validation", "agent_score": null, "error_code": "INVALID_QUALIFICATION_RESPONSE", "error": "Alternative policy references are valid only for met_by_alternative."}
+  ]
+}

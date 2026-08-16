@@ -20,6 +20,7 @@ DEFAULT_LOG_LEVEL = "info"
 DEFAULT_ENV_NAME = "local"
 DEFAULT_CLIENT_ORIGIN = "http://localhost:3000"
 DEFAULT_CLIENT_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+DEFAULT_OPENAI_MODEL = "gpt-5.6-luna"
 DEFAULT_PROVIDER_USER_LIMIT_PER_MINUTE = 20
 DEFAULT_PROVIDER_IP_LIMIT_PER_MINUTE = 60
 DEFAULT_AUTH_LOGIN_IP_LIMIT = 30
@@ -50,6 +51,7 @@ class MatchingV2FeatureFlags:
     web_enabled: bool = False
     mobile_enabled: bool = False
     evaluation_enabled: bool = False
+    prompt_debug_enabled: bool = False
     legacy_adapter_enabled: bool = True
 
 
@@ -239,8 +241,8 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         client_origin_regex = ""
     openai_model = (
         os.getenv("DALIJOB_OPENAI_MODEL", "").strip()
-        or read_config_value("openai", "model", "gpt-4.1-mini")
-        or "gpt-4.1-mini"
+        or read_config_value("openai", "model", DEFAULT_OPENAI_MODEL)
+        or DEFAULT_OPENAI_MODEL
     )
     ask_scout_model = (
         os.getenv("DALIJOB_ASK_SCOUT_MODEL", "").strip()
@@ -438,6 +440,11 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         evaluation_enabled=_coerce_bool(
             os.getenv("DALIJOB_MATCHING_V2_EVALUATION_ENABLED", "").strip()
             or read_config_value("matching_v2", "evaluation_enabled", "false"),
+            False,
+        ),
+        prompt_debug_enabled=_coerce_bool(
+            os.getenv("DALIJOB_MATCHING_V2_PROMPT_DEBUG_ENABLED", "").strip()
+            or read_config_value("matching_v2", "prompt_debug_enabled", "false"),
             False,
         ),
         legacy_adapter_enabled=_coerce_bool(

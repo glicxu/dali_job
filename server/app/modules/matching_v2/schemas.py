@@ -32,6 +32,15 @@ RoleFamily = Literal[
     "product_management",
     "unknown",
 ]
+JobCareerTrack = Literal[
+    "individual_contributor", "architect", "engineering_management", "research",
+    "technical_program", "technical_education", "product", "program", "unknown",
+]
+JobRoleFamily = Literal[
+    "software_engineering", "data_science", "financial_technology", "technical_education",
+    "product_management", "machine_learning_engineering", "hardware_engineering",
+    "embedded_systems", "technical_program_management", "unknown",
+]
 EvidenceStrength = Literal["claimed", "demonstrated"]
 EvidenceContext = Literal["professional", "academic", "personal", "open_source", "volunteer", "unknown"]
 DimensionSignal = Literal["not_applicable", "not_demonstrated", "limited", "developing", "demonstrated", "advanced"]
@@ -185,14 +194,20 @@ class CareerLevelRangeResponse(StrictModel):
 
 
 class JobCareerContextResponse(StrictModel):
-    primary_role_family: RoleFamily
-    adjacent_role_families: list[RoleFamily] = Field(max_length=5)
-    track: CareerTrack
+    primary_role_family: JobRoleFamily
+    adjacent_role_families: list[JobRoleFamily] = Field(max_length=5)
+    track: JobCareerTrack
     target_level: CareerLevel
     acceptable_level_range: CareerLevelRangeResponse | None
     level_source: Literal["explicit", "inferred_from_requirements", "unknown"]
     confidence: float = Field(ge=0, le=1)
     evidence_refs: list[str] = Field(min_length=1, max_length=10)
+
+
+class LegacyJobCareerContextResponse(JobCareerContextResponse):
+    primary_role_family: RoleFamily
+    adjacent_role_families: list[RoleFamily] = Field(max_length=5)
+    track: CareerTrack
 
 
 class JobCompensationResponse(StrictModel):
@@ -209,7 +224,7 @@ class JobCompensationResponse(StrictModel):
         return self
 
 
-class JobRequirementResponse(StrictModel):
+class LegacyJobRequirementResponse(StrictModel):
     local_ref: str = Field(min_length=1, max_length=100, pattern=r"^[a-z][a-z0-9_]*$")
     category: Literal["skill", "experience", "education", "certification", "domain", "other"]
     scoring_dimension: RequirementDimension
@@ -221,6 +236,52 @@ class JobRequirementResponse(StrictModel):
     explicit_alternatives: list[str] = Field(max_length=20)
     policy_alternative_group: str | None = Field(max_length=120)
     source_refs: list[str] = Field(min_length=1, max_length=10)
+
+
+class JobAlternativeGroupResponse(StrictModel):
+    local_ref: str = Field(min_length=1, max_length=100, pattern=r"^[a-z][a-z0-9_]*$")
+    any_of: list[str] = Field(min_length=2, max_length=20)
+    source_refs: list[str] = Field(min_length=1, max_length=10)
+
+
+class JobRequirementResponse(StrictModel):
+    local_ref: str = Field(min_length=1, max_length=100, pattern=r"^[a-z][a-z0-9_]*$")
+    category: Literal["skill", "experience", "education", "certification", "domain", "other"]
+    scoring_dimension: RequirementDimension
+    statement: str = Field(min_length=1, max_length=1_000)
+    importance: Literal["required", "optional"]
+    acceptable_evidence_contexts: list[EvidenceContext] = Field(max_length=6)
+    minimum_years: float | None = Field(ge=0, le=100)
+    alternative_groups: list[JobAlternativeGroupResponse] = Field(max_length=10)
+    policy_alternative_group: str | None = Field(max_length=120)
+    source_refs: list[str] = Field(min_length=1, max_length=10)
+
+    @model_validator(mode="after")
+    def validate_alternative_groups(self) -> JobRequirementResponse:
+        refs = [group.local_ref for group in self.alternative_groups]
+        if len(refs) != len(set(refs)):
+            raise ValueError("Alternative-group local_ref values must be unique within a requirement.")
+        for group in self.alternative_groups:
+            normalized = {item.casefold().strip() for item in group.any_of}
+            if len(normalized) != len(group.any_of):
+                raise ValueError("Alternative-group any_of members must be distinct.")
+        return self
+
+
+class JobRequirementProviderResponse(JobRequirementResponse):
+    """Provider-owned v3 requirement fields; server policy IDs are never model-owned."""
+
+    policy_alternative_group: None
+
+
+class JobCompensationProviderResponse(StrictModel):
+    """Compensation is intentionally excluded from model ownership in Job Profile v3."""
+
+    currency: None
+    period: Literal["unknown"]
+    minimum: None
+    maximum: None
+    is_employer_provided: Literal[False]
 
 
 class JobResponsibilityResponse(StrictModel):
@@ -239,6 +300,37 @@ class JobCleanupResponse(StrictModel):
     duplicate_spans_removed: int = Field(ge=0)
     boilerplate_spans_ignored: int = Field(ge=0)
     warnings: list[str] = Field(max_length=20)
+
+
+class JobCleanupProviderResponse(JobCleanupResponse):
+    """Cleanup counters are computed from canonical spans by the server."""
+
+    duplicate_spans_removed: Literal[0]
+    boilerplate_spans_ignored: Literal[0]
+
+
+class LegacyJobExtractionResponse(StrictModel):
+    title: str = Field(min_length=1, max_length=300)
+    company: str | None = Field(max_length=300)
+    location: JobLocationResponse
+    employment_type: Literal[
+        "full_time", "part_time", "contract", "temporary", "internship", "unknown"
+    ]
+    career_context: LegacyJobCareerContextResponse
+    compensation: JobCompensationResponse
+    requirements: list[LegacyJobRequirementResponse] = Field(max_length=50)
+    responsibilities: list[JobResponsibilityResponse] = Field(max_length=50)
+    application_constraints: JobApplicationConstraintsResponse
+    cleanup: JobCleanupResponse
+
+
+class LegacyJobRequirementProviderResponse(LegacyJobRequirementResponse):
+    policy_alternative_group: None
+
+
+class LegacyJobExtractionProviderResponse(LegacyJobExtractionResponse):
+    requirements: list[LegacyJobRequirementProviderResponse] = Field(max_length=50)
+    cleanup: JobCleanupProviderResponse
 
 
 class JobExtractionResponse(StrictModel):
@@ -268,7 +360,15 @@ class JobExtractionResponse(StrictModel):
         return self
 
 
-class QualificationItemResponse(StrictModel):
+class JobExtractionProviderResponse(JobExtractionResponse):
+    """Strict model response DTO, converted to JobExtractionResponse before persistence."""
+
+    requirements: list[JobRequirementProviderResponse] = Field(max_length=50)
+    compensation: JobCompensationProviderResponse
+    cleanup: JobCleanupProviderResponse
+
+
+class LegacyQualificationItemResponse(StrictModel):
     requirement_id: str = Field(min_length=1, max_length=100)
     status: QualificationStatus
     confidence: float = Field(ge=0, le=1)
@@ -278,9 +378,24 @@ class QualificationItemResponse(StrictModel):
     missing: list[str] = Field(max_length=10)
 
 
+class LegacyQualificationAssessmentResponse(StrictModel):
+    requirement_assessments: list[LegacyQualificationItemResponse] = Field(max_length=50)
+    hard_constraint_assessments: list[LegacyQualificationItemResponse] = Field(max_length=50)
+
+
+class QualificationItemResponse(StrictModel):
+    requirement_id: str = Field(min_length=1, max_length=100)
+    status: Literal["met", "met_by_alternative", "partially_met", "not_demonstrated"]
+    confidence: float = Field(ge=0, le=1)
+    evidence_refs: list[str] = Field(max_length=10)
+    alternative_group_refs: list[str] = Field(max_length=10)
+    alternative_policy_ref: str | None = Field(max_length=120)
+    reason: str = Field(min_length=1, max_length=1_000)
+    missing: list[str] = Field(max_length=10)
+
+
 class QualificationAssessmentResponse(StrictModel):
     requirement_assessments: list[QualificationItemResponse] = Field(max_length=50)
-    hard_constraint_assessments: list[QualificationItemResponse] = Field(max_length=50)
 
 
 def normalized_json_schema(model: type[BaseModel]) -> dict[str, Any]:
@@ -315,8 +430,8 @@ def candidate_response_format(allowed_evidence_refs: Sequence[str]) -> dict[str,
 
 def job_response_format(allowed_source_refs: Sequence[str]) -> dict[str, Any]:
     return strict_response_format(
-        JobExtractionResponse,
-        name="dalijob_job_extract_v1",
+        JobExtractionProviderResponse,
+        name="dalijob_job_extract_v3",
         enum_restrictions={"source_refs": allowed_source_refs, "evidence_refs": allowed_source_refs},
     )
 
@@ -328,7 +443,7 @@ def qualification_response_format(
 ) -> dict[str, Any]:
     return strict_response_format(
         QualificationAssessmentResponse,
-        name="dalijob_qualification_assessment_v1",
+        name="dalijob_qualification_assessment_v2",
         enum_restrictions={
             "requirement_id": allowed_requirement_ids,
             "evidence_refs": allowed_evidence_refs,

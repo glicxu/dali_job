@@ -10,16 +10,24 @@ from openai import OpenAI
 from pydantic import ValidationError
 
 from app.core.secrets import get_provider_secret
+from app.modules.matching_v2.diagnostics import (
+    record_model_error,
+    record_model_request,
+    record_model_response,
+    record_validation_error,
+)
 from app.modules.matching_v2.canonical import EvidenceSpan
 from app.modules.matching_v2.prompts import (
     CANDIDATE_EXTRACTION_SYSTEM_PROMPT,
     JOB_EXTRACTION_SYSTEM_PROMPT,
     build_extraction_user_prompt,
+    build_job_repair_user_prompt,
 )
-from app.modules.matching_v2.registry import DEFAULT_REGISTRY
+from app.modules.matching_v2.registry import DEFAULT_REGISTRY, match_explicit_alternative_policy
 from app.modules.matching_v2.schemas import (
     CandidateExtractionResponse,
     JobExtractionResponse,
+    JobExtractionProviderResponse,
     candidate_response_format,
     job_response_format,
 )
@@ -82,6 +90,16 @@ class JobExtractionResult:
     model_id: str
     provider_execution_reference: str | None
     omitted_span_ids: tuple[str, ...] = ()
+    repair_attempted: bool = False
+    repair_count: int = 0
+
+
+class JobProfileValidationFailed(HTTPException):
+    """Privacy-safe public failure for an invalid provider extraction."""
+
+    def __init__(self, *, repair_attempted: bool) -> None:
+        super().__init__(status_code=status.HTTP_502_BAD_GATEWAY, detail="Job Profile validation failed.")
+        self.repair_attempted = repair_attempted
 
 
 class CandidateProfileExtractor(Protocol):
@@ -112,30 +130,46 @@ class OpenAICandidateProfileExtractor:
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="The resume does not contain usable evidence spans.",
             )
-        response = self._client.chat.completions.create(
+        user_prompt = build_extraction_user_prompt(
+            spans=[
+                {
+                    "span_id": span.span_id,
+                    "section": span.section,
+                    "excerpt": span.excerpt,
+                }
+                for span in selected
+            ]
+        )
+        response_format = {
+            "type": "json_schema",
+            "json_schema": candidate_response_format([span.span_id for span in selected]),
+        }
+        record_model_request(
+            stage="candidate_profile",
+            model=self._model,
+            system_prompt=CANDIDATE_EXTRACTION_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            response_format=response_format,
+        )
+        try:
+            response = self._client.chat.completions.create(
             model=self._model,
             messages=[
                 {"role": "system", "content": CANDIDATE_EXTRACTION_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": build_extraction_user_prompt(
-                        spans=[
-                            {
-                                "span_id": span.span_id,
-                                "section": span.section,
-                                "excerpt": span.excerpt,
-                            }
-                            for span in selected
-                        ]
-                    ),
-                },
+                {"role": "user", "content": user_prompt},
             ],
-            response_format={
-                "type": "json_schema",
-                "json_schema": candidate_response_format([span.span_id for span in selected]),
-            },
-        )
+            response_format=response_format,
+            )
+        except Exception as exc:
+            record_model_error(stage="candidate_profile", model=self._model, error=exc)
+            raise
         content = response.choices[0].message.content
+        record_model_response(
+            stage="candidate_profile",
+            model=self._model,
+            provider_response_id=getattr(response, "id", None),
+            content=content,
+        )
         if content is None:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
@@ -145,6 +179,7 @@ class OpenAICandidateProfileExtractor:
             artifact = CandidateExtractionResponse.model_validate(json.loads(content))
             artifact = validate_candidate_extraction(artifact, {span.span_id for span in selected})
         except (json.JSONDecodeError, ValidationError, ValueError) as exc:
+            record_validation_error(stage="candidate_profile", model=self._model, error=exc)
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="The candidate-profile provider returned an invalid response.",
@@ -192,44 +227,136 @@ class OpenAIJobProfileExtractor:
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="The job description does not contain usable evidence spans.",
             )
-        response = self._client.chat.completions.create(
-            model=self._model,
-            messages=[
-                {"role": "system", "content": JOB_EXTRACTION_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": build_extraction_user_prompt(
-                        spans=[
-                            {"span_id": span.span_id, "section": span.section, "excerpt": span.excerpt}
-                            for span in selected
-                        ]
-                    ),
-                },
-            ],
-            response_format={
-                "type": "json_schema",
-                "json_schema": job_response_format([span.span_id for span in selected]),
-            },
+        span_payload = [
+            {"span_id": span.span_id, "section": span.section, "excerpt": span.excerpt}
+            for span in selected
+        ]
+        user_prompt = build_extraction_user_prompt(spans=span_payload)
+        allowed_refs = {span.span_id for span in selected}
+        response_format = {
+            "type": "json_schema",
+            "json_schema": job_response_format(sorted(allowed_refs)),
+        }
+        response, content = self._request(
+            stage="job_profile",
+            user_prompt=user_prompt,
+            response_format=response_format,
         )
-        content = response.choices[0].message.content
         if content is None:
-            raise HTTPException(status_code=502, detail="The job-profile provider returned an empty response.")
+            raise JobProfileValidationFailed(repair_attempted=False)
+        provider_reference = getattr(response, "id", None)
+        repair_attempted = False
         try:
-            artifact = JobExtractionResponse.model_validate(json.loads(content))
+            artifact = self._decode_and_validate(
+                content,
+                allowed_refs=allowed_refs,
+                source_spans=selected,
+                cleanup=cleanup,
+                omitted_span_count=len(omitted),
+            )
+        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
+            record_validation_error(stage="job_profile", model=self._model, error=exc)
+            repair_attempted = True
+            repair_prompt = build_job_repair_user_prompt(
+                spans=span_payload,
+                errors=job_validation_feedback(exc),
+            )
+            repair_response, repair_content = self._request(
+                stage="job_profile_repair",
+                user_prompt=repair_prompt,
+                response_format=response_format,
+            )
+            provider_reference = getattr(repair_response, "id", None)
+            if repair_content is None:
+                raise JobProfileValidationFailed(repair_attempted=True) from exc
+            try:
+                artifact = self._decode_and_validate(
+                    repair_content,
+                    allowed_refs=allowed_refs,
+                    source_spans=selected,
+                    cleanup=cleanup,
+                    omitted_span_count=len(omitted),
+                )
+            except (json.JSONDecodeError, ValidationError, ValueError) as repair_exc:
+                record_validation_error(stage="job_profile_repair", model=self._model, error=repair_exc)
+                raise JobProfileValidationFailed(repair_attempted=True) from repair_exc
+
+        artifact = assign_alternative_policies(artifact)
+        try:
             artifact = validate_job_extraction(
                 artifact,
-                {span.span_id for span in selected},
+                allowed_refs,
+                source_spans=selected,
                 duplicate_spans_removed=cleanup.duplicate_spans_removed,
                 boilerplate_spans_ignored=cleanup.boilerplate_spans_ignored,
                 omitted_span_count=len(omitted),
             )
-        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-            raise HTTPException(status_code=502, detail="The job-profile provider returned an invalid response.") from exc
+        except (ValidationError, ValueError) as exc:
+            record_validation_error(stage="job_profile_policy_assignment", model=self._model, error=exc)
+            raise JobProfileValidationFailed(repair_attempted=repair_attempted) from exc
+
         return JobExtractionResult(
             artifact=artifact,
             model_id=self._model,
-            provider_execution_reference=getattr(response, "id", None),
+            provider_execution_reference=provider_reference,
             omitted_span_ids=tuple(span.span_id for span in omitted),
+            repair_attempted=repair_attempted,
+            repair_count=1 if repair_attempted else 0,
+        )
+
+    def _request(
+        self,
+        *,
+        stage: str,
+        user_prompt: str,
+        response_format: dict[str, object],
+    ) -> tuple[object, str | None]:
+        record_model_request(
+            stage=stage,
+            model=self._model,
+            system_prompt=JOB_EXTRACTION_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            response_format=response_format,
+        )
+        try:
+            response = self._client.chat.completions.create(
+                model=self._model,
+                messages=[
+                    {"role": "system", "content": JOB_EXTRACTION_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format=response_format,
+            )
+        except Exception as exc:
+            record_model_error(stage=stage, model=self._model, error=exc)
+            raise
+        content = response.choices[0].message.content
+        record_model_response(
+            stage=stage,
+            model=self._model,
+            provider_response_id=getattr(response, "id", None),
+            content=content,
+        )
+        return response, content
+
+    @staticmethod
+    def _decode_and_validate(
+        content: str,
+        *,
+        allowed_refs: set[str],
+        source_spans: list[EvidenceSpan],
+        cleanup: JobCleanupResult,
+        omitted_span_count: int,
+    ) -> JobExtractionResponse:
+        provider_artifact = JobExtractionProviderResponse.model_validate(json.loads(content))
+        artifact = JobExtractionResponse.model_validate(provider_artifact.model_dump(mode="json"))
+        return validate_job_extraction(
+            artifact,
+            allowed_refs,
+            source_spans=source_spans,
+            duplicate_spans_removed=cleanup.duplicate_spans_removed,
+            boilerplate_spans_ignored=cleanup.boilerplate_spans_ignored,
+            omitted_span_count=omitted_span_count,
         )
 
 
@@ -268,7 +395,9 @@ def cleanup_job_spans(spans: list[EvidenceSpan]) -> JobCleanupResult:
             duplicate_count += 1
             continue
         seen.add(normalized)
-        if any(marker in normalized for marker in _BOILERPLATE_MARKERS):
+        # Evidence spans may contain a valid section followed by a legal/footer fragment.
+        # Drop only spans that are themselves boilerplate, not mixed substantive spans.
+        if any(normalized.startswith(marker) for marker in _BOILERPLATE_MARKERS):
             boilerplate_count += 1
             continue
         kept.append(span)
@@ -295,10 +424,82 @@ def select_job_model_spans(
     )
 
 
+def assign_alternative_policies(artifact: JobExtractionResponse) -> JobExtractionResponse:
+    """Assign registry IDs from normalized employer alternatives; the model never owns them."""
+
+    requirements = [
+        requirement.model_copy(update={
+            "policy_alternative_group": match_explicit_alternative_policy(
+                [" or ".join(_alternative_members(group)) for group in requirement.alternative_groups]
+            )
+        })
+        for requirement in artifact.requirements
+    ]
+    return artifact.model_copy(update={"requirements": requirements})
+
+
+def job_validation_feedback(exc: Exception) -> list[dict[str, str]]:
+    """Convert detailed local failures into bounded, value-free repair feedback."""
+
+    if isinstance(exc, ValidationError):
+        feedback: list[dict[str, str]] = []
+        for error in exc.errors(include_url=False, include_context=False, include_input=False)[:10]:
+            feedback.append({
+                "code": "SCHEMA_VALIDATION_FAILED",
+                "path": _json_path(error.get("loc", ())),
+                "message": "the value does not satisfy the required output schema",
+            })
+        return feedback or [{
+            "code": "SCHEMA_VALIDATION_FAILED",
+            "path": "$",
+            "message": "the response does not satisfy the required output schema",
+        }]
+
+    message = str(exc)
+    rules = (
+        ("Unknown job source references", "UNKNOWN_SOURCE_REFERENCE", "$", "all source references must use supplied span IDs"),
+        ("level range cannot contain unknown", "INVALID_LEVEL_ENDPOINT", "$.career_context.acceptable_level_range", "level range endpoints must be concrete permitted levels"),
+        ("level range minimum cannot exceed", "LEVEL_RANGE_REVERSED", "$.career_context.acceptable_level_range", "minimum level must not exceed maximum level"),
+        ("Compensation minimum cannot exceed", "COMPENSATION_RANGE_REVERSED", "$.compensation", "compensation minimum must not exceed maximum"),
+        ("duplicates an application constraint", "DUPLICATE_APPLICATION_CONSTRAINT", "$.requirements", "a represented application constraint must not also be a requirement"),
+        ("primary role family cannot be adjacent", "DUPLICATE_ADJACENT_ROLE", "$.career_context.adjacent_role_families", "the primary role family must not appear as adjacent"),
+        ("unknown cannot be an adjacent", "UNKNOWN_ADJACENT_ROLE", "$.career_context.adjacent_role_families", "unknown is not an adjacent role family"),
+        ("Missing required-section coverage", "MISSING_REQUIRED_SECTION_COVERAGE", "$.requirements", "extract all substantive required qualifications"),
+        ("Missing optional-section coverage", "MISSING_OPTIONAL_SECTION_COVERAGE", "$.requirements", "extract all substantive optional qualifications"),
+        ("Missing responsibility-section coverage", "MISSING_RESPONSIBILITY_SECTION_COVERAGE", "$.responsibilities", "extract all substantive responsibilities"),
+        ("Requirement is not owned by a qualification section", "REQUIREMENT_SECTION_OWNERSHIP", "$.requirements", "when qualification sections exist, every requirement must cite one of them"),
+        ("Unsupported employment type", "UNSUPPORTED_EMPLOYMENT_TYPE", "$.employment_type", "use unknown unless the source explicitly states an employment type"),
+        ("Duplicate job requirements conflict", "DUPLICATE_REQUIREMENT_CONFLICT", "$.requirements", "duplicate requirements must be merged without conflicting metadata"),
+        ("Duplicate alternative-group references conflict", "DUPLICATE_ALTERNATIVE_GROUP_REFERENCE", "$.requirements", "alternative-group references must be unique within a merged requirement"),
+        ("local_ref values must be unique", "DUPLICATE_REQUIREMENT_REFERENCE", "$.requirements", "each requirement local_ref must be unique"),
+    )
+    for marker, code, path, safe_message in rules:
+        if marker.casefold() in message.casefold():
+            return [{"code": code, "path": path, "message": safe_message}]
+    return [{
+        "code": "JOB_PROFILE_SEMANTIC_INVALID",
+        "path": "$",
+        "message": "the complete Job Profile must satisfy all semantic validation rules",
+    }]
+
+
+def _json_path(location: object) -> str:
+    path = "$"
+    if not isinstance(location, (tuple, list)):
+        return path
+    for part in location:
+        if isinstance(part, int):
+            path += f"[{part}]"
+        else:
+            path += f".{part}"
+    return path
+
+
 def validate_job_extraction(
     artifact: JobExtractionResponse,
     allowed_source_refs: set[str],
     *,
+    source_spans: list[EvidenceSpan] | None = None,
     duplicate_spans_removed: int = 0,
     boilerplate_spans_ignored: int = 0,
     omitted_span_count: int = 0,
@@ -306,6 +507,11 @@ def validate_job_extraction(
     unknown = _collect_source_refs(artifact.model_dump(mode="json")) - allowed_source_refs
     if unknown:
         raise ValueError(f"Unknown job source references: {sorted(unknown)}")
+    career = artifact.career_context
+    if career.primary_role_family in career.adjacent_role_families:
+        raise ValueError("Primary role family cannot be adjacent.")
+    if "unknown" in career.adjacent_role_families:
+        raise ValueError("Unknown cannot be an adjacent role family.")
     level_range = artifact.career_context.acceptable_level_range
     if level_range is not None:
         order = {name: index for index, name in enumerate(
@@ -315,6 +521,9 @@ def validate_job_extraction(
             raise ValueError("Job level range cannot contain unknown endpoints.")
         if order[level_range.minimum] > order[level_range.maximum]:
             raise ValueError("Job level range minimum cannot exceed maximum.")
+
+    location, location_warning = _normalize_location_placeholders(artifact.location)
+    artifact = artifact.model_copy(update={"location": location})
 
     requirements = []
     positions: dict[str, int] = {}
@@ -327,9 +536,9 @@ def validate_job_extraction(
                 raise ValueError(
                     f"Unknown job alternative policy: {requirement.policy_alternative_group}"
                 ) from exc
-        if requirement.hard_constraint and _duplicates_application_constraint(artifact, key):
+        if _duplicates_application_constraint(artifact, key):
             raise ValueError(
-                f"Hard requirement duplicates an application constraint: {requirement.local_ref}"
+                f"Requirement duplicates an application constraint: {requirement.local_ref}"
             )
         prior_index = positions.get(key)
         if prior_index is None:
@@ -337,7 +546,7 @@ def validate_job_extraction(
             requirements.append(requirement)
             continue
         prior = requirements[prior_index]
-        conflict_fields = ("category", "scoring_dimension", "importance", "hard_constraint", "minimum_years")
+        conflict_fields = ("category", "scoring_dimension", "importance", "minimum_years")
         if any(getattr(prior, field) != getattr(requirement, field) for field in conflict_fields):
             raise ValueError(f"Duplicate job requirements conflict: {prior.local_ref}, {requirement.local_ref}")
         requirements[prior_index] = prior.model_copy(
@@ -345,13 +554,20 @@ def validate_job_extraction(
                 "acceptable_evidence_contexts": list(dict.fromkeys([
                     *prior.acceptable_evidence_contexts, *requirement.acceptable_evidence_contexts
                 ])),
-                "explicit_alternatives": list(dict.fromkeys([
-                    *prior.explicit_alternatives, *requirement.explicit_alternatives
-                ])),
+                "alternative_groups": _merge_alternative_groups(
+                    prior.alternative_groups, requirement.alternative_groups
+                ),
                 "source_refs": list(dict.fromkeys([*prior.source_refs, *requirement.source_refs])),
             }
         )
+    artifact = artifact.model_copy(update={"requirements": requirements})
+    if source_spans:
+        _validate_section_coverage(artifact, source_spans)
+        _validate_requirement_section_ownership(artifact, source_spans)
+        _validate_employment_type(artifact, source_spans)
     warnings = list(artifact.cleanup.warnings)
+    if location_warning:
+        warnings.append(location_warning)
     if omitted_span_count:
         warnings.append(f"NEEDS_MORE_INFORMATION:MODEL_INPUT_OMITTED_SPANS:{omitted_span_count}")
     cleanup = artifact.cleanup.model_copy(update={
@@ -408,6 +624,115 @@ def _collect_source_refs(value: object) -> set[str]:
 
 def _normalized_statement(value: str) -> str:
     return re.sub(r"\s+", " ", value.casefold()).strip()
+
+
+def _normalize_location_placeholders(location):
+    marker = re.compile(r"(?:[,;]\s*)?\+\d+\s+more\b", flags=re.I)
+    display = marker.sub("", location.display).strip(" ,;") if location.display else None
+    regions = [item for item in location.remote_regions if not marker.fullmatch(item.strip())]
+    changed = display != location.display or regions != location.remote_regions
+    return location.model_copy(update={"display": display or None, "remote_regions": regions}), (
+        "SOURCE_LOCATION_PLACEHOLDER_REMOVED" if changed else None
+    )
+
+
+_SECTION_HEADINGS = {
+    "requirements",
+    "required qualifications",
+    "minimum qualifications",
+    "basic qualifications",
+    "preferred qualifications",
+    "responsibilities",
+    "what you'll do",
+    "what you will do",
+}
+
+
+def _substantive_section_refs(spans: list[EvidenceSpan], section: str) -> set[str]:
+    refs: set[str] = set()
+    for span in spans:
+        if span.section != section:
+            continue
+        normalized = _normalized_statement(span.excerpt).strip(":")
+        if normalized and normalized not in _SECTION_HEADINGS:
+            refs.add(span.span_id)
+    return refs
+
+
+def _validate_section_coverage(artifact: JobExtractionResponse, spans: list[EvidenceSpan]) -> None:
+    required_refs = _substantive_section_refs(spans, "requirements")
+    optional_refs = _substantive_section_refs(spans, "preferred_requirements")
+    responsibility_refs = _substantive_section_refs(spans, "responsibilities")
+    if required_refs and not any(
+        item.importance == "required" and required_refs.intersection(item.source_refs)
+        for item in artifact.requirements
+    ):
+        raise ValueError("Missing required-section coverage.")
+    if optional_refs and not any(
+        item.importance == "optional" and optional_refs.intersection(item.source_refs)
+        for item in artifact.requirements
+    ):
+        raise ValueError("Missing optional-section coverage.")
+    if responsibility_refs and not any(
+        responsibility_refs.intersection(item.source_refs) for item in artifact.responsibilities
+    ):
+        raise ValueError("Missing responsibility-section coverage.")
+
+
+def _validate_requirement_section_ownership(
+    artifact: JobExtractionResponse, spans: list[EvidenceSpan]
+) -> None:
+    qualification_refs = {
+        span.span_id for span in spans
+        if span.section in {"requirements", "preferred_requirements"}
+        and _normalized_statement(span.excerpt).strip(":") not in _SECTION_HEADINGS
+    }
+    if not qualification_refs:
+        return
+    for requirement in artifact.requirements:
+        if not qualification_refs.intersection(requirement.source_refs):
+            raise ValueError("Requirement is not owned by a qualification section.")
+
+
+def _validate_employment_type(artifact: JobExtractionResponse, spans: list[EvidenceSpan]) -> None:
+    if artifact.employment_type == "unknown":
+        return
+    markers = {
+        "full_time": ("full time", "full-time", "full_time"),
+        "part_time": ("part time", "part-time", "part_time"),
+        "contract": ("contract", "contractor"),
+        "temporary": ("temporary", "temp position"),
+        "internship": ("internship", "intern position"),
+    }[artifact.employment_type]
+    source = " ".join(_normalized_statement(span.excerpt) for span in spans)
+    if not any(marker in source for marker in markers):
+        raise ValueError("Unsupported employment type.")
+
+
+def _merge_alternative_groups(first: list, second: list) -> list:
+    merged = []
+    positions: dict[tuple[str, ...], int] = {}
+    refs: dict[str, tuple[str, ...]] = {}
+    for group in [*first, *second]:
+        key = tuple(sorted(_normalized_statement(item) for item in group.any_of))
+        prior_key = refs.get(group.local_ref)
+        if prior_key is not None and prior_key != key:
+            raise ValueError("Duplicate alternative-group references conflict.")
+        refs[group.local_ref] = key
+        position = positions.get(key)
+        if position is None:
+            positions[key] = len(merged)
+            merged.append(group)
+        else:
+            prior = merged[position]
+            merged[position] = prior.model_copy(update={
+                "source_refs": list(dict.fromkeys([*prior.source_refs, *group.source_refs]))
+            })
+    return merged
+
+
+def _alternative_members(group) -> list[str]:
+    return list(group["any_of"] if isinstance(group, dict) else group.any_of)
 
 
 def _duplicates_application_constraint(artifact: JobExtractionResponse, statement: str) -> bool:

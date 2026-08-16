@@ -141,16 +141,18 @@ def _job_artifact(ref: str) -> JobExtractionResponse:
                 **requirement,
                 "local_ref": "python",
                 "statement": "Production Python experience",
-                "hard_constraint": False,
-                "explicit_alternatives": [],
+                "alternative_groups": [],
                 "policy_alternative_group": None,
             },
             {
                 **requirement,
                 "local_ref": "language_alternative",
                 "statement": "TypeScript, JavaScript, or a comparable language",
-                "hard_constraint": True,
-                "explicit_alternatives": ["TypeScript", "JavaScript"],
+                "alternative_groups": [{
+                    "local_ref": "language_options",
+                    "any_of": ["TypeScript", "JavaScript"],
+                    "source_refs": [ref],
+                }],
                 "policy_alternative_group": "general-purpose-programming-language.v1",
             },
         ],
@@ -197,7 +199,7 @@ def _foundation(db: Session):
         db,
         source=candidate_source,
         artifact=_candidate_artifact(resume_ref),
-        model_id="gpt-4.1-mini",
+        model_id="gpt-5.6-luna",
         resume_profile_id=resume.id,
     )
 
@@ -232,31 +234,31 @@ def _foundation(db: Session):
         db,
         source=job_source,
         artifact=_job_artifact(job_ref),
-        model_id="gpt-4.1-mini",
+        model_id="gpt-5.6-luna",
         jobs_cache_id=cache.id,
     )
     return owner, candidate, job
 
 
 def _valid_assessment(requirements: list[JobRequirement], evidence_ref: str):
-    normal = next(item for item in requirements if not item.hard_constraint)
-    hard = next(item for item in requirements if item.hard_constraint)
+    normal, alternative = requirements
     return QualificationAssessmentResponse.model_validate({
         "requirement_assessments": [{
             "requirement_id": normal.requirement_id,
             "status": "met",
             "confidence": 0.92,
             "evidence_refs": [evidence_ref],
+            "alternative_group_refs": [],
             "alternative_policy_ref": None,
             "reason": "Production Python delivery is demonstrated.",
             "missing": [],
-        }],
-        "hard_constraint_assessments": [{
-            "requirement_id": hard.requirement_id,
+        }, {
+            "requirement_id": alternative.requirement_id,
             "status": "met_by_alternative",
             "confidence": 0.88,
             "evidence_refs": [evidence_ref],
-            "alternative_policy_ref": "general-purpose-programming-language.v1",
+            "alternative_group_refs": ["language_options"],
+            "alternative_policy_ref": None,
             "reason": "Python is an approved language alternative.",
             "missing": [],
         }],
@@ -287,7 +289,11 @@ def test_qualification_input_excludes_derived_candidate_fields(db: Session) -> N
 
     assert len(qualification_input.candidate_evidence) == 1
     assert "headline" not in str(qualification_input.candidate_evidence)
+    assert qualification_input.candidate_profile["skills"][0]["canonical_name"] == "Python"
+    assert "derived" not in qualification_input.candidate_profile
     assert len(qualification_input.job_requirements) == 2
+    assert "hard_constraint" not in qualification_input.job_requirements[0]
+    assert qualification_input.job_requirements[1]["alternative_groups"][0]["local_ref"] == "language_options"
     assert qualification_input.approved_alternatives[-1]["policy_hash"].startswith("sha256:")
 
 
@@ -296,53 +302,78 @@ def test_qualification_validator_enforces_exact_coverage_and_evidence(db: Sessio
     requirements = list(db.scalars(select(JobRequirement).where(
         JobRequirement.job_profile_version_id == job.id
     )).all())
-    evidence_ref = next(iter(build_qualification_input(
+    qualification_input = build_qualification_input(
         db, candidate_profile=candidate, job_profile=job, career_context=None
-    ).allowed_evidence_refs))
+    )
+    evidence_ref = next(iter(qualification_input.allowed_evidence_refs))
     valid = _valid_assessment(requirements, evidence_ref)
 
     assert validate_qualification_assessment(
-        valid, requirements=requirements, allowed_evidence_refs={evidence_ref}
+        valid, requirements=requirements, allowed_evidence_refs={evidence_ref},
+        allowed_alternative_group_refs=qualification_input.allowed_alternative_group_refs,
     ) == valid
-    missing = valid.model_copy(update={"hard_constraint_assessments": []})
-    with pytest.raises(ValueError, match="every hard constraint exactly once"):
+    missing = valid.model_copy(update={"requirement_assessments": valid.requirement_assessments[:1]})
+    with pytest.raises(ValueError, match="every requirement exactly once"):
         validate_qualification_assessment(
-            missing, requirements=requirements, allowed_evidence_refs={evidence_ref}
+            missing, requirements=requirements, allowed_evidence_refs={evidence_ref},
+            allowed_alternative_group_refs=qualification_input.allowed_alternative_group_refs,
         )
     unsupported = valid.model_copy(update={
-        "requirement_assessments": [valid.requirement_assessments[0].model_copy(
-            update={"evidence_refs": ["resume:unknown"]}
-        )]
+        "requirement_assessments": [
+            valid.requirement_assessments[0].model_copy(
+                update={"evidence_refs": ["resume:unknown"]}
+            ),
+            valid.requirement_assessments[1],
+        ]
     })
     with pytest.raises(ValueError, match="unknown evidence"):
         validate_qualification_assessment(
-            unsupported, requirements=requirements, allowed_evidence_refs={evidence_ref}
+            unsupported, requirements=requirements, allowed_evidence_refs={evidence_ref},
+            allowed_alternative_group_refs=qualification_input.allowed_alternative_group_refs,
+        )
+    bad_group = valid.model_copy(update={
+        "requirement_assessments": [
+            valid.requirement_assessments[0],
+            valid.requirement_assessments[1].model_copy(
+                update={"alternative_group_refs": ["invented_group"]}
+            ),
+        ]
+    })
+    with pytest.raises(ValueError, match="supplied group or approved policy"):
+        validate_qualification_assessment(
+            bad_group, requirements=requirements, allowed_evidence_refs={evidence_ref},
+            allowed_alternative_group_refs=qualification_input.allowed_alternative_group_refs,
         )
 
 
-def test_low_confidence_and_absent_evidence_are_normalized(db: Session) -> None:
+def test_confidence_does_not_change_evidence_status(db: Session) -> None:
     _, candidate, job = _foundation(db)
     requirements = list(db.scalars(select(JobRequirement).where(
         JobRequirement.job_profile_version_id == job.id
     )).all())
-    evidence_ref = next(iter(build_qualification_input(
+    qualification_input = build_qualification_input(
         db, candidate_profile=candidate, job_profile=job, career_context=None
-    ).allowed_evidence_refs))
+    )
+    evidence_ref = next(iter(qualification_input.allowed_evidence_refs))
     artifact = _valid_assessment(requirements, evidence_ref)
     normal = artifact.requirement_assessments[0].model_copy(update={
-        "status": "needs_clarification",
+        "status": "partially_met",
         "confidence": 0.5,
-        "evidence_refs": [],
-        "reason": "No evidence.",
-        "missing": [],
+        "evidence_refs": [evidence_ref],
+        "reason": "Some evidence.",
+        "missing": ["Additional production scope"],
     })
-    artifact = artifact.model_copy(update={"requirement_assessments": [normal]})
+    artifact = artifact.model_copy(update={
+        "requirement_assessments": [normal, artifact.requirement_assessments[1]]
+    })
 
     validated = validate_qualification_assessment(
-        artifact, requirements=requirements, allowed_evidence_refs={evidence_ref}
+        artifact, requirements=requirements, allowed_evidence_refs={evidence_ref},
+        allowed_alternative_group_refs=qualification_input.allowed_alternative_group_refs,
     )
 
-    assert validated.requirement_assessments[0].status == "not_demonstrated"
+    assert validated.requirement_assessments[0].status == "partially_met"
+    assert validated.requirement_assessments[0].confidence == 0.5
 
 
 class StubQualificationMatcher:
@@ -352,8 +383,7 @@ class StubQualificationMatcher:
     def assess(self, qualification_input: QualificationInput) -> QualificationResult:
         self.calls += 1
         evidence_ref = next(iter(qualification_input.allowed_evidence_refs))
-        normal = next(item for item in qualification_input.job_requirements if not item["hard_constraint"])
-        hard = next(item for item in qualification_input.job_requirements if item["hard_constraint"])
+        normal, alternative = qualification_input.job_requirements
         return QualificationResult(
             artifact=QualificationAssessmentResponse.model_validate({
                 "requirement_assessments": [{
@@ -361,21 +391,22 @@ class StubQualificationMatcher:
                     "status": "met",
                     "confidence": 0.9,
                     "evidence_refs": [evidence_ref],
+                    "alternative_group_refs": [],
                     "alternative_policy_ref": None,
                     "reason": "Direct evidence.",
                     "missing": [],
-                }],
-                "hard_constraint_assessments": [{
-                    "requirement_id": hard["requirement_id"],
+                }, {
+                    "requirement_id": alternative["requirement_id"],
                     "status": "met_by_alternative",
                     "confidence": 0.9,
                     "evidence_refs": [evidence_ref],
-                    "alternative_policy_ref": "general-purpose-programming-language.v1",
+                    "alternative_group_refs": ["language_options"],
+                    "alternative_policy_ref": None,
                     "reason": "Approved alternative.",
                     "missing": [],
                 }],
             }),
-            model_id="gpt-4.1-mini",
+            model_id="gpt-5.6-luna",
             provider_execution_reference="provider-qualification-test-1",
         )
 

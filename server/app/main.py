@@ -9,9 +9,10 @@ from typing import Optional
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import load_runtime_config
-from app.core.logging import RequestLoggingMiddleware, configure_logging
+from app.core.logging import REQUEST_ID, RequestLoggingMiddleware, configure_logging
 from app.core.provider_ops import ProviderRateLimiter
 from app.db.session import dispose_db_engines
 from app.modules.applications.router import router as applications_router
@@ -32,6 +33,7 @@ from app.modules.interviews.router import router as interviews_router
 from app.modules.jobs.router import router as jobs_router
 from app.modules.materials.router import router as materials_router
 from app.modules.matching_v2.router import router as matching_v2_router
+from app.modules.matching_v2.extraction import JobProfileValidationFailed
 from app.modules.notifications.router import router as notifications_router
 from app.modules.operations.router import router as operations_router
 from app.modules.profiles.router import resume_profiles_router, router as profile_router
@@ -89,6 +91,21 @@ def create_app(config_path: Optional[str] = None) -> FastAPI:
     validate_route_authorization(API_ROUTERS)
 
     app = FastAPI(title="DaliJob API", version="0.1.0", lifespan=lifespan)
+
+    @app.exception_handler(JobProfileValidationFailed)
+    async def job_profile_validation_failed_handler(
+        _request: object, exc: JobProfileValidationFailed
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=502,
+            content={
+                "error": "JOB_PROFILE_VALIDATION_FAILED",
+                "stage": "job_profile_extraction",
+                "correlation_id": REQUEST_ID.get(),
+                "repair_attempted": exc.repair_attempted,
+            },
+        )
+
     app.state.runtime = runtime
     app.state.tier_entitlements = runtime.tier_entitlements
     app.state.provider_rate_limiter = ProviderRateLimiter()

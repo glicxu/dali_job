@@ -10,6 +10,11 @@ from fastapi.testclient import TestClient
 from app.config import load_runtime_config
 from app.core.logging import configure_logging
 from app.main import create_app
+from app.modules.matching_v2.diagnostics import (
+    begin_matching_prompt_trace,
+    end_matching_prompt_trace,
+    record_model_request,
+)
 
 
 def test_structured_logs_and_alerts_are_written_to_rotating_files(tmp_path: Path) -> None:
@@ -53,3 +58,37 @@ def test_http_transport_debug_logs_are_suppressed(tmp_path: Path) -> None:
     assert "close.started" not in messages
     assert "request details" not in messages
     assert "application details" in messages
+
+
+def test_full_matching_prompt_debug_is_opt_in_and_trace_scoped(tmp_path: Path) -> None:
+    runtime = load_runtime_config()
+    runtime = replace(
+        runtime,
+        log_dir=str(tmp_path),
+        matching_v2=replace(runtime.matching_v2, prompt_debug_enabled=True),
+    )
+    configure_logging(runtime)
+    payload = {
+        "stage": "qualification",
+        "model": "gpt-5.6-luna",
+        "system_prompt": "system secret",
+        "user_prompt": "candidate and job context",
+        "response_format": {"type": "json_schema"},
+    }
+
+    record_model_request(**payload)
+    token = begin_matching_prompt_trace()
+    try:
+        record_model_request(**payload)
+    finally:
+        end_matching_prompt_trace(token)
+    for handler in logging.getLogger("dalijob.matching_prompt_debug").handlers:
+        handler.flush()
+
+    records = [
+        json.loads(line)
+        for line in (tmp_path / "matching_prompt_debug.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert len(records) == 1
+    assert records[0]["messages"][0]["content"] == "system secret"
+    assert records[0]["messages"][1]["content"] == "candidate and job context"

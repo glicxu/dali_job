@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -399,6 +400,7 @@ def create_qualification_assessment(
             result.artifact,
             requirements=requirements,
             allowed_evidence_refs=qualification_input.allowed_evidence_refs,
+            allowed_alternative_group_refs=qualification_input.allowed_alternative_group_refs,
             incomplete_evidence_input=bool(qualification_input.omitted_evidence_refs),
         )
     except ValueError as exc:
@@ -594,18 +596,19 @@ def _job_profile_view(db: Session, profile: JobProfileVersion, source: Canonical
             canonicalization_version=source.canonicalization_version,
             language=source.language,
         ),
-        extracted=profile.artifact,
+        extracted=_normalize_job_profile_artifact(profile.artifact),
         requirements=[JobRequirementView(
             requirement_id=item.requirement_id,
             local_ref=item.local_ref,
             category=item.category,
             scoring_dimension=item.scoring_dimension,
             statement=item.statement,
-            importance=item.importance,
-            hard_constraint=item.hard_constraint,
+            importance="required" if item.importance == "required" else "optional",
             acceptable_evidence_contexts=item.acceptable_evidence_contexts,
             minimum_years=item.minimum_years,
-            explicit_alternatives=item.explicit_alternatives,
+            alternative_groups=_legacy_alternative_groups(
+                item.local_ref, item.explicit_alternatives, item.source_refs
+            ),
             policy_alternative_group=item.policy_alternative_group,
             source_refs=item.source_refs,
         ) for item in requirements],
@@ -620,6 +623,57 @@ def _job_profile_view(db: Session, profile: JobProfileVersion, source: Canonical
         },
         created_at=profile.created_at,
     )
+
+
+def _legacy_alternative_groups(
+    local_ref: str, alternatives: list[str], source_refs: list[str]
+) -> list[dict[str, object]]:
+    if not alternatives:
+        return []
+    members = alternatives if len(alternatives) > 1 else [
+        part.strip() for part in re.split(r"\s*(?:\bor\b|/|,)\s*", alternatives[0], flags=re.I)
+        if part.strip()
+    ]
+    members = list(dict.fromkeys(members))
+    if len(members) < 2:
+        return []
+    return [{
+        "local_ref": f"{local_ref}_alternatives",
+        "any_of": members,
+        "source_refs": source_refs,
+    }]
+
+
+def _normalize_job_profile_artifact(value: dict[str, object]) -> dict[str, object]:
+    """Keep persisted v1/v2 Job Profiles readable through the v3 API contract."""
+
+    artifact = dict(value)
+    career = dict(artifact.get("career_context") or {})
+    primary = career.get("primary_role_family")
+    career["adjacent_role_families"] = [
+        item for item in career.get("adjacent_role_families", [])
+        if item not in {primary, "unknown"}
+    ]
+    artifact["career_context"] = career
+    normalized = []
+    for raw in artifact.get("requirements", []):
+        requirement = dict(raw)
+        requirement["importance"] = (
+            "required" if requirement.get("importance") == "required" else "optional"
+        )
+        requirement.pop("hard_constraint", None)
+        alternatives = requirement.pop("explicit_alternatives", [])
+        requirement.setdefault(
+            "alternative_groups",
+            _legacy_alternative_groups(
+                str(requirement.get("local_ref", "requirement")),
+                alternatives,
+                list(requirement.get("source_refs", [])),
+            ),
+        )
+        normalized.append(requirement)
+    artifact["requirements"] = normalized
+    return artifact
 
 
 def _qualification_assessment_view(

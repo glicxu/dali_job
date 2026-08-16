@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime, timezone
+import hashlib
+import json
+import time
 from typing import cast
+from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -11,8 +17,20 @@ from app.core.provider_ops import run_provider_call
 from app.db.session import get_db_session
 from app.modules.auth.dependencies import AuthenticatedIdentity, get_current_identity
 from app.modules.evaluation import repository
-from app.modules.evaluation.models import EvaluationJobSnapshot, EvaluationRun
+from app.modules.accounts.models import User
+from app.modules.evaluation.benchmark import build_admission_report
+from app.modules.evaluation.catalog import build_fixture_catalog
+from app.modules.evaluation.metrics import calculate_aggregate_metrics, calculate_run_metrics, compare_runs
+from app.modules.evaluation.export import build_corpus_export, corpus_markdown
+from app.modules.evaluation.models import EvaluationAnnotation, EvaluationJobSnapshot, EvaluationRun
+from app.modules.evaluation.review import artifact_annotation_targets, build_disagreement_queue
 from app.modules.evaluation.schemas import (
+    EvaluationAnnotationCreateRequest,
+    EvaluationAnnotationView,
+    EvaluationAggregateMetricsView,
+    EvaluationComparisonView,
+    DisagreementQueueView,
+    EvaluationMetricsView,
     EvaluationRunCreateRequest,
     EvaluationRunDetail,
     EvaluationRunListResponse,
@@ -21,15 +39,20 @@ from app.modules.evaluation.schemas import (
     EvidenceSpanView,
     JobSnapshotImportRequest,
     JobSnapshotListResponse,
+    JobSnapshotReviewRequest,
     JobSnapshotView,
+    BenchmarkAdmissionReportView,
+    EvaluationFixtureCatalogView,
 )
 from app.modules.matching_v2.api_schemas import QualificationAssessmentCreateRequest
 from app.modules.matching_v2.extraction import CandidateProfileExtractor, JobProfileExtractor
+from app.modules.matching_v2.diagnostics import begin_matching_prompt_trace, end_matching_prompt_trace
 from app.modules.matching_v2.models import (
     CandidateProfileVersion,
     CanonicalSource,
     JobProfileVersion,
     QualificationAssessment,
+    RequirementAssessment,
     SourceSpan,
 )
 from app.modules.matching_v2.qualification import QualificationMatcher
@@ -56,6 +79,25 @@ def get_job_snapshot_fetcher() -> JobSnapshotFetcher:
     return fetch_job_result_from_url
 
 
+def _source_company(source_url: str) -> str:
+    parsed = urlparse(source_url)
+    hostname = (parsed.hostname or "").lower().removeprefix("www.")
+    path = parsed.path.lower()
+    if hostname == "amazon.jobs" or hostname.endswith(".amazon.jobs"):
+        return "Amazon"
+    if hostname == "google.com" or hostname.endswith(".google.com"):
+        return "Google"
+    if hostname == "apple.com" or hostname.endswith(".apple.com"):
+        return "Apple"
+    if hostname.endswith(".microsoft.com"):
+        return "Microsoft"
+    if hostname.endswith(".myworkdayjobs.com") and "nvidia" in hostname:
+        return "NVIDIA"
+    if hostname == "job-boards.greenhouse.io" and path.startswith("/cloudflare/"):
+        return "Cloudflare"
+    return ""
+
+
 def _require_evaluation_access(request: Request, db: Session, identity: AuthenticatedIdentity):
     if not request.app.state.runtime.matching_v2.evaluation_enabled or identity.role != "admin":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
@@ -74,6 +116,10 @@ def _snapshot_view(snapshot: EvaluationJobSnapshot) -> JobSnapshotView:
         company=snapshot.company,
         raw_description_text=snapshot.raw_description_text,
         capture_metadata=snapshot.capture_metadata,
+        review_status=snapshot.review_status,
+        review_notes=snapshot.review_notes,
+        reviewed_by_user_id=snapshot.reviewed_by_user_id,
+        reviewed_at=snapshot.reviewed_at,
         created_at=snapshot.created_at,
     )
 
@@ -106,7 +152,7 @@ def import_job_snapshot(
         source_url=source_url,
         raw_description_text=result.focused_text,
         title=(result.title or "").strip(),
-        company=(result.company or "").strip(),
+        company=(result.company or "").strip() or _source_company(source_url),
         capture_metadata={
             "canonical_url": result.canonical_url,
             "location": result.location,
@@ -131,6 +177,55 @@ def get_job_snapshots(
     )
 
 
+@router.post("/job-snapshots/{snapshot_id}/review", response_model=JobSnapshotView)
+def review_job_snapshot(
+    snapshot_id: str,
+    payload: JobSnapshotReviewRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> JobSnapshotView:
+    user, workspace = _require_evaluation_access(request, db, identity)
+    snapshot = repository.get_snapshot(db, public_id=snapshot_id, workspace_id=workspace.id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="Evaluation job snapshot not found.")
+    return _snapshot_view(repository.review_snapshot(
+        db,
+        snapshot=snapshot,
+        reviewer_user_id=user.id,
+        review_status=payload.review_status,
+        review_notes=payload.review_notes,
+    ))
+
+
+@router.get("/admission-report", response_model=BenchmarkAdmissionReportView)
+def get_benchmark_admission_report(
+    request: Request,
+    benchmark_release: str = "matching-benchmark-jobs.v1",
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> BenchmarkAdmissionReportView:
+    _, workspace = _require_evaluation_access(request, db, identity)
+    return BenchmarkAdmissionReportView.model_validate(build_admission_report(
+        repository.list_snapshots(db, workspace_id=workspace.id),
+        benchmark_release=benchmark_release,
+    ))
+
+
+@router.get("/fixture-catalog", response_model=EvaluationFixtureCatalogView)
+def get_fixture_catalog(
+    request: Request,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> EvaluationFixtureCatalogView:
+    _, workspace = _require_evaluation_access(request, db, identity)
+    catalog = build_fixture_catalog(
+        profile_repository.list_resume_profiles(db, identity),
+        repository.list_snapshots(db, workspace_id=workspace.id),
+    )
+    return EvaluationFixtureCatalogView.model_validate(catalog)
+
+
 @router.post("/runs", response_model=EvaluationRunDetail)
 def start_evaluation_run(
     payload: EvaluationRunCreateRequest,
@@ -141,28 +236,44 @@ def start_evaluation_run(
     job_extractor: JobProfileExtractor = Depends(get_job_profile_extractor),
     matcher: QualificationMatcher = Depends(get_qualification_matcher),
 ) -> EvaluationRunDetail:
+    started_at = datetime.now(timezone.utc)
     user, workspace = _require_evaluation_access(request, db, identity)
     snapshot = repository.get_snapshot(db, public_id=payload.job_snapshot_id, workspace_id=workspace.id)
     if snapshot is None:
         raise HTTPException(status_code=404, detail="Evaluation job snapshot not found.")
+    if snapshot.review_status != "accepted":
+        raise HTTPException(
+            status_code=409,
+            detail="The job snapshot must be accepted into the benchmark before it can be evaluated.",
+        )
     if profile_repository.get_resume_profile_for_identity(db, identity, payload.resume_profile_id) is None:
         raise HTTPException(status_code=404, detail="Resume profile not found.")
 
-    candidate_view = create_candidate_profile(
-        payload.resume_profile_id, request, db, identity, candidate_extractor
-    )
-    job_view = create_job_profile(snapshot.user_saved_job_id, request, db, identity, job_extractor)
-    qualification_view = create_qualification_assessment(
-        QualificationAssessmentCreateRequest(
-            candidate_profile_id=candidate_view.candidate_profile_id,
-            candidate_career_selection_revision=candidate_view.selection.revision,
-            job_profile_id=job_view.job_profile_id,
-        ),
-        request,
-        db,
-        identity,
-        matcher,
-    )
+    trace_token = begin_matching_prompt_trace()
+    try:
+        stage_started = time.monotonic()
+        candidate_view = create_candidate_profile(
+            payload.resume_profile_id, request, db, identity, candidate_extractor
+        )
+        candidate_latency_ms = round((time.monotonic() - stage_started) * 1000, 2)
+        stage_started = time.monotonic()
+        job_view = create_job_profile(snapshot.user_saved_job_id, request, db, identity, job_extractor)
+        job_latency_ms = round((time.monotonic() - stage_started) * 1000, 2)
+        stage_started = time.monotonic()
+        qualification_view = create_qualification_assessment(
+            QualificationAssessmentCreateRequest(
+                candidate_profile_id=candidate_view.candidate_profile_id,
+                candidate_career_selection_revision=candidate_view.selection.revision,
+                job_profile_id=job_view.job_profile_id,
+            ),
+            request,
+            db,
+            identity,
+            matcher,
+        )
+        qualification_latency_ms = round((time.monotonic() - stage_started) * 1000, 2)
+    finally:
+        end_matching_prompt_trace(trace_token)
     candidate = db.scalar(select(CandidateProfileVersion).where(
         CandidateProfileVersion.public_id == candidate_view.candidate_profile_id
     ))
@@ -183,7 +294,40 @@ def start_evaluation_run(
         candidate_profile_version_id=candidate.id,
         job_profile_version_id=job_profile.id,
         qualification_assessment_id=qualification.id,
-        run_metadata={"pipeline": "matching-v2-three-stage", "score_generated": False},
+        run_metadata={
+            "pipeline": "matching-v2-three-stage",
+            "score_generated": False,
+            "stage_execution": {
+                "candidate_profile": {
+                    "latency_ms": candidate_latency_ms,
+                    "cache_status": _cache_status(candidate.created_at, started_at),
+                },
+                "job_profile": {
+                    "latency_ms": job_latency_ms,
+                    "cache_status": _cache_status(job_profile.created_at, started_at),
+                },
+                "qualification": {
+                    "latency_ms": qualification_latency_ms,
+                    "cache_status": _cache_status(qualification.created_at, started_at),
+                },
+            },
+            "provider_usage": {
+                "input_tokens": None,
+                "output_tokens": None,
+                "cost_usd": None,
+                "availability": "provider_does_not_expose_usage_to_current_adapter",
+            },
+            "validation": {"strict_schema_success": True, "retry_count": 0},
+        },
+        manifest=_build_manifest(
+            snapshot=snapshot,
+            candidate=candidate,
+            job_profile=job_profile,
+            qualification=qualification,
+            candidate_fixture_release=payload.candidate_fixture_release,
+            started_at=started_at,
+            completed_at=datetime.now(timezone.utc),
+        ),
     )
     return _run_detail(db, run)
 
@@ -212,6 +356,124 @@ def get_evaluation_run(
     if run is None:
         raise HTTPException(status_code=404, detail="Evaluation run not found.")
     return _run_detail(db, run)
+
+
+@router.post("/runs/{run_id}/annotations", response_model=EvaluationAnnotationView)
+def add_evaluation_annotation(
+    run_id: str,
+    payload: EvaluationAnnotationCreateRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> EvaluationAnnotationView:
+    user, workspace = _require_evaluation_access(request, db, identity)
+    run = repository.get_run(db, public_id=run_id, workspace_id=workspace.id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Evaluation run not found.")
+    valid_targets = _annotation_targets(db, run, payload.stage)
+    if payload.target_ref not in valid_targets:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "UNKNOWN_EVALUATION_TARGET", "valid_targets": sorted(valid_targets)},
+        )
+    if payload.review_kind == "adjudication" and not payload.expected_value:
+        raise HTTPException(status_code=422, detail="Adjudication requires an expected value.")
+    annotation = repository.create_annotation(
+        db,
+        run=run,
+        reviewer_user_id=user.id,
+        stage=payload.stage,
+        target_ref=payload.target_ref,
+        review_kind=payload.review_kind,
+        verdict=payload.verdict,
+        evidence_support=payload.evidence_support,
+        expected_value=payload.expected_value,
+        confidence=payload.confidence,
+        severity=payload.severity,
+        error_taxonomy_code=payload.error_taxonomy_code,
+        comment=payload.comment,
+    )
+    return _annotation_view(db, annotation)
+
+
+@router.get("/runs/{run_id}/metrics", response_model=EvaluationMetricsView)
+def get_evaluation_metrics(
+    run_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> EvaluationMetricsView:
+    _, workspace = _require_evaluation_access(request, db, identity)
+    run = repository.get_run(db, public_id=run_id, workspace_id=workspace.id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Evaluation run not found.")
+    return calculate_run_metrics(db, run)
+
+
+@router.get("/comparisons", response_model=EvaluationComparisonView)
+def get_evaluation_comparison(
+    baseline_run_id: str,
+    candidate_run_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> EvaluationComparisonView:
+    _, workspace = _require_evaluation_access(request, db, identity)
+    baseline = repository.get_run(db, public_id=baseline_run_id, workspace_id=workspace.id)
+    candidate = repository.get_run(db, public_id=candidate_run_id, workspace_id=workspace.id)
+    if baseline is None or candidate is None:
+        raise HTTPException(status_code=404, detail="Evaluation run not found.")
+    return compare_runs(db, baseline, candidate)
+
+
+@router.get("/metrics", response_model=EvaluationAggregateMetricsView)
+def get_aggregate_evaluation_metrics(
+    request: Request,
+    benchmark_release: str | None = None,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> EvaluationAggregateMetricsView:
+    _, workspace = _require_evaluation_access(request, db, identity)
+    runs = repository.list_runs(db, workspace_id=workspace.id)
+    if benchmark_release is not None:
+        runs = [run for run in runs if run.benchmark_release == benchmark_release]
+    return calculate_aggregate_metrics(db, runs, benchmark_release=benchmark_release)
+
+
+@router.get("/adjudication-queue", response_model=DisagreementQueueView)
+def get_adjudication_queue(
+    request: Request,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> DisagreementQueueView:
+    _, workspace = _require_evaluation_access(request, db, identity)
+    return DisagreementQueueView(items=build_disagreement_queue(db, workspace_id=workspace.id))
+
+
+@router.get("/exports/corpus", response_model=None)
+def export_evaluation_corpus(
+    request: Request,
+    export_format: str = Query(default="json", alias="format", pattern="^(json|markdown)$"),
+    benchmark_release: str | None = None,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> Response:
+    _, workspace = _require_evaluation_access(request, db, identity)
+    runs = repository.list_runs(db, workspace_id=workspace.id)
+    if benchmark_release is not None:
+        runs = [run for run in runs if run.benchmark_release == benchmark_release]
+    payload = build_corpus_export(db, runs, benchmark_release=benchmark_release)
+    suffix = benchmark_release or "all"
+    if export_format == "markdown":
+        return Response(
+            content=corpus_markdown(payload),
+            media_type="text/markdown; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="matching-evaluation-{suffix}.md"'},
+        )
+    return JSONResponse(
+        content=payload,
+        headers={"Content-Disposition": f'attachment; filename="matching-evaluation-{suffix}.json"'},
+    )
 
 
 def _run_artifacts(db: Session, run: EvaluationRun):
@@ -259,6 +521,90 @@ def _source_view(db: Session, source: CanonicalSource) -> EvaluationSourceView:
     )
 
 
+def _build_manifest(
+    *,
+    snapshot: EvaluationJobSnapshot,
+    candidate: CandidateProfileVersion,
+    job_profile: JobProfileVersion,
+    qualification: QualificationAssessment,
+    candidate_fixture_release: str,
+    started_at: datetime,
+    completed_at: datetime,
+) -> dict:
+    provider_configuration = {
+        "candidate_model": candidate.model_id,
+        "job_model": job_profile.model_id,
+        "qualification_model": qualification.model_id,
+    }
+    provider_hash = "sha256:" + hashlib.sha256(
+        json.dumps(provider_configuration, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return {
+        "benchmark_release": snapshot.benchmark_release,
+        "candidate_fixture_release": candidate_fixture_release,
+        "job_fixture_release": snapshot.benchmark_release,
+        "candidate_prompt_version": candidate.prompt_version,
+        "job_prompt_version": job_profile.prompt_version,
+        "qualification_prompt_version": qualification.prompt_version,
+        "schema_versions": {
+            "candidate": candidate.schema_version,
+            "job": job_profile.schema_version,
+            "qualification": qualification.schema_version,
+        },
+        "taxonomy_version": candidate.taxonomy_version,
+        "selection_policy_version": qualification.selection_policy_version,
+        "qualification_policy_version": qualification.matching_policy_version,
+        "model_ids": provider_configuration,
+        "provider_configuration_hash": provider_hash,
+        "started_at": started_at.isoformat(),
+        "completed_at": completed_at.isoformat(),
+    }
+
+
+def _cache_status(created_at: datetime, started_at: datetime) -> str:
+    normalized = created_at if created_at.tzinfo is not None else created_at.replace(tzinfo=timezone.utc)
+    return "created" if normalized >= started_at else "reused"
+
+
+def _annotation_view(db: Session, annotation: EvaluationAnnotation) -> EvaluationAnnotationView:
+    reviewer = db.get(User, annotation.reviewer_user_id)
+    return EvaluationAnnotationView(
+        public_id=annotation.public_id,
+        reviewer_user_id=annotation.reviewer_user_id,
+        reviewer_label=(reviewer.email if reviewer is not None else f"user:{annotation.reviewer_user_id}"),
+        stage=annotation.stage,
+        target_ref=annotation.target_ref,
+        review_kind=annotation.review_kind,
+        verdict=annotation.verdict,
+        evidence_support=annotation.evidence_support,
+        expected_value=annotation.expected_value,
+        confidence=annotation.confidence,
+        severity=annotation.severity,
+        error_taxonomy_code=annotation.error_taxonomy_code,
+        comment=annotation.comment,
+        created_at=annotation.created_at,
+    )
+
+
+def _annotation_targets(db: Session, run: EvaluationRun, stage: str) -> set[str]:
+    _, _, candidate, job_profile, qualification, candidate_source, job_source = _run_artifacts(db, run)
+    if stage == "qualification":
+        return set(db.scalars(select(RequirementAssessment.requirement_id).where(
+            RequirementAssessment.qualification_assessment_id == qualification.id
+        )).all())
+    source = candidate_source if stage == "candidate_profile" else job_source
+    targets = set(db.scalars(select(SourceSpan.span_id).where(
+        SourceSpan.canonical_source_id == source.id
+    )).all())
+    targets.add(candidate.public_id if stage == "candidate_profile" else job_profile.public_id)
+    targets.update(
+        item["target_ref"] for item in artifact_annotation_targets(
+            db, candidate=candidate, job_profile=job_profile
+        ) if item["stage"] == stage
+    )
+    return targets
+
+
 def _run_detail(db: Session, run: EvaluationRun) -> EvaluationRunDetail:
     snapshot, resume, candidate, job_profile, qualification, candidate_source, job_source = _run_artifacts(db, run)
     summary = _run_summary(db, run)
@@ -273,5 +619,11 @@ def _run_detail(db: Session, run: EvaluationRun) -> EvaluationRunDetail:
         job_source=_source_view(db, job_source),
         job_profile=_job_profile_view(db, job_profile, job_source),
         qualification=_qualification_assessment_view(db, qualification),
+        manifest=cast(dict, run.manifest),
+        annotations=[_annotation_view(db, item) for item in repository.list_annotations(db, run_id=run.id)],
+        annotation_targets=artifact_annotation_targets(
+            db, candidate=candidate, job_profile=job_profile
+        ),
+        metrics=calculate_run_metrics(db, run),
         run_metadata=cast(dict, run.run_metadata),
     )

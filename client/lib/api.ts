@@ -386,7 +386,54 @@ export type EvaluationJobSnapshot = {
   company: string;
   raw_description_text: string;
   capture_metadata: Record<string, unknown>;
+  review_status: "draft" | "accepted" | "rejected";
+  review_notes: string;
+  reviewed_by_user_id: number | null;
+  reviewed_at: string | null;
   created_at: string;
+};
+
+export type BenchmarkAdmissionReport = {
+  benchmark_release: string;
+  ready: boolean;
+  slots: Array<{
+    code: string;
+    label: string;
+    status: "filled" | "awaiting_review" | "missing";
+    accepted_snapshot_ids: string[];
+  }>;
+  missing_slots: string[];
+  awaiting_review_slots: string[];
+  accepted_count: number;
+  draft_count: number;
+  rejected_count: number;
+  employer_counts: Record<string, number>;
+  balance_violations: string[];
+  storage_policy: "deferred_internal_testing";
+};
+
+export type EvaluationFixtureCatalog = {
+  candidate_fixture_release: string;
+  pair_release: string;
+  benchmark_release: string;
+  candidates: Array<{
+    fixture_id: string;
+    label: string;
+    coverage: Record<string, string>;
+    intended_failure_modes: string[];
+    resume_profile_id: number | null;
+    loaded: boolean;
+  }>;
+  pairs: Array<{
+    pair_id: string;
+    coverage_slot: string;
+    candidate_fixture_id: string;
+    expectation: "strong" | "adjacent_or_incomplete" | "mismatch";
+    rationale: string;
+    resume_profile_id: number | null;
+    job_snapshot_id: string | null;
+    available: boolean;
+  }>;
 };
 
 export type EvaluationEvidenceSpan = {
@@ -413,6 +460,7 @@ export type EvaluationRequirementAssessment = {
   status: string;
   confidence: number;
   evidence_refs: string[];
+  alternative_group_refs?: string[];
   alternative_policy_ref: string | null;
   reason: string;
   missing: string[];
@@ -430,12 +478,100 @@ export type EvaluationRunDetail = EvaluationRunSummary & {
   qualification: {
     assessment: {
       requirement_assessments: EvaluationRequirementAssessment[];
-      hard_constraint_assessments: EvaluationRequirementAssessment[];
+      hard_constraint_assessments?: EvaluationRequirementAssessment[];
     };
     input_quality: Record<string, unknown>;
     generation: Record<string, unknown>;
   } & Record<string, unknown>;
+  manifest: Record<string, unknown>;
+  annotations: EvaluationAnnotation[];
+  annotation_targets: EvaluationAnnotationTarget[];
+  metrics: EvaluationMetrics;
   run_metadata: Record<string, unknown>;
+};
+
+export type EvaluationAnnotationTarget = {
+  stage: "candidate_profile" | "job_profile";
+  target_ref: string;
+  label: string;
+  value: unknown;
+  evidence_refs: string[];
+};
+
+export type EvaluationAnnotation = {
+  public_id: string;
+  reviewer_user_id: number;
+  reviewer_label: string;
+  stage: "candidate_profile" | "job_profile" | "qualification";
+  target_ref: string;
+  review_kind: "independent" | "adjudication";
+  verdict: "correct" | "partially_correct" | "incorrect" | "missing" | "ambiguous";
+  evidence_support: "supported" | "partially_supported" | "unsupported" | "ambiguous" | "not_reviewed";
+  expected_value: Record<string, unknown> | null;
+  confidence: number;
+  severity: "none" | "minor" | "major" | "severe";
+  error_taxonomy_code: string | null;
+  comment: string;
+  created_at: string;
+};
+
+export type EvaluationMetrics = {
+  run_id: string;
+  contract_metrics: Array<{
+    name: string;
+    passed: boolean;
+    numerator: number;
+    denominator: number;
+    details: string[];
+  }>;
+  qualification_status_counts: Record<string, number>;
+  annotation_count: number;
+  adjudicated_count: number;
+  positive_evidence_support_precision: number | null;
+  positive_evidence_support_counts: { supported: number; reviewed: number };
+  qualification_confusion_matrix: Record<string, Record<string, number>>;
+};
+
+export type EvaluationAggregateMetrics = {
+  benchmark_release: string | null;
+  run_count: number;
+  contract_pass_counts: Record<string, { passed: number; total: number }>;
+  qualification_status_counts: Record<string, number>;
+  annotation_count: number;
+  adjudicated_count: number;
+  severe_error_count: number;
+  positive_evidence_support_precision: number | null;
+  positive_evidence_support_counts: { supported: number; reviewed: number };
+};
+
+export type EvaluationComparison = {
+  baseline_run_id: string;
+  candidate_run_id: string;
+  comparable: boolean;
+  incompatibilities: string[];
+  manifest_differences: Record<string, { baseline: unknown; candidate: unknown }>;
+  qualification_changes: Array<Record<string, unknown>>;
+  candidate_profile_changed: boolean;
+  job_profile_changed: boolean;
+};
+
+export type EvaluationDisagreementQueue = {
+  items: Array<{
+    run_id: string;
+    stage: string;
+    target_ref: string;
+    status: "pending" | "resolved";
+    reviews: Array<{
+      annotation_id: string;
+      reviewer_label: string;
+      verdict: string;
+      evidence_support: string;
+      expected_value: Record<string, unknown> | null;
+      severity: string;
+      comment: string;
+    }>;
+    adjudication: Record<string, unknown> | null;
+  }>;
 };
 
 export type UserReportCategory = "bug" | "feedback" | "account" | "other";
@@ -1910,6 +2046,27 @@ export function listEvaluationJobSnapshots(): Promise<{ snapshots: EvaluationJob
   return requestJson<{ snapshots: EvaluationJobSnapshot[] }>("/internal/evaluation/job-snapshots");
 }
 
+export function reviewEvaluationJobSnapshot(
+  snapshotId: string,
+  payload: { review_status: "accepted" | "rejected"; review_notes: string },
+): Promise<EvaluationJobSnapshot> {
+  return requestJson<EvaluationJobSnapshot>(`/internal/evaluation/job-snapshots/${snapshotId}/review`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getBenchmarkAdmissionReport(
+  benchmarkRelease = "matching-benchmark-jobs.v1",
+): Promise<BenchmarkAdmissionReport> {
+  const params = new URLSearchParams({ benchmark_release: benchmarkRelease });
+  return requestJson<BenchmarkAdmissionReport>(`/internal/evaluation/admission-report?${params.toString()}`);
+}
+
+export function getEvaluationFixtureCatalog(): Promise<EvaluationFixtureCatalog> {
+  return requestJson<EvaluationFixtureCatalog>("/internal/evaluation/fixture-catalog");
+}
+
 export function importEvaluationJobSnapshot(payload: {
   source_url: string;
   benchmark_release: string;
@@ -1928,6 +2085,7 @@ export function listEvaluationRuns(): Promise<{ runs: EvaluationRunSummary[] }> 
 export function createEvaluationRun(payload: {
   job_snapshot_id: string;
   resume_profile_id: number;
+  candidate_fixture_release?: string;
 }): Promise<EvaluationRunDetail> {
   return requestJson<EvaluationRunDetail>("/internal/evaluation/runs", {
     method: "POST",
@@ -1937,4 +2095,55 @@ export function createEvaluationRun(payload: {
 
 export function getEvaluationRun(runId: string): Promise<EvaluationRunDetail> {
   return requestJson<EvaluationRunDetail>(`/internal/evaluation/runs/${runId}`);
+}
+
+export function addEvaluationAnnotation(
+  runId: string,
+  payload: Omit<EvaluationAnnotation, "public_id" | "reviewer_user_id" | "reviewer_label" | "created_at">,
+): Promise<EvaluationAnnotation> {
+  return requestJson<EvaluationAnnotation>(`/internal/evaluation/runs/${runId}/annotations`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function compareEvaluationRuns(
+  baselineRunId: string,
+  candidateRunId: string,
+): Promise<EvaluationComparison> {
+  const params = new URLSearchParams({
+    baseline_run_id: baselineRunId,
+    candidate_run_id: candidateRunId,
+  });
+  return requestJson<EvaluationComparison>(`/internal/evaluation/comparisons?${params.toString()}`);
+}
+
+export function getAggregateEvaluationMetrics(
+  benchmarkRelease?: string,
+): Promise<EvaluationAggregateMetrics> {
+  const query = benchmarkRelease
+    ? `?${new URLSearchParams({ benchmark_release: benchmarkRelease }).toString()}`
+    : "";
+  return requestJson<EvaluationAggregateMetrics>(`/internal/evaluation/metrics${query}`);
+}
+
+export function getEvaluationAdjudicationQueue(): Promise<EvaluationDisagreementQueue> {
+  return requestJson<EvaluationDisagreementQueue>("/internal/evaluation/adjudication-queue");
+}
+
+export async function downloadEvaluationCorpus(format: "json" | "markdown"): Promise<void> {
+  const response = await fetch(`${getApiBaseUrl()}/internal/evaluation/exports/corpus?format=${format}`, {
+    credentials: "include",
+    headers: authHeaders(),
+  });
+  if (!response.ok) throw new Error(`Corpus export failed with status ${response.status}`);
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const fileName = disposition.match(/filename="([^"]+)"/)?.[1] ?? `matching-evaluation.${format === "json" ? "json" : "md"}`;
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }

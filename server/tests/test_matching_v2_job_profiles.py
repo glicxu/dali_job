@@ -15,6 +15,7 @@ from app.modules.jobs.repository import source_url_hash
 from app.modules.matching_v2.canonical import EvidenceSpan, build_evidence_spans, canonicalize_text
 from app.modules.matching_v2.extraction import (
     JobExtractionResult,
+    assign_alternative_policies,
     cleanup_job_spans,
     select_job_model_spans,
     validate_job_extraction,
@@ -31,10 +32,9 @@ def _artifact(source_ref: str, *, duplicate_requirement: bool = False) -> JobExt
             "scoring_dimension": "technical_skill",
             "statement": "Production Python experience",
             "importance": "required",
-            "hard_constraint": False,
             "acceptable_evidence_contexts": ["professional", "open_source"],
             "minimum_years": None,
-            "explicit_alternatives": [],
+            "alternative_groups": [],
             "policy_alternative_group": None,
             "source_refs": [source_ref],
         }
@@ -96,7 +96,7 @@ class StubJobExtractor:
         self.calls += 1
         return JobExtractionResult(
             artifact=_artifact(spans[0].span_id, duplicate_requirement=True),
-            model_id="gpt-4.1-mini",
+            model_id="gpt-5.6-luna",
             provider_execution_reference="provider-job-test-1",
         )
 
@@ -123,6 +123,38 @@ def test_job_validator_merges_duplicate_requirements_without_extra_weight() -> N
     assert len(validated.requirements) == 1
     assert validated.requirements[0].local_ref == "python_required"
     assert validated.cleanup.duplicate_spans_removed == 0
+
+
+def test_server_assigns_only_registered_explicit_alternative_policies() -> None:
+    language_artifact = _artifact("job:requirements:1")
+    language_requirement = language_artifact.requirements[0].model_copy(
+        update={"alternative_groups": [{
+            "local_ref": "language_options",
+            "any_of": ["Python", "Java"],
+            "source_refs": ["job:requirements:1"],
+        }]}
+    )
+    language_artifact = language_artifact.model_copy(
+        update={"requirements": [language_requirement]}
+    )
+    degree_artifact = _artifact("job:requirements:1")
+    degree_requirement = degree_artifact.requirements[0].model_copy(
+        update={"alternative_groups": [{
+            "local_ref": "degree_options",
+            "any_of": ["degree", "equivalent experience"],
+            "source_refs": ["job:requirements:1"],
+        }]}
+    )
+    degree_artifact = degree_artifact.model_copy(update={"requirements": [degree_requirement]})
+
+    assigned_language = assign_alternative_policies(language_artifact)
+    assigned_degree = assign_alternative_policies(degree_artifact)
+
+    assert (
+        assigned_language.requirements[0].policy_alternative_group
+        == "general-purpose-programming-language.v2"
+    )
+    assert assigned_degree.requirements[0].policy_alternative_group is None
 
 
 def test_job_input_limit_is_explicitly_reported() -> None:

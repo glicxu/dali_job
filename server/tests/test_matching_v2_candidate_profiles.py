@@ -78,7 +78,7 @@ class StubCandidateExtractor:
         self.last_spans = spans
         return CandidateExtractionResult(
             artifact=_artifact(spans[-1].span_id),
-            model_id="gpt-4.1-mini",
+            model_id="gpt-5.6-luna",
             provider_execution_reference="provider-test-1",
         )
 

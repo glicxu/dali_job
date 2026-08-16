@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "sample_release": "matching-agent-score-sample.v1",
+  "matrix_release": "matching-expected-scores.v1",
+  "selection_policy": "Two pairs per initial score band, spanning role families; expected values are evaluation metadata and are not sent to the agent.",
+  "pairs": [
+    {"sample_id": "strong_ml", "band": "strong_direct_fit", "coverage_slot": "ml_data", "candidate_fixture_id": "cand_ml_mid_01", "initial_expected_score": 96, "expected_range": [93, 99]},
+    {"sample_id": "strong_manager", "band": "strong_direct_fit", "coverage_slot": "engineering_management", "candidate_fixture_id": "cand_manager_01", "initial_expected_score": 97, "expected_range": [94, 99]},
+    {"sample_id": "credible_backend_infra", "band": "credible_fit_with_gaps", "coverage_slot": "software_infrastructure", "candidate_fixture_id": "cand_backend_mid_01", "initial_expected_score": 72, "expected_range": [66, 78]},
+    {"sample_id": "credible_principal_manager", "band": "credible_fit_with_gaps", "coverage_slot": "engineering_management", "candidate_fixture_id": "cand_principal_01", "initial_expected_score": 65, "expected_range": [58, 72]},
+    {"sample_id": "adjacent_firmware_asic", "band": "adjacent_or_materially_incomplete", "coverage_slot": "hardware_design", "candidate_fixture_id": "cand_firmware_senior_01", "initial_expected_score": 57, "expected_range": [50, 64]},
+    {"sample_id": "adjacent_tpm_product", "band": "adjacent_or_materially_incomplete", "coverage_slot": "product_management", "candidate_fixture_id": "cand_tpm_senior_01", "initial_expected_score": 59, "expected_range": [52, 66]},
+    {"sample_id": "weak_firmware_mobile", "band": "weak_fit", "coverage_slot": "software_mobile", "candidate_fixture_id": "cand_firmware_senior_01", "initial_expected_score": 33, "expected_range": [25, 40]},
+    {"sample_id": "weak_backend_embedded", "band": "weak_fit", "coverage_slot": "embedded_firmware", "candidate_fixture_id": "cand_backend_mid_01", "initial_expected_score": 38, "expected_range": [30, 45]},
+    {"sample_id": "mismatch_product_asic", "band": "clear_mismatch", "coverage_slot": "hardware_design", "candidate_fixture_id": "cand_product_senior_01", "initial_expected_score": 10, "expected_range": [5, 15]},
+    {"sample_id": "mismatch_junior_principal", "band": "clear_mismatch", "coverage_slot": "principal_architecture", "candidate_fixture_id": "cand_junior_sparse_01", "initial_expected_score": 4, "expected_range": [0, 8]}
+  ]
+}

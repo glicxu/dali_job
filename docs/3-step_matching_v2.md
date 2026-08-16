@@ -165,7 +165,7 @@ The strict candidate-extraction response contains extracted evidence fields, car
 
 ### 4.3 Job extraction model response
 
-The strict job-extraction response contains normalized job facts, career context, atomic requirements, responsibilities, application constraints, and cleanup observations. It does not contain job IDs, URLs, hashes, versions, timestamps, or provider metadata; application code already knows those values.
+The strict provider response contains normalized job facts, career context, atomic requirements, responsibilities, application constraints, and extraction warnings. It does not contain job IDs, URLs, hashes, versions, timestamps, provider metadata, or server policy decisions. The provider DTO requires `policy_alternative_group` and permits only `null`; the persisted domain model permits a server-assigned registered policy ID after validation.
 
 ```json
 {
@@ -220,14 +220,14 @@ The strict job-extraction response contains normalized job facts, career context
     "clearance": null
   },
   "cleanup": {
-    "duplicate_spans_removed": 2,
-    "boilerplate_spans_ignored": 3,
+    "duplicate_spans_removed": 0,
+    "boilerplate_spans_ignored": 0,
     "warnings": []
   }
 }
 ```
 
-Requirement `local_ref` values are response-local. Application code validates uniqueness and source references, assigns durable requirement IDs, and rewrites approved local cross-references before persisting the Job Profile.
+Requirement `local_ref` values are response-local. Cleanup counters are also server-owned and constrained to zero in the provider DTO. Application code validates uniqueness and source references, computes cleanup counters, deterministically maps normalized employer alternatives to registered policies, assigns durable requirement IDs, and rewrites approved local cross-references before persisting the Job Profile.
 
 ### 4.4 Qualification model response
 
@@ -427,6 +427,30 @@ Primary selection is a mutable, revisioned overlay rather than part of the conte
 
 ## 7. Job Profile v1
 
+### 7.0 Current extraction contract: Job Profile v3
+
+The examples later in this section preserve the original v1 architecture for historical
+traceability. New Job Profile extraction uses the following versioned contract:
+
+- `job-profile.v3`, `job-extract-response.v3`, and `job-extract.v3`;
+- ordinary requirements use only `required` and `optional` importance;
+- there is no model-owned `hard_constraint` on an ordinary requirement;
+- work authorization, sponsorship, travel, and clearance remain single-owner eligibility facts
+  under `application_constraints`;
+- explicit employer alternatives are structured as cited `alternative_groups` with `any_of`
+  members; `policy_alternative_group` is always null in model output and is assigned only by the
+  deterministic registry;
+- the job-only taxonomy adds machine-learning, hardware, embedded, and technical-program role
+  families plus product/program tracks without changing Candidate Profile v1;
+- compensation is excluded from model ownership pending a cited multi-range representation;
+- section coverage, adjacent-family consistency, employment-type evidence, and constraint
+  duplication are enforced before persistence, with one full-replacement repair attempt.
+
+Qualification Assessment v2 consumes Job Profile v3 directly. The normalized database row retains
+`hard_constraint=false` and a flattened alternative value only so historical v1 artifacts remain
+readable; the v2 model input is reconstructed from the persisted Job Profile v3 artifact and uses
+its structured alternative groups.
+
 Exact duplicate removal runs before the job extraction model. The extractor receives bounded cleaned text plus valid source-span identifiers.
 
 ```json
@@ -493,7 +517,7 @@ Exact duplicate removal runs before the job extraction model. The extractor rece
       "importance": "required",
       "hard_constraint": false,
       "explicit_alternatives": ["TypeScript", "JavaScript"],
-      "policy_alternative_group": "general-purpose-programming-language.v1",
+      "policy_alternative_group": "general-purpose-programming-language.v2",
       "source_refs": ["job_01:requirements:0005"]
     },
     {
@@ -522,7 +546,7 @@ Exact duplicate removal runs before the job extraction model. The extractor rece
   },
   "generation": {
     "model": "model-id",
-    "prompt_version": "job-extract.v1",
+    "prompt_version": "job-extract.v2",
     "taxonomy_version": "skills.v1"
   }
 }
@@ -538,11 +562,22 @@ Job extraction rules:
 - Preserve missing salary, location, workplace type, and authorization information as unknown.
 - The model emits `importance`, not a numerical weight.
 - Every requirement has exactly one controlled `scoring_dimension`; code uses it to select the level- and track-aware multiplier.
-- Model-proposed alternatives must be either explicit in employer text or linked to an approved, versioned alternative policy.
+- The model extracts employer-stated alternatives only into `explicit_alternatives` and always returns `policy_alternative_group: null`.
+- After semantic validation, deterministic code may assign a policy only when normalized alternatives exactly satisfy a versioned registry rule. Model-suggested policy identifiers are never accepted.
 - A job has one primary role family and track. Adjacent role families provide context but do not independently change scoring.
 - `target_level` is the best-supported expected level; an acceptable range is included only when the posting supports one.
 - `level_source` is `explicit`, `inferred_from_requirements`, or `unknown`. An inferred level must cite the responsibilities or requirements supporting it and carry confidence.
 - A title alone may establish an explicit label, but requirement extraction must still preserve the actual experience, scope, architecture, and leadership expectations.
+
+Job Profile validation and repair order:
+
+1. Validate the provider response against the strict null-only structured-output schema.
+2. Normalize model-owned fields and perform semantic validation.
+3. For a recoverable failure, retry once with sanitized error codes and paths and require a complete replacement Job Profile.
+4. Deterministically assign registered alternative policies from normalized `explicit_alternatives`.
+5. Run final domain semantic validation and only then persist.
+
+The public failure body contains `JOB_PROFILE_VALIDATION_FAILED`, stage, correlation ID, and whether repair was attempted. Raw output, source text, and detailed validation data remain available only in protected evaluation traces.
 
 ## 8. User Preferences v1
 
@@ -648,6 +683,36 @@ The deterministic eligibility evaluator compares one immutable Candidate Eligibi
 Eligibility statuses are `satisfied`, `violated`, `unknown`, and `not_applicable`. The evaluator produces exactly one item for every material Job Profile application constraint. Missing user facts produce `unknown`; they never produce `violated`. A verified violation or unknown is passed to the gate engine under the employer hard-constraint rules in Section 11.5. If the job does not state a constraint, its status is `not_applicable` and the app does not ask the user for it.
 
 ## 9. Qualification Assessment v1: model output
+
+### 9.0 Current matching contract: Qualification Assessment v2
+
+The v1 example below remains for historical artifact compatibility. New Stage 3 matching uses
+`qualification-assessment.v2`, `qualification-assessment-response.v2`,
+`qualification-match.v2`, `qualification-policy.v2`, and `qualification-input.v2`.
+
+The v2 model receives the non-derived, evidence-bearing Candidate Profile collections, their
+canonical evidence spans, the selected career context, and Job Profile v3 requirements with
+structured alternative groups. It returns one `requirement_assessments` collection; there is no
+hard-constraint collection and no numerical score.
+
+Each requirement is classified exactly once as:
+
+- `met`: cited evidence covers the complete requirement;
+- `met_by_alternative`: cited evidence covers an explicit employer alternative group member or
+  an approved server policy, identified by an exact registered reference;
+- `partially_met`: cited evidence covers a material portion and `missing` records the remaining gap;
+- `not_demonstrated`: available evidence does not demonstrate the requirement, with no supporting
+  evidence refs and with the needed evidence listed in `missing`.
+
+Required and optional importance use the same evidence semantics. Importance is consumed later by
+the deterministic score policy and cannot change a Stage 3 status. Career context guides
+interpretation but cannot satisfy a requirement. The strict schema and semantic validator reject
+missing or duplicate requirement decisions, invented evidence IDs, invented alternative refs,
+unsupported positive statuses, partial decisions without gaps, and score/rank/recommendation fields.
+
+Qualification v1 artifacts remain immutable and readable through the API union. New normalized
+assessment rows use `collection_kind=normal`; `alternative_group_refs` are persisted separately from
+the server policy reference.
 
 The qualification model evaluates all atomic requirements for one job in one structured-output call. It does not receive User Preferences and cannot return scores.
 

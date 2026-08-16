@@ -15,6 +15,7 @@ from app.modules.matching_v2.registry import (
 from app.modules.matching_v2.prompts import build_extraction_user_prompt, build_qualification_user_prompt
 from app.modules.matching_v2.schemas import (
     CandidateExtractionResponse,
+    JobExtractionProviderResponse,
     QualificationAssessmentResponse,
     candidate_response_format,
     job_response_format,
@@ -78,7 +79,10 @@ def _assert_strict_objects(value: Any) -> None:
     [
         "candidate-extract-response.v1",
         "job-extract-response.v1",
+        "job-extract-response.v2",
+        "job-extract-response.v3",
         "qualification-assessment-response.v1",
+        "qualification-assessment-response.v2",
     ],
 )
 def test_model_response_schemas_are_recursively_strict(version: str) -> None:
@@ -126,6 +130,11 @@ def test_request_scoped_ids_are_closed_enums() -> None:
         "resume_01:experience:0002",
         "resume_01:project:0001",
     ]
+    assert item_schema["properties"]["status"]["enum"] == [
+        "met", "met_by_alternative", "partially_met", "not_demonstrated"
+    ]
+    assessment_schema = qualification["schema"]
+    assert "hard_constraint_assessments" not in assessment_schema["properties"]
 
 
 def test_extraction_formats_restrict_supplied_span_ids() -> None:
@@ -133,13 +142,28 @@ def test_extraction_formats_restrict_supplied_span_ids() -> None:
     job = job_response_format(["job_01:requirements:0001"])
 
     candidate_profile = candidate["schema"]["$defs"]["CandidateCareerProfileResponse"]
-    job_requirement = job["schema"]["$defs"]["JobRequirementResponse"]
+    job_requirement = job["schema"]["$defs"]["JobRequirementProviderResponse"]
     assert candidate_profile["properties"]["evidence_refs"]["items"]["enum"] == [
         "resume_01:project:0001"
     ]
     assert job_requirement["properties"]["source_refs"]["items"]["enum"] == [
         "job_01:requirements:0001"
     ]
+    assert job_requirement["properties"]["policy_alternative_group"] == {
+        "title": "Policy Alternative Group",
+        "type": "null",
+    }
+    assert "policy_alternative_group" in job_requirement["required"]
+    job_cleanup = job["schema"]["$defs"]["JobCleanupProviderResponse"]
+    assert job_cleanup["properties"]["duplicate_spans_removed"]["const"] == 0
+    assert job_cleanup["properties"]["boilerplate_spans_ignored"]["const"] == 0
+
+
+def test_provider_job_schema_rejects_model_owned_policy_identifier() -> None:
+    schema = normalized_json_schema(JobExtractionProviderResponse)
+    requirement = schema["$defs"]["JobRequirementProviderResponse"]
+
+    assert requirement["properties"]["policy_alternative_group"]["type"] == "null"
 
 
 def test_schema_hash_is_stable() -> None:
@@ -174,10 +198,16 @@ def test_foundation_registry_contains_versioned_contract_inputs() -> None:
     expected = {
         ("prompt", "candidate-extract.v1"),
         ("prompt", "job-extract.v1"),
+        ("prompt", "job-extract.v2"),
+        ("prompt", "job-extract.v3"),
         ("prompt", "qualification-match.v1"),
+        ("prompt", "qualification-match.v2"),
         ("taxonomy", "matching-taxonomy.v1"),
+        ("taxonomy", "matching-taxonomy.v2"),
         ("semantic_validator", "matching-semantic-validator.v1"),
+        ("semantic_validator", "matching-semantic-validator.v3"),
         ("alternative_policy", "general-purpose-programming-language.v1"),
+        ("alternative_policy", "general-purpose-programming-language.v2"),
         ("deterministic_policy", "preference-policy.v1"),
         ("deterministic_policy", "eligibility-policy.v1"),
         ("role_track_scoring_policy", "software-ic-score.v1"),
@@ -197,6 +227,7 @@ def test_prompt_builders_keep_untrusted_content_inside_json_envelopes() -> None:
         ],
     )
     qualification = build_qualification_user_prompt(
+        candidate_profile={"skills": []},
         candidate_evidence=[{"span_id": "resume:summary:0001", "text": "Python"}],
         job_requirements=[{"requirement_id": "req_01", "statement": "Python"}],
         approved_alternatives=[],

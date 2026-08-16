@@ -1,0 +1,235 @@
+{
+  "schema_version": 1,
+  "fixture_release": "candidate-fixtures.synthetic.v1",
+  "construction": "synthetic",
+  "contains_personal_data": false,
+  "fixtures": [
+    {
+      "fixture_id": "cand_junior_sparse_01",
+      "label": "Junior software candidate — sparse evidence",
+      "coverage": {"role_family": "software_engineering", "track": "individual_contributor", "career_stage": "entry", "resume_quality": "sparse"},
+      "intended_failure_modes": ["insufficient_evidence", "skill_list_without_usage"],
+      "resume_data": {
+        "headline": "Junior Software Developer",
+        "summary": "Early-career developer seeking a first full-time software role.",
+        "experience": ["Completed a three-month internship assisting with internal web application bug fixes."],
+        "skills": ["Python", "Java", "SQL", "AWS", "Kubernetes"],
+        "education": ["Bachelor of Science in Computer Science."],
+        "certifications": [],
+        "projects": ["Built a small course project that stores task data in SQLite."],
+        "awards": [], "publications": [], "languages": [], "volunteer": [],
+        "target_roles": ["Software Engineer"],
+        "notes": ["Synthetic evaluation fixture cand_junior_sparse_01; deliberately sparse."]
+      }
+    },
+    {
+      "fixture_id": "cand_backend_mid_01",
+      "label": "Mid-level backend and distributed systems engineer",
+      "coverage": {"role_family": "software_engineering", "track": "individual_contributor", "career_stage": "mid", "resume_quality": "strong"},
+      "intended_failure_modes": [],
+      "resume_data": {
+        "headline": "Backend Software Engineer",
+        "summary": "Five years building transaction-processing services and distributed data systems.",
+        "experience": [
+          "Designed and operated Go and Java services processing 18,000 transactions per second with idempotency and retry controls.",
+          "Implemented replicated storage workflows using consensus-based coordination and reduced recovery time by 35 percent.",
+          "Led production incident reviews and added service-level objectives, tracing, and automated rollback checks."
+        ],
+        "skills": ["Go", "Java", "SQL", "distributed systems", "databases", "AWS"],
+        "education": ["Bachelor of Science in Computer Engineering."],
+        "certifications": [], "projects": [], "awards": [], "publications": [], "languages": [], "volunteer": [],
+        "target_roles": ["Backend Software Engineer", "Distributed Systems Engineer"],
+        "notes": ["Synthetic evaluation fixture cand_backend_mid_01."]
+      }
+    },
+    {
+      "fixture_id": "cand_sre_senior_01",
+      "label": "Senior infrastructure and site reliability engineer",
+      "coverage": {"role_family": "software_engineering", "track": "individual_contributor", "career_stage": "senior", "resume_quality": "strong"},
+      "intended_failure_modes": ["adjacent_distributed_systems_experience"],
+      "resume_data": {
+        "headline": "Senior Site Reliability Engineer",
+        "summary": "Eight years improving reliability of globally distributed cloud platforms.",
+        "experience": [
+          "Owned availability and capacity for Kubernetes services across twelve regions and maintained a 99.99 percent service objective.",
+          "Built Go automation that cut repetitive operational work by 45 percent and reduced failed deployments.",
+          "Led incident response, Linux performance debugging, disaster-recovery exercises, and reliability design reviews.",
+          "Mentored four engineers on observability, error budgets, and production readiness."
+        ],
+        "skills": ["Go", "Python", "Linux", "Kubernetes", "Terraform", "observability", "distributed systems"],
+        "education": ["Bachelor of Science in Computer Science."],
+        "certifications": ["Cloud infrastructure professional certification."],
+        "projects": [], "awards": [], "publications": [], "languages": [], "volunteer": [],
+        "target_roles": ["Senior Site Reliability Engineer", "Infrastructure Engineer"],
+        "notes": ["Synthetic evaluation fixture cand_sre_senior_01."]
+      }
+    },
+    {
+      "fixture_id": "cand_mobile_mid_01",
+      "label": "Mid-level iOS client engineer",
+      "coverage": {"role_family": "software_engineering", "track": "individual_contributor", "career_stage": "mid", "resume_quality": "strong"},
+      "intended_failure_modes": ["limited_backend_depth"],
+      "resume_data": {
+        "headline": "iOS Software Engineer",
+        "summary": "Six years delivering Swift applications and shared Apple-platform components.",
+        "experience": [
+          "Shipped three customer-facing iOS applications in Swift and SwiftUI used by more than 400,000 monthly users.",
+          "Designed offline synchronization, authentication, and API client layers and reduced crash rate by 40 percent.",
+          "Built XCTest automation and release telemetry and partnered with design, security, and backend teams."
+        ],
+        "skills": ["Swift", "SwiftUI", "UIKit", "XCTest", "REST APIs", "iOS performance"],
+        "education": ["Bachelor of Science in Software Engineering."],
+        "certifications": [], "projects": [], "awards": [], "publications": [], "languages": [], "volunteer": [],
+        "target_roles": ["iOS Software Engineer", "Client Platform Engineer"],
+        "notes": ["Synthetic evaluation fixture cand_mobile_mid_01."]
+      }
+    },
+    {
+      "fixture_id": "cand_ml_mid_01",
+      "label": "Mid-level production machine-learning engineer",
+      "coverage": {"role_family": "machine_learning", "track": "individual_contributor", "career_stage": "mid", "resume_quality": "strong"},
+      "intended_failure_modes": ["research_depth_ambiguous"],
+      "resume_data": {
+        "headline": "Machine Learning Engineer",
+        "summary": "Five years developing and operating production NLP and model-evaluation systems.",
+        "experience": [
+          "Trained and deployed PyTorch text-classification models serving 30 million requests per month.",
+          "Built dataset quality, bias, robustness, and drift evaluations and established release thresholds with product-security partners.",
+          "Implemented Python data pipelines, experiment tracking, automated retraining, and production monitoring."
+        ],
+        "skills": ["Python", "PyTorch", "machine learning", "LLM evaluation", "MLOps", "data pipelines"],
+        "education": ["Master of Science in Computer Science."],
+        "certifications": [], "projects": [], "awards": [],
+        "publications": ["Co-authored an internal technical report on robust text-model evaluation."],
+        "languages": [], "volunteer": [],
+        "target_roles": ["Machine Learning Engineer", "ML Platform Engineer"],
+        "notes": ["Synthetic evaluation fixture cand_ml_mid_01."]
+      }
+    },
+    {
+      "fixture_id": "cand_asic_senior_01",
+      "label": "Senior ASIC and SoC design engineer",
+      "coverage": {"role_family": "hardware_engineering", "track": "individual_contributor", "career_stage": "senior", "resume_quality": "strong"},
+      "intended_failure_modes": ["firmware_experience_not_demonstrated"],
+      "resume_data": {
+        "headline": "Senior ASIC Design Engineer",
+        "summary": "Seven years designing and integrating high-performance SoC subsystems.",
+        "experience": [
+          "Defined microarchitecture and implemented SystemVerilog RTL for cache, DMA, reset, and interconnect control blocks.",
+          "Owned synthesis, timing closure, CDC review, formal equivalence, and power-performance-area tradeoff analysis.",
+          "Partnered with verification and silicon-bring-up teams to debug two production SoC generations."
+        ],
+        "skills": ["SystemVerilog", "RTL", "ASIC design", "logic synthesis", "timing analysis", "computer architecture", "Python"],
+        "education": ["Master of Science in Electrical Engineering."],
+        "certifications": [], "projects": [], "awards": [], "publications": [], "languages": [], "volunteer": [],
+        "target_roles": ["Senior ASIC Design Engineer", "SoC Design Engineer"],
+        "notes": ["Synthetic evaluation fixture cand_asic_senior_01."]
+      }
+    },
+    {
+      "fixture_id": "cand_firmware_senior_01",
+      "label": "Senior embedded firmware engineer",
+      "coverage": {"role_family": "embedded_systems", "track": "individual_contributor", "career_stage": "senior", "resume_quality": "strong"},
+      "intended_failure_modes": ["asic_rtl_not_demonstrated"],
+      "resume_data": {
+        "headline": "Senior Embedded Firmware Engineer",
+        "summary": "Nine years delivering low-level firmware for network and compute devices.",
+        "experience": [
+          "Designed C and C++ firmware for ARM microcontrollers using an RTOS, memory-mapped I/O, and interrupt-driven interfaces.",
+          "Led board bring-up, boot and power-management debugging, error injection, and hardware-software integration.",
+          "Built Python verification automation and coordinated requirements with architecture, hardware, validation, and manufacturing teams."
+        ],
+        "skills": ["C", "C++", "Python", "RTOS", "ARM", "firmware", "hardware debugging", "JTAG"],
+        "education": ["Bachelor of Science in Computer Engineering."],
+        "certifications": [], "projects": [], "awards": [], "publications": [], "languages": [], "volunteer": [],
+        "target_roles": ["Senior Firmware Engineer", "Embedded Systems Engineer"],
+        "notes": ["Synthetic evaluation fixture cand_firmware_senior_01."]
+      }
+    },
+    {
+      "fixture_id": "cand_product_senior_01",
+      "label": "Senior infrastructure product manager",
+      "coverage": {"role_family": "product_management", "track": "product", "career_stage": "senior", "resume_quality": "strong"},
+      "intended_failure_modes": ["hands_on_engineering_not_claimed"],
+      "resume_data": {
+        "headline": "Senior Technical Product Manager",
+        "summary": "Eight years defining and launching cloud infrastructure and developer-platform products.",
+        "experience": [
+          "Defined strategy and roadmaps for capacity-planning and infrastructure tooling used by 600 internal service teams.",
+          "Took two technical products from discovery through launch and adoption, using customer research and usage metrics to prioritize work.",
+          "Aligned engineering, operations, finance, and executive stakeholders across multi-year platform investments."
+        ],
+        "skills": ["product strategy", "roadmaps", "customer discovery", "cloud infrastructure", "analytics", "cross-functional leadership"],
+        "education": ["Master of Business Administration.", "Bachelor of Science in Information Systems."],
+        "certifications": [], "projects": [], "awards": [], "publications": [], "languages": [], "volunteer": [],
+        "target_roles": ["Senior Product Manager", "Infrastructure Product Manager"],
+        "notes": ["Synthetic evaluation fixture cand_product_senior_01."]
+      }
+    },
+    {
+      "fixture_id": "cand_tpm_senior_01",
+      "label": "Senior hardware and software technical program manager",
+      "coverage": {"role_family": "technical_program_management", "track": "program", "career_stage": "senior", "resume_quality": "strong"},
+      "intended_failure_modes": ["product_ownership_adjacent"],
+      "resume_data": {
+        "headline": "Senior Technical Program Manager",
+        "summary": "Nine years leading cross-functional hardware, firmware, and platform delivery programs.",
+        "experience": [
+          "Led acoustic hardware, embedded software, validation, and operations teams through two consumer-device launches.",
+          "Established integrated schedules, dependency and risk reviews, engineering change control, and executive status reporting.",
+          "Resolved supplier and technical blockers across teams in four countries and improved milestone predictability by 30 percent."
+        ],
+        "skills": ["technical program management", "hardware development", "firmware delivery", "risk management", "cross-functional leadership"],
+        "education": ["Bachelor of Science in Electrical Engineering."],
+        "certifications": ["Project management professional certification."],
+        "projects": [], "awards": [], "publications": [], "languages": [], "volunteer": [],
+        "target_roles": ["Senior Technical Program Manager", "Engineering Program Manager"],
+        "notes": ["Synthetic evaluation fixture cand_tpm_senior_01."]
+      }
+    },
+    {
+      "fixture_id": "cand_manager_01",
+      "label": "Software engineering manager with systems background",
+      "coverage": {"role_family": "software_engineering", "track": "engineering_management", "career_stage": "manager", "resume_quality": "strong"},
+      "intended_failure_modes": ["recent_individual_contributor_depth_ambiguous"],
+      "resume_data": {
+        "headline": "Software Engineering Manager",
+        "summary": "Twelve years in systems engineering, including five years managing platform teams.",
+        "experience": [
+          "Managed a team of ten engineers responsible for operating-system search, indexing, and retrieval services.",
+          "Set technical direction, quality gates, observability standards, hiring plans, and growth paths for senior engineers.",
+          "Coordinated eight concurrent workstreams across product, security, release, and partner organizations.",
+          "Previously developed C++ storage and indexing components for a desktop operating system."
+        ],
+        "skills": ["engineering management", "C++", "systems programming", "search systems", "people development", "release governance"],
+        "education": ["Bachelor of Science in Computer Science."],
+        "certifications": [], "projects": [], "awards": [], "publications": [], "languages": [], "volunteer": [],
+        "target_roles": ["Software Engineering Manager", "Principal Engineering Manager"],
+        "notes": ["Synthetic evaluation fixture cand_manager_01."]
+      }
+    },
+    {
+      "fixture_id": "cand_principal_01",
+      "label": "Principal distributed-platform architect",
+      "coverage": {"role_family": "software_engineering", "track": "individual_contributor", "career_stage": "principal", "resume_quality": "strong"},
+      "intended_failure_modes": ["multiple_plausible_role_profiles"],
+      "resume_data": {
+        "headline": "Principal Software Engineer and Platform Architect",
+        "summary": "Seventeen years designing cloud platforms, distributed services, and device-management architecture while remaining hands-on.",
+        "experience": [
+          "Defined the multi-year architecture for identity, registration, and management services supporting 90 million connected devices.",
+          "Established organization-wide API, availability, data-consistency, security, and operational standards across fourteen teams.",
+          "Built reference implementations in Java and Go, reviewed critical designs, and led resolution of cross-service scaling failures.",
+          "Mentored staff engineers and influenced investment decisions with directors and product leaders without direct authority."
+        ],
+        "skills": ["software architecture", "distributed systems", "device cloud", "Java", "Go", "AWS", "technical leadership"],
+        "education": ["Master of Science in Computer Science."],
+        "certifications": [], "projects": [], "awards": ["Company-wide technical leadership award."],
+        "publications": ["Authored internal architecture guidance for globally distributed device services."],
+        "languages": [], "volunteer": [],
+        "target_roles": ["Principal Software Engineer", "Platform Architect", "Technical Leader"],
+        "notes": ["Synthetic evaluation fixture cand_principal_01; supports multiple plausible profiles."]
+      }
+    }
+  ]
+}

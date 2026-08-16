@@ -4,7 +4,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
-CANONICALIZATION_VERSION = "canonical-text.v1"
+CANONICALIZATION_VERSION = "canonical-text.v2"
 SPAN_POLICY_VERSION = "evidence-spans.v1"
 MAX_SPAN_CHARS = 1_200
 
@@ -55,10 +55,17 @@ class EvidenceSpan:
 
 
 def canonicalize_text(value: str) -> str:
-    """Apply the intentionally narrow canonical-text.v1 transformation."""
+    """Apply narrow Unicode normalization plus known job-board mojibake repair."""
     normalized = unicodedata.normalize("NFC", value)
     normalized = normalized.replace("\r\n", "\n").replace("\r", "\n")
-    return normalized.replace("\x00", "")
+    normalized = normalized.replace("\x00", "")
+    replacements = {
+        "â€™": "’", "â€˜": "‘", "â€œ": "“", "â€": "”",
+        "â€”": "—", "â€“": "–", "â€¢": "•", "Â ": " ",
+    }
+    for damaged, repaired in replacements.items():
+        normalized = normalized.replace(damaged, repaired)
+    return normalized
 
 
 def build_evidence_spans(
@@ -68,7 +75,7 @@ def build_evidence_spans(
     max_span_chars: int = MAX_SPAN_CHARS,
 ) -> list[EvidenceSpan]:
     if canonical_text != canonicalize_text(canonical_text):
-        raise ValueError("Evidence spans require canonical-text.v1 input.")
+        raise ValueError(f"Evidence spans require {CANONICALIZATION_VERSION} input.")
     if max_span_chars < 100:
         raise ValueError("max_span_chars must be at least 100.")
     safe_prefix = _slug(source_prefix) or "source"

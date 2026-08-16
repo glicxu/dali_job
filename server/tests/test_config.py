@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 import app.config as config_module
-from app.config import SERVER_ENV_FILE, load_runtime_config
+from app.config import DEFAULT_OPENAI_MODEL, SERVER_ENV_FILE, load_runtime_config
 
 
 def test_server_env_file_points_to_server_directory() -> None:
@@ -15,6 +15,13 @@ def test_default_auth_mode_is_dev() -> None:
     runtime = load_runtime_config()
 
     assert runtime.auth_mode == "dev"
+
+
+def test_default_openai_model_is_gpt_5_6_luna() -> None:
+    runtime = load_runtime_config()
+
+    assert DEFAULT_OPENAI_MODEL == "gpt-5.6-luna"
+    assert runtime.openai_model == DEFAULT_OPENAI_MODEL
 
 
 @pytest.mark.parametrize("auth_mode", ["dev", "disabled"])
@@ -94,6 +101,7 @@ def test_matching_v2_public_flags_default_off() -> None:
     assert runtime.matching_v2.web_enabled is False
     assert runtime.matching_v2.mobile_enabled is False
     assert runtime.matching_v2.evaluation_enabled is False
+    assert runtime.matching_v2.prompt_debug_enabled is False
     assert runtime.matching_v2.legacy_adapter_enabled is True
 
 
@@ -105,6 +113,7 @@ def test_matching_v2_flags_have_explicit_environment_overrides(monkeypatch) -> N
     monkeypatch.setenv("DALIJOB_MATCHING_V2_WEB_ENABLED", "true")
     monkeypatch.setenv("DALIJOB_MATCHING_V2_MOBILE_ENABLED", "true")
     monkeypatch.setenv("DALIJOB_MATCHING_V2_EVALUATION_ENABLED", "true")
+    monkeypatch.setenv("DALIJOB_MATCHING_V2_PROMPT_DEBUG_ENABLED", "true")
     monkeypatch.setenv("DALIJOB_MATCHING_LEGACY_ADAPTER_ENABLED", "false")
 
     runtime = load_runtime_config()
@@ -116,6 +125,7 @@ def test_matching_v2_flags_have_explicit_environment_overrides(monkeypatch) -> N
     assert runtime.matching_v2.web_enabled is True
     assert runtime.matching_v2.mobile_enabled is True
     assert runtime.matching_v2.evaluation_enabled is True
+    assert runtime.matching_v2.prompt_debug_enabled is True
     assert runtime.matching_v2.legacy_adapter_enabled is False
 
 

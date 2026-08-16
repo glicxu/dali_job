@@ -375,6 +375,7 @@ class RequirementAssessment(Base):
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     evidence_refs: Mapped[list] = mapped_column(JSON, nullable=False)
+    alternative_group_refs: Mapped[list | None] = mapped_column(JSON, nullable=True)
     alternative_policy_ref: Mapped[str | None] = mapped_column(String(120), nullable=True)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     missing: Mapped[list] = mapped_column(JSON, nullable=False)

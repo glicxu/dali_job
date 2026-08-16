@@ -1,6 +1,6 @@
 # Three-Step Matching Evaluation Plan
 
-Status: E0 implementation in progress
+Status: E1 in progress; ten-job benchmark admitted and diagnostic pair set prepared
 Scope: Candidate Profile extraction, Job Profile extraction, and Qualification Assessment
 Out of scope initially: preferences, eligibility, numerical scoring, ranking, and recommendations
 
@@ -187,6 +187,12 @@ For the ten-job pilot, create 30–50 resume/job pairs:
 
 Pair labels must be assigned before observing the system result when practical. This reduces confirmation bias.
 
+The pilot's pre-run numerical expectations are frozen in
+`MATCHING_EXPECTED_SCORE_MATRIX.md` and the machine-readable release
+`server/app/modules/evaluation/expected_score_matrix.v1.json`. Every candidate/job combination has
+an `initial_expected_score` and tolerance range. A later run records `agent_score` separately, and a
+later independent review records `human_score`; neither value overwrites the initial matrix.
+
 The pilot is diagnostic, not statistically conclusive. Percentages from ten jobs must always be reported with raw counts and examples.
 
 ## 9. Golden Annotation Contract
@@ -328,7 +334,7 @@ Every run should record:
   "job_fixture_release": "matching-benchmark-jobs.v1",
   "candidate_prompt_version": "candidate-extract.v1",
   "job_prompt_version": "job-extract.v1",
-  "qualification_prompt_version": "qualification-match.v1",
+  "qualification_prompt_version": "qualification-match.v2",
   "schema_versions": {},
   "taxonomy_version": "matching-taxonomy.v1",
   "selection_policy_version": "career-selection-policy.v1",
@@ -553,23 +559,69 @@ Implementation checkpoint (2026-08-15): the first E0 vertical slice is operation
 resume-PDF loading through the existing managed import path, persisted three-stage runs, run
 history, exact source/profile inspection, and evidence navigation in an admin-only web
 workbench at `/evaluation`. The API intentionally records `score_generated: false`.
-Annotation/adjudication, benchmark manifests, aggregate metrics, run comparison, corpus export,
-and leakage checks remain in the next E0 increment.
+At that checkpoint, annotation/adjudication, benchmark manifests, aggregate metrics, run
+comparison, corpus export, and leakage checks remained.
+
+Second implementation checkpoint (2026-08-15): run manifests, append-only independent and
+adjudicated reviewer annotations, per-run and aggregate contract metrics, qualification confusion
+matrices, the primary positive-evidence-support metric, and source-safe run comparison are now
+implemented in the internal API and `/evaluation` workbench. Comparison explicitly reports changed
+candidate or job sources as incompatible. At that checkpoint, corpus export, fact-level review,
+disagreement queues, admission reporting, and automated privacy checks remained.
+
+E0 completion checkpoint (2026-08-15): job capture and benchmark admission are separate actions;
+the ten pilot coverage slots and balancing violations are visible; only accepted snapshots can run;
+Candidate Profile facts, Job Profile facts, and qualification rows are independently reviewable;
+cross-reviewer disagreements enter an adjudication queue; JSON and Markdown corpus exports redact
+candidate contact channels; and automated tests verify that private candidate data and complete job
+inputs do not enter logs or exported candidate sources. E0 is complete. E1 is the human/data task of
+selecting the ten real jobs, loading 8–12 consented or synthetic candidate fixtures, constructing
+intentional pairs, and completing reviews through this workbench.
 
 ### E0: Evaluation foundation
 
-- Define manifest and annotation schemas.
+- Define manifest and annotation schemas. **Complete.**
 - Implement frozen-fixture runner and version capture. **Initial vertical slice complete.**
-- Implement evidence, coverage, and contract metrics.
-- Add redaction and benchmark-leakage tests.
+- Implement evidence, coverage, and contract metrics. **Initial per-run and aggregate metrics complete.**
+- Add redaction and benchmark-leakage tests. **Complete.**
 - Add the workbench shell, server-managed job import, resume loading, and source/profile inspection. **Complete.**
 
-Exit: one synthetic candidate/job pair runs reproducibly without a live search.
+Exit: **Passed.** A synthetic candidate/job pair runs reproducibly without a live search, supports
+all three annotation stages, reports metrics, compares safely, and exports with candidate redaction.
 
 ### E1: Ten-job curated pilot
 
-- Fill and review the ten coverage slots.
-- Create 8–12 candidate fixtures and 30–50 intentional pairs.
+Collection checkpoint (2026-08-15): ten active postings were fetched from employer-controlled
+career pages, reviewed, accepted, and frozen in the local evaluation corpus. The admitted set fills
+every coverage slot with Amazon (2), Google (2), Apple (2), NVIDIA (2), Microsoft (1), and
+Cloudflare (1), with no balance violations and no aggregator posting. Future discovery starts from
+the machine-readable employer source registry at
+`server/app/modules/evaluation/company_job_sources.json`.
+
+Candidate-and-pair checkpoint (2026-08-15): `candidate-fixtures.synthetic.v1` defines eleven
+source-controlled synthetic resumes with no personal or contact data. They cover entry, mid,
+senior, manager, and principal contexts across software, infrastructure, mobile, ML, hardware,
+firmware, product, TPM, and leadership. All eleven are loaded into the local tester workbench.
+`matching-evaluation-pairs.v1` freezes thirty expectations before matcher execution: one strong,
+one adjacent or incomplete, and one mismatch candidate for each of the ten job slots.
+
+Manual-selection checkpoint (2026-08-15): the `/evaluation` workbench exposes all eleven candidate
+fixtures, ten accepted jobs, and thirty suggested diagnostic pairs. A tester can independently
+select a candidate or job, inspect the exact structured resume and frozen job description, or use a
+suggested pair to fill both selectors. Selection never starts provider work; the three-stage matcher
+runs only after the tester explicitly chooses **Run evaluation now**.
+
+Initial-score checkpoint (2026-08-15): all 110 candidate/job combinations have a frozen 0–100
+initial expected score and reviewer-tolerance range. Agent and human scores remain intentionally
+empty until their respective run and blind-review stages.
+
+First agent-sample checkpoint (2026-08-15): two pairs from each of the five initial score bands were
+run once on US3 without exposing evaluation labels. Two of ten runs completed; eight were rejected
+by strict Job Profile or Qualification Assessment validation, and none returned a numeric score.
+The immutable sample and observed results are recorded in `MATCHING_AGENT_SAMPLE_RESULTS.md`.
+
+- Fill and review the ten coverage slots. **Complete.**
+- Create 8–12 candidate fixtures and 30–50 intentional pairs. **Complete: 11 fixtures and 30 pairs.**
 - Complete initial annotations and adjudication.
 - Run the current three-step matcher and classify every disagreement.
 - Complete the pilot through the tester workbench without direct database access.

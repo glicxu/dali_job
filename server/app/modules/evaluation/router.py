@@ -23,6 +23,7 @@ from app.modules.evaluation.metrics import calculate_aggregate_metrics, calculat
 from app.modules.evaluation.export import build_corpus_export, corpus_markdown
 from app.modules.evaluation.models import (
     EvaluationAnnotation,
+    EvaluationArtifactReview,
     EvaluationJobSnapshot,
     EvaluationMatchReview,
     EvaluationRun,
@@ -50,9 +51,18 @@ from app.modules.evaluation.schemas import (
     JobSnapshotReviewRequest,
     JobSnapshotView,
     BenchmarkAdmissionReportView,
+    CandidateProfileEvaluationView,
+    EvaluationArtifactReviewCreateRequest,
+    EvaluationArtifactReviewView,
+    EvaluationCandidateSourceListResponse,
     EvaluationFixtureCatalogView,
+    JobProfileEvaluationView,
 )
-from app.modules.matching_v2.api_schemas import QualificationAssessmentCreateRequest
+from app.modules.matching_v2.api_schemas import (
+    CandidateProfileView,
+    JobProfileView,
+    QualificationAssessmentCreateRequest,
+)
 from app.modules.matching_v2.extraction import CandidateProfileExtractor, JobProfileExtractor
 from app.modules.matching_v2.diagnostics import begin_matching_prompt_trace, end_matching_prompt_trace
 from app.modules.matching_v2.models import (
@@ -241,6 +251,199 @@ def get_fixture_catalog(
         repository.list_snapshots(db, workspace_id=workspace.id),
     )
     return EvaluationFixtureCatalogView.model_validate(catalog)
+
+
+@router.get("/candidate-sources", response_model=EvaluationCandidateSourceListResponse)
+def get_evaluation_candidate_sources(
+    request: Request,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> EvaluationCandidateSourceListResponse:
+    user, workspace = _require_evaluation_access(request, db, identity)
+    candidates = []
+    for resume in profile_repository.list_resume_profiles(db, identity):
+        profile = db.scalar(
+            select(CandidateProfileVersion)
+            .join(CanonicalSource, CandidateProfileVersion.canonical_source_id == CanonicalSource.id)
+            .where(
+                CandidateProfileVersion.resume_profile_id == resume.id,
+                CandidateProfileVersion.deleted_at.is_(None),
+                CanonicalSource.workspace_id == workspace.id,
+                CanonicalSource.user_id == user.id,
+                CanonicalSource.deleted_at.is_(None),
+            )
+            .order_by(CandidateProfileVersion.created_at.desc(), CandidateProfileVersion.id.desc())
+            .limit(1)
+        )
+        if resume.title.startswith("[EVAL internal"):
+            fixture_group = "internal"
+        elif resume.title.startswith("[EVAL synthetic"):
+            fixture_group = "synthetic"
+        else:
+            fixture_group = "account"
+        candidates.append({
+            "resume_profile_id": resume.id,
+            "label": resume.title,
+            "fixture_group": fixture_group,
+            "candidate_profile_id": profile.public_id if profile is not None else None,
+            "profile_created_at": profile.created_at if profile is not None else None,
+        })
+    return EvaluationCandidateSourceListResponse.model_validate({"candidates": candidates})
+
+
+@router.post(
+    "/candidate-sources/{resume_profile_id}/profile",
+    response_model=CandidateProfileEvaluationView,
+)
+def evaluate_candidate_profile(
+    resume_profile_id: int,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+    candidate_extractor: CandidateProfileExtractor = Depends(get_candidate_profile_extractor),
+) -> CandidateProfileEvaluationView:
+    _, workspace = _require_evaluation_access(request, db, identity)
+    resume = profile_repository.get_resume_profile_for_identity(db, identity, resume_profile_id)
+    if resume is None:
+        raise HTTPException(status_code=404, detail="Resume profile not found.")
+    view = create_candidate_profile(
+        resume_profile_id,
+        request,
+        Response(),
+        BackgroundTasks(),
+        db,
+        identity,
+        candidate_extractor,
+    )
+    if not isinstance(view, CandidateProfileView):
+        raise HTTPException(status_code=409, detail="Candidate Profile extraction did not complete synchronously.")
+    profile = db.scalar(select(CandidateProfileVersion).where(
+        CandidateProfileVersion.public_id == view.candidate_profile_id
+    ))
+    if profile is None:
+        raise HTTPException(status_code=409, detail="Candidate Profile was not persisted.")
+    source = db.get(CanonicalSource, profile.canonical_source_id)
+    if source is None:
+        raise HTTPException(status_code=409, detail="Candidate Profile source is unavailable.")
+    return _candidate_evaluation_view(db, workspace.id, resume, profile, source)
+
+
+@router.post(
+    "/job-snapshots/{snapshot_id}/profile",
+    response_model=JobProfileEvaluationView,
+)
+def evaluate_job_profile(
+    snapshot_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+    job_extractor: JobProfileExtractor = Depends(get_job_profile_extractor),
+) -> JobProfileEvaluationView:
+    _, workspace = _require_evaluation_access(request, db, identity)
+    snapshot = repository.get_snapshot(db, public_id=snapshot_id, workspace_id=workspace.id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="Evaluation job snapshot not found.")
+    if snapshot.review_status != "accepted":
+        raise HTTPException(status_code=409, detail="The job snapshot must be accepted before profiling.")
+    view = create_job_profile(
+        snapshot.user_saved_job_id,
+        request,
+        Response(),
+        BackgroundTasks(),
+        db,
+        identity,
+        job_extractor,
+    )
+    if not isinstance(view, JobProfileView):
+        raise HTTPException(status_code=409, detail="Job Profile extraction did not complete synchronously.")
+    profile = db.scalar(select(JobProfileVersion).where(
+        JobProfileVersion.public_id == view.job_profile_id
+    ))
+    if profile is None:
+        raise HTTPException(status_code=409, detail="Job Profile was not persisted.")
+    source = db.get(CanonicalSource, profile.canonical_source_id)
+    if source is None:
+        raise HTTPException(status_code=409, detail="Job Profile source is unavailable.")
+    return _job_evaluation_view(db, workspace.id, snapshot, profile, source)
+
+
+@router.post(
+    "/candidate-profiles/{candidate_profile_id}/reviews",
+    response_model=EvaluationArtifactReviewView,
+)
+def add_candidate_profile_review(
+    candidate_profile_id: str,
+    payload: EvaluationArtifactReviewCreateRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> EvaluationArtifactReviewView:
+    user, workspace = _require_evaluation_access(request, db, identity)
+    profile = db.scalar(
+        select(CandidateProfileVersion)
+        .join(CanonicalSource, CandidateProfileVersion.canonical_source_id == CanonicalSource.id)
+        .where(
+            CandidateProfileVersion.public_id == candidate_profile_id,
+            CandidateProfileVersion.deleted_at.is_(None),
+            CanonicalSource.workspace_id == workspace.id,
+            CanonicalSource.user_id == user.id,
+            CanonicalSource.deleted_at.is_(None),
+        )
+    )
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Candidate Profile not found.")
+    review = repository.create_artifact_review(
+        db,
+        workspace_id=workspace.id,
+        reviewer_user_id=user.id,
+        stage="candidate_profile",
+        candidate_profile_version_id=profile.id,
+        job_profile_version_id=None,
+        overall_score=payload.overall_score,
+        confidence=payload.confidence,
+        rationale=payload.rationale,
+    )
+    return _artifact_review_view(db, review, profile.public_id)
+
+
+@router.post(
+    "/job-profiles/{job_profile_id}/reviews",
+    response_model=EvaluationArtifactReviewView,
+)
+def add_job_profile_review(
+    job_profile_id: str,
+    payload: EvaluationArtifactReviewCreateRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> EvaluationArtifactReviewView:
+    user, workspace = _require_evaluation_access(request, db, identity)
+    profile = db.scalar(
+        select(JobProfileVersion)
+        .join(
+            EvaluationJobSnapshot,
+            EvaluationJobSnapshot.jobs_cache_id == JobProfileVersion.jobs_cache_id,
+        )
+        .where(
+            JobProfileVersion.public_id == job_profile_id,
+            JobProfileVersion.deleted_at.is_(None),
+            EvaluationJobSnapshot.workspace_id == workspace.id,
+        )
+    )
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Job Profile not found.")
+    review = repository.create_artifact_review(
+        db,
+        workspace_id=workspace.id,
+        reviewer_user_id=user.id,
+        stage="job_profile",
+        candidate_profile_version_id=None,
+        job_profile_version_id=profile.id,
+        overall_score=payload.overall_score,
+        confidence=payload.confidence,
+        rationale=payload.rationale,
+    )
+    return _artifact_review_view(db, review, profile.public_id)
 
 
 @router.post("/runs", response_model=EvaluationRunDetail)
@@ -591,6 +794,76 @@ def _source_view(db: Session, source: CanonicalSource) -> EvaluationSourceView:
             end_utf8_byte=item.end_utf8_byte,
             excerpt=item.excerpt,
         ) for item in spans],
+    )
+
+
+def _artifact_review_view(
+    db: Session,
+    review: EvaluationArtifactReview,
+    artifact_id: str,
+) -> EvaluationArtifactReviewView:
+    reviewer = db.get(User, review.reviewer_user_id)
+    return EvaluationArtifactReviewView(
+        public_id=review.public_id,
+        stage=cast(str, review.stage),
+        artifact_id=artifact_id,
+        reviewer_user_id=review.reviewer_user_id,
+        reviewer_label=reviewer.email if reviewer is not None else f"user:{review.reviewer_user_id}",
+        overall_score=review.overall_score,
+        confidence=review.confidence,
+        rationale=review.rationale,
+        created_at=review.created_at,
+    )
+
+
+def _candidate_evaluation_view(
+    db: Session,
+    workspace_id: int,
+    resume: ResumeProfile,
+    profile: CandidateProfileVersion,
+    source: CanonicalSource,
+) -> CandidateProfileEvaluationView:
+    return CandidateProfileEvaluationView(
+        resume_profile_id=resume.id,
+        resume_title=resume.title,
+        resume_source=_source_view(db, source),
+        candidate_profile=_candidate_profile_view(db, profile, source),
+        annotation_targets=artifact_annotation_targets(db, candidate=profile),
+        reviews=[
+            _artifact_review_view(db, item, profile.public_id)
+            for item in repository.list_artifact_reviews(
+                db,
+                workspace_id=workspace_id,
+                stage="candidate_profile",
+                candidate_profile_version_id=profile.id,
+            )
+        ],
+    )
+
+
+def _job_evaluation_view(
+    db: Session,
+    workspace_id: int,
+    snapshot: EvaluationJobSnapshot,
+    profile: JobProfileVersion,
+    source: CanonicalSource,
+) -> JobProfileEvaluationView:
+    return JobProfileEvaluationView(
+        job_snapshot_id=snapshot.public_id,
+        job_title=snapshot.title,
+        job_company=snapshot.company,
+        job_source=_source_view(db, source),
+        job_profile=_job_profile_view(db, profile, source),
+        annotation_targets=artifact_annotation_targets(db, job_profile=profile),
+        reviews=[
+            _artifact_review_view(db, item, profile.public_id)
+            for item in repository.list_artifact_reviews(
+                db,
+                workspace_id=workspace_id,
+                stage="job_profile",
+                job_profile_version_id=profile.id,
+            )
+        ],
     )
 
 

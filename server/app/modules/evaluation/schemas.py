@@ -102,6 +102,18 @@ class EvaluationFixtureCatalogView(BaseModel):
     pairs: list[EvaluationPairCatalogItem]
 
 
+class EvaluationCandidateSourceItem(BaseModel):
+    resume_profile_id: int
+    label: str
+    fixture_group: Literal["internal", "synthetic", "account"]
+    candidate_profile_id: str | None
+    profile_created_at: datetime | None
+
+
+class EvaluationCandidateSourceListResponse(BaseModel):
+    candidates: list[EvaluationCandidateSourceItem]
+
+
 class EvaluationRunCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -186,6 +198,42 @@ class EvaluationMatchReviewSummaryView(BaseModel):
     independent_reviewer_count: int
     reviews: list[EvaluationMatchReviewView]
     adjudicated_review: EvaluationMatchReviewView | None
+
+
+class EvaluationArtifactReviewCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    overall_score: int = Field(ge=0, le=100)
+    confidence: float = Field(default=1.0, ge=0, le=1)
+    rationale: str = Field(min_length=1, max_length=4000)
+
+
+class EvaluationArtifactReviewView(EvaluationArtifactReviewCreateRequest):
+    public_id: str
+    stage: Literal["candidate_profile", "job_profile"]
+    artifact_id: str
+    reviewer_user_id: int
+    reviewer_label: str
+    created_at: datetime
+
+
+class CandidateProfileEvaluationView(BaseModel):
+    resume_profile_id: int
+    resume_title: str
+    resume_source: EvaluationSourceView
+    candidate_profile: CandidateProfileView
+    annotation_targets: list[EvaluationAnnotationTargetView]
+    reviews: list[EvaluationArtifactReviewView]
+
+
+class JobProfileEvaluationView(BaseModel):
+    job_snapshot_id: str
+    job_title: str
+    job_company: str
+    job_source: EvaluationSourceView
+    job_profile: JobProfileView
+    annotation_targets: list[EvaluationAnnotationTargetView]
+    reviews: list[EvaluationArtifactReviewView]
 
 
 class EvaluationAnnotationTargetView(BaseModel):

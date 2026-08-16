@@ -2557,6 +2557,215 @@
         }
       }
     },
+    "/api/v1/internal/evaluation/candidate-sources": {
+      "get": {
+        "tags": [
+          "matching-evaluation"
+        ],
+        "summary": "Get Evaluation Candidate Sources",
+        "operationId": "get_evaluation_candidate_sources_api_v1_internal_evaluation_candidate_sources_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationCandidateSourceListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/internal/evaluation/candidate-sources/{resume_profile_id}/profile": {
+      "post": {
+        "tags": [
+          "matching-evaluation"
+        ],
+        "summary": "Evaluate Candidate Profile",
+        "operationId": "evaluate_candidate_profile_api_v1_internal_evaluation_candidate_sources__resume_profile_id__profile_post",
+        "parameters": [
+          {
+            "name": "resume_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Resume Profile Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateProfileEvaluationView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/internal/evaluation/job-snapshots/{snapshot_id}/profile": {
+      "post": {
+        "tags": [
+          "matching-evaluation"
+        ],
+        "summary": "Evaluate Job Profile",
+        "operationId": "evaluate_job_profile_api_v1_internal_evaluation_job_snapshots__snapshot_id__profile_post",
+        "parameters": [
+          {
+            "name": "snapshot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Snapshot Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobProfileEvaluationView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/internal/evaluation/candidate-profiles/{candidate_profile_id}/reviews": {
+      "post": {
+        "tags": [
+          "matching-evaluation"
+        ],
+        "summary": "Add Candidate Profile Review",
+        "operationId": "add_candidate_profile_review_api_v1_internal_evaluation_candidate_profiles__candidate_profile_id__reviews_post",
+        "parameters": [
+          {
+            "name": "candidate_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Candidate Profile Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluationArtifactReviewCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationArtifactReviewView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/internal/evaluation/job-profiles/{job_profile_id}/reviews": {
+      "post": {
+        "tags": [
+          "matching-evaluation"
+        ],
+        "summary": "Add Job Profile Review",
+        "operationId": "add_job_profile_review_api_v1_internal_evaluation_job_profiles__job_profile_id__reviews_post",
+        "parameters": [
+          {
+            "name": "job_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Profile Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluationArtifactReviewCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationArtifactReviewView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/internal/evaluation/runs": {
       "get": {
         "tags": [
@@ -4878,6 +5087,54 @@
                     }
                   ],
                   "title": "Response Create Candidate Profile Api V1 Resumes  Resume Profile Id  Candidate Profile Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "candidate-profiles"
+        ],
+        "summary": "Get Latest Candidate Profile For Resume",
+        "operationId": "get_latest_candidate_profile_for_resume_api_v1_resumes__resume_profile_id__candidate_profile_get",
+        "parameters": [
+          {
+            "name": "resume_profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Resume Profile Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/CandidateProfileView"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get Latest Candidate Profile For Resume Api V1 Resumes  Resume Profile Id  Candidate Profile Get"
                 }
               }
             }
@@ -10833,6 +11090,48 @@
         ],
         "title": "CandidateFixtureCatalogItem"
       },
+      "CandidateProfileEvaluationView": {
+        "properties": {
+          "resume_profile_id": {
+            "type": "integer",
+            "title": "Resume Profile Id"
+          },
+          "resume_title": {
+            "type": "string",
+            "title": "Resume Title"
+          },
+          "resume_source": {
+            "$ref": "#/components/schemas/EvaluationSourceView"
+          },
+          "candidate_profile": {
+            "$ref": "#/components/schemas/CandidateProfileView"
+          },
+          "annotation_targets": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluationAnnotationTargetView"
+            },
+            "type": "array",
+            "title": "Annotation Targets"
+          },
+          "reviews": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluationArtifactReviewView"
+            },
+            "type": "array",
+            "title": "Reviews"
+          }
+        },
+        "type": "object",
+        "required": [
+          "resume_profile_id",
+          "resume_title",
+          "resume_source",
+          "candidate_profile",
+          "annotation_targets",
+          "reviews"
+        ],
+        "title": "CandidateProfileEvaluationView"
+      },
       "CandidateProfileSourceResponse": {
         "properties": {
           "source_id": {
@@ -12677,6 +12976,170 @@
         ],
         "title": "EvaluationAnnotationView"
       },
+      "EvaluationArtifactReviewCreateRequest": {
+        "properties": {
+          "overall_score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Overall Score"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 1.0
+          },
+          "rationale": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Rationale"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "overall_score",
+          "rationale"
+        ],
+        "title": "EvaluationArtifactReviewCreateRequest"
+      },
+      "EvaluationArtifactReviewView": {
+        "properties": {
+          "overall_score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Overall Score"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 1.0
+          },
+          "rationale": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Rationale"
+          },
+          "public_id": {
+            "type": "string",
+            "title": "Public Id"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "candidate_profile",
+              "job_profile"
+            ],
+            "title": "Stage"
+          },
+          "artifact_id": {
+            "type": "string",
+            "title": "Artifact Id"
+          },
+          "reviewer_user_id": {
+            "type": "integer",
+            "title": "Reviewer User Id"
+          },
+          "reviewer_label": {
+            "type": "string",
+            "title": "Reviewer Label"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "overall_score",
+          "rationale",
+          "public_id",
+          "stage",
+          "artifact_id",
+          "reviewer_user_id",
+          "reviewer_label",
+          "created_at"
+        ],
+        "title": "EvaluationArtifactReviewView"
+      },
+      "EvaluationCandidateSourceItem": {
+        "properties": {
+          "resume_profile_id": {
+            "type": "integer",
+            "title": "Resume Profile Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "fixture_group": {
+            "type": "string",
+            "enum": [
+              "internal",
+              "synthetic",
+              "account"
+            ],
+            "title": "Fixture Group"
+          },
+          "candidate_profile_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Profile Id"
+          },
+          "profile_created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "resume_profile_id",
+          "label",
+          "fixture_group",
+          "candidate_profile_id",
+          "profile_created_at"
+        ],
+        "title": "EvaluationCandidateSourceItem"
+      },
+      "EvaluationCandidateSourceListResponse": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluationCandidateSourceItem"
+            },
+            "type": "array",
+            "title": "Candidates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "candidates"
+        ],
+        "title": "EvaluationCandidateSourceListResponse"
+      },
       "EvaluationComparisonView": {
         "properties": {
           "baseline_run_id": {
@@ -13562,6 +14025,37 @@
             "type": "string",
             "title": "Result Context",
             "default": "Best usable match from this guest search"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          },
+          "policy_reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Policy Reason Codes"
           }
         },
         "type": "object",
@@ -15990,6 +16484,53 @@
         ],
         "title": "JobLocationResponse"
       },
+      "JobProfileEvaluationView": {
+        "properties": {
+          "job_snapshot_id": {
+            "type": "string",
+            "title": "Job Snapshot Id"
+          },
+          "job_title": {
+            "type": "string",
+            "title": "Job Title"
+          },
+          "job_company": {
+            "type": "string",
+            "title": "Job Company"
+          },
+          "job_source": {
+            "$ref": "#/components/schemas/EvaluationSourceView"
+          },
+          "job_profile": {
+            "$ref": "#/components/schemas/JobProfileView"
+          },
+          "annotation_targets": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluationAnnotationTargetView"
+            },
+            "type": "array",
+            "title": "Annotation Targets"
+          },
+          "reviews": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluationArtifactReviewView"
+            },
+            "type": "array",
+            "title": "Reviews"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_snapshot_id",
+          "job_title",
+          "job_company",
+          "job_source",
+          "job_profile",
+          "annotation_targets",
+          "reviews"
+        ],
+        "title": "JobProfileEvaluationView"
+      },
       "JobProfileSourceResponse": {
         "properties": {
           "source_id": {
@@ -17806,9 +18347,16 @@
             "title": "Source Url"
           },
           "match_score": {
-            "type": "integer",
-            "maximum": 10.0,
-            "minimum": 0.0,
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Match Score"
           },
           "match_data": {
@@ -17830,6 +18378,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/MatchFeedbackResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "matching_v2_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MatchResultView"
               },
               {
                 "type": "null"
@@ -17878,7 +18436,6 @@
           "search_schedule_id",
           "title",
           "company",
-          "match_score",
           "match_data",
           "resume_data",
           "job_data",

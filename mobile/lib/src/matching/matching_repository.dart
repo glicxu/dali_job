@@ -295,17 +295,58 @@ class MatchingRepository {
           'internal/evaluation/fixture-catalog',
           accessToken: token,
         );
+        final candidateSources = await api.get(
+          'internal/evaluation/candidate-sources',
+          accessToken: token,
+        );
         final snapshots = await api.get(
           'internal/evaluation/job-snapshots',
           accessToken: token,
         );
         return TesterFixtures(
           catalog: catalog,
+          candidates: (candidateSources['candidates'] as List)
+              .map((item) => Map<String, dynamic>.from(item as Map))
+              .toList(),
           jobs: (snapshots['snapshots'] as List)
               .map((item) => Map<String, dynamic>.from(item as Map))
               .toList(),
         );
       });
+
+  Future<Map<String, dynamic>> loadCandidateProfileEvaluation(
+    int resumeProfileId,
+  ) => session.authorized(
+    (token) => api.post(
+      'internal/evaluation/candidate-sources/$resumeProfileId/profile',
+      accessToken: token,
+    ),
+  );
+
+  Future<Map<String, dynamic>> loadJobProfileEvaluation(String jobSnapshotId) =>
+      session.authorized(
+        (token) => api.post(
+          'internal/evaluation/job-snapshots/$jobSnapshotId/profile',
+          accessToken: token,
+        ),
+      );
+
+  Future<Map<String, dynamic>> submitArtifactReview({
+    required String stage,
+    required String artifactId,
+    required int score,
+    required String rationale,
+  }) => session.authorized(
+    (token) => api.post(
+      'internal/evaluation/${stage == 'candidate_profile' ? 'candidate-profiles' : 'job-profiles'}/$artifactId/reviews',
+      accessToken: token,
+      body: {
+        'overall_score': score,
+        'confidence': 1.0,
+        'rationale': rationale.trim(),
+      },
+    ),
+  );
 
   Future<Map<String, dynamic>> startTesterEvaluation({
     required int resumeProfileId,
@@ -363,9 +404,14 @@ class MatchingRepository {
 }
 
 class TesterFixtures {
-  const TesterFixtures({required this.catalog, required this.jobs});
+  const TesterFixtures({
+    required this.catalog,
+    required this.candidates,
+    required this.jobs,
+  });
 
   final Map<String, dynamic> catalog;
+  final List<Map<String, dynamic>> candidates;
   final List<Map<String, dynamic>> jobs;
 }
 

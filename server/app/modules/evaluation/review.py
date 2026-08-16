@@ -14,41 +14,44 @@ from app.modules.matching_v2.models import CandidateProfileVersion, JobProfileVe
 def artifact_annotation_targets(
     db: Session,
     *,
-    candidate: CandidateProfileVersion,
-    job_profile: JobProfileVersion,
+    candidate: CandidateProfileVersion | None = None,
+    job_profile: JobProfileVersion | None = None,
 ) -> list[dict[str, Any]]:
     targets: list[dict[str, Any]] = []
-    candidate_artifact = candidate.artifact
-    candidate_labels = {
-        "skills": "Skill",
-        "experience": "Experience",
-        "projects": "Project",
-        "education": "Education",
-        "certifications": "Certification",
-        "publications": "Publication",
-        "career_profiles": "Career profile",
-    }
-    for collection, label in candidate_labels.items():
-        values = candidate_artifact.get(collection, [])
-        if not isinstance(values, list):
-            continue
-        for index, value in enumerate(values):
-            refs = value.get("evidence_refs", []) if isinstance(value, dict) else []
-            targets.append({
-                "stage": "candidate_profile",
-                "target_ref": f"candidate_profile:{collection}:{index}",
-                "label": f"{label} {index + 1}",
-                "value": value,
-                "evidence_refs": refs,
-            })
-    targets.append({
-        "stage": "candidate_profile",
-        "target_ref": "candidate_profile:derived",
-        "label": "Derived summary and target roles",
-        "value": candidate_artifact.get("derived", {}),
-        "evidence_refs": [],
-    })
+    if candidate is not None:
+        candidate_artifact = candidate.artifact
+        candidate_labels = {
+            "skills": "Skill",
+            "experience": "Experience",
+            "projects": "Project",
+            "education": "Education",
+            "certifications": "Certification",
+            "publications": "Publication",
+            "career_profiles": "Career profile",
+        }
+        for collection, label in candidate_labels.items():
+            values = candidate_artifact.get(collection, [])
+            if not isinstance(values, list):
+                continue
+            for index, value in enumerate(values):
+                refs = value.get("evidence_refs", []) if isinstance(value, dict) else []
+                targets.append({
+                    "stage": "candidate_profile",
+                    "target_ref": f"candidate_profile:{collection}:{index}",
+                    "label": f"{label} {index + 1}",
+                    "value": value,
+                    "evidence_refs": refs,
+                })
+        targets.append({
+            "stage": "candidate_profile",
+            "target_ref": "candidate_profile:derived",
+            "label": "Derived summary and target roles",
+            "value": candidate_artifact.get("derived", {}),
+            "evidence_refs": [],
+        })
 
+    if job_profile is None:
+        return targets
     requirements = list(db.scalars(select(JobRequirement).where(
         JobRequirement.job_profile_version_id == job_profile.id
     ).order_by(JobRequirement.id)).all())

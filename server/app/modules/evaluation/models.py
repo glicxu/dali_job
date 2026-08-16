@@ -193,3 +193,57 @@ class EvaluationMatchReview(Base):
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     rationale: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class EvaluationArtifactReview(Base):
+    __tablename__ = "matching_evaluation_artifact_reviews"
+    __table_args__ = (
+        CheckConstraint(
+            "stage IN ('candidate_profile', 'job_profile')",
+            name="ck_matching_eval_artifact_reviews_stage",
+        ),
+        CheckConstraint(
+            "overall_score >= 0 AND overall_score <= 100",
+            name="ck_matching_eval_artifact_reviews_score",
+        ),
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 1",
+            name="ck_matching_eval_artifact_reviews_confidence",
+        ),
+        CheckConstraint(
+            "(stage = 'candidate_profile' AND candidate_profile_version_id IS NOT NULL "
+            "AND job_profile_version_id IS NULL) OR "
+            "(stage = 'job_profile' AND job_profile_version_id IS NOT NULL "
+            "AND candidate_profile_version_id IS NULL)",
+            name="ck_matching_eval_artifact_reviews_target",
+        ),
+        Index("ix_matching_eval_artifact_reviews_public", "public_id", unique=True),
+        Index("ix_matching_eval_artifact_reviews_workspace", "workspace_id"),
+        Index("ix_matching_eval_artifact_reviews_reviewer", "reviewer_user_id"),
+        Index("ix_matching_eval_artifact_reviews_candidate", "candidate_profile_version_id"),
+        Index("ix_matching_eval_artifact_reviews_job", "job_profile_version_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    public_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    workspace_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    reviewer_user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    stage: Mapped[str] = mapped_column(String(30), nullable=False)
+    candidate_profile_version_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("matching_candidate_profile_versions.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    job_profile_version_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("matching_job_profile_versions.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    overall_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)

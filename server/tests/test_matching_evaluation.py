@@ -381,6 +381,68 @@ def test_admin_can_capture_and_inspect_a_repeatable_three_stage_run(caplog) -> N
     assert admission_after.status_code == 200
     assert admission_after.json()["slots"][0]["status"] == "filled"
 
+    candidate_sources = client.get("/api/v1/internal/evaluation/candidate-sources")
+    assert candidate_sources.status_code == 200
+    assert candidate_sources.json()["candidates"] == [{
+        "resume_profile_id": resume.json()["id"],
+        "label": "Evaluation Candidate",
+        "fixture_group": "account",
+        "candidate_profile_id": None,
+        "profile_created_at": None,
+    }]
+    candidate_stage = client.post(
+        f"/api/v1/internal/evaluation/candidate-sources/{resume.json()['id']}/profile"
+    )
+    assert candidate_stage.status_code == 200, candidate_stage.text
+    candidate_stage_body = candidate_stage.json()
+    assert candidate_stage_body["resume_title"] == "Evaluation Candidate"
+    assert candidate_stage_body["resume_source"]["spans"]
+    assert candidate_stage_body["candidate_profile"]["candidate_profile_id"].startswith("cp_")
+    assert candidate_stage_body["annotation_targets"]
+    assert candidate_stage_body["reviews"] == []
+    candidate_profile_id = candidate_stage_body["candidate_profile"]["candidate_profile_id"]
+    candidate_review = client.post(
+        f"/api/v1/internal/evaluation/candidate-profiles/{candidate_profile_id}/reviews",
+        json={
+            "overall_score": 88,
+            "confidence": 0.9,
+            "rationale": "Accurate profile with a small date-normalization issue.",
+        },
+    )
+    assert candidate_review.status_code == 200, candidate_review.text
+    assert candidate_review.json()["stage"] == "candidate_profile"
+    assert candidate_review.json()["artifact_id"] == candidate_profile_id
+    candidate_stage_reloaded = client.post(
+        f"/api/v1/internal/evaluation/candidate-sources/{resume.json()['id']}/profile"
+    )
+    assert [item["overall_score"] for item in candidate_stage_reloaded.json()["reviews"]] == [88]
+
+    job_stage = client.post(
+        f"/api/v1/internal/evaluation/job-snapshots/{captured.json()['public_id']}/profile"
+    )
+    assert job_stage.status_code == 200, job_stage.text
+    job_stage_body = job_stage.json()
+    assert job_stage_body["job_source"]["spans"]
+    assert job_stage_body["job_profile"]["job_profile_id"].startswith("jp_")
+    assert job_stage_body["annotation_targets"]
+    assert job_stage_body["reviews"] == []
+    job_profile_id = job_stage_body["job_profile"]["job_profile_id"]
+    job_review = client.post(
+        f"/api/v1/internal/evaluation/job-profiles/{job_profile_id}/reviews",
+        json={
+            "overall_score": 92,
+            "confidence": 1,
+            "rationale": "Requirements and job context are faithfully extracted.",
+        },
+    )
+    assert job_review.status_code == 200, job_review.text
+    assert job_review.json()["stage"] == "job_profile"
+    assert job_review.json()["artifact_id"] == job_profile_id
+    job_stage_reloaded = client.post(
+        f"/api/v1/internal/evaluation/job-snapshots/{captured.json()['public_id']}/profile"
+    )
+    assert [item["overall_score"] for item in job_stage_reloaded.json()["reviews"]] == [92]
+
     run = client.post("/api/v1/internal/evaluation/runs", json={
         "job_snapshot_id": captured.json()["public_id"],
         "resume_profile_id": resume.json()["id"],

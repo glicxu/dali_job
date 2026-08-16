@@ -522,8 +522,13 @@ The exact API may change during implementation, but the workbench needs internal
 POST /api/v1/internal/evaluation/job-snapshots/import
 GET  /api/v1/internal/evaluation/job-snapshots
 POST /api/v1/internal/evaluation/job-snapshots/{snapshot_id}/accept
+POST /api/v1/internal/evaluation/job-snapshots/{snapshot_id}/profile
+POST /api/v1/internal/evaluation/job-profiles/{job_profile_id}/reviews
 POST /api/v1/internal/evaluation/resume-fixtures
 GET  /api/v1/internal/evaluation/resume-fixtures
+GET  /api/v1/internal/evaluation/candidate-sources
+POST /api/v1/internal/evaluation/candidate-sources/{resume_profile_id}/profile
+POST /api/v1/internal/evaluation/candidate-profiles/{candidate_profile_id}/reviews
 POST /api/v1/internal/evaluation/runs
 GET  /api/v1/internal/evaluation/runs/{run_id}
 POST /api/v1/internal/evaluation/runs/{run_id}/annotations
@@ -549,6 +554,9 @@ A normal pilot session is:
 ### 15.11 Workbench acceptance criteria
 
 - A tester can complete the workflow without shell or direct database access.
+- The lab has separate Candidate Profile, Job Profile, and Matching sections.
+- Candidate Profile extraction/review and Job Profile extraction/review run independently and do
+  not invoke Qualification Assessment.
 - A job is fetched once and replayed from its frozen snapshot for later runs.
 - Resume, Candidate Profile, job description, Job Profile, and detailed Qualification Assessment are accessible from one evaluation run.
 - Every evidence reference navigates to the correct immutable source and excerpt.
@@ -556,6 +564,13 @@ A normal pilot session is:
 - A rerun always shows whether it reused or changed each input and policy version.
 - No Phase 5 score or recommendation appears before the deterministic scoring phase is implemented.
 - Evaluation routes remain inaccessible when the internal evaluation feature is disabled.
+
+Implementation checkpoint (2026-08-16): the mobile tester lab is split into three explicit
+sections. Candidate Profile review lists account-owned real and synthetic resume sources, displays
+canonical resume text beside the extracted artifact, and persists an overall human score and
+rationale. Job Profile review does the same for accepted frozen job snapshots. Matching retains the
+paired three-stage run and its independent match review. Artifact reviews are append-only and do
+not mutate generated Candidate or Job Profiles.
 
 ## 16. Delivery Stages
 

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.modules.auth.dependencies import AuthenticatedIdentity
 from app.modules.evaluation.models import (
     EvaluationAnnotation,
+    EvaluationArtifactReview,
     EvaluationJobSnapshot,
     EvaluationMatchReview,
     EvaluationRun,
@@ -232,4 +233,58 @@ def list_match_reviews(
         statement = statement.where(EvaluationMatchReview.reviewer_user_id == reviewer_user_id)
     return list(db.scalars(statement.order_by(
         EvaluationMatchReview.created_at, EvaluationMatchReview.id
+    )).all())
+
+
+def create_artifact_review(
+    db: Session,
+    *,
+    workspace_id: int,
+    reviewer_user_id: int,
+    stage: str,
+    candidate_profile_version_id: int | None,
+    job_profile_version_id: int | None,
+    overall_score: int,
+    confidence: float,
+    rationale: str,
+) -> EvaluationArtifactReview:
+    review = EvaluationArtifactReview(
+        public_id=f"evp_{uuid.uuid4().hex}",
+        workspace_id=workspace_id,
+        reviewer_user_id=reviewer_user_id,
+        stage=stage,
+        candidate_profile_version_id=candidate_profile_version_id,
+        job_profile_version_id=job_profile_version_id,
+        overall_score=overall_score,
+        confidence=confidence,
+        rationale=rationale,
+    )
+    db.add(review)
+    db.flush()
+    db.refresh(review)
+    return review
+
+
+def list_artifact_reviews(
+    db: Session,
+    *,
+    workspace_id: int,
+    stage: str,
+    candidate_profile_version_id: int | None = None,
+    job_profile_version_id: int | None = None,
+) -> list[EvaluationArtifactReview]:
+    statement = select(EvaluationArtifactReview).where(
+        EvaluationArtifactReview.workspace_id == workspace_id,
+        EvaluationArtifactReview.stage == stage,
+    )
+    if stage == "candidate_profile":
+        statement = statement.where(
+            EvaluationArtifactReview.candidate_profile_version_id == candidate_profile_version_id
+        )
+    else:
+        statement = statement.where(
+            EvaluationArtifactReview.job_profile_version_id == job_profile_version_id
+        )
+    return list(db.scalars(statement.order_by(
+        EvaluationArtifactReview.created_at, EvaluationArtifactReview.id
     )).all())

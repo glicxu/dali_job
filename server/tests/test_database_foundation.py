@@ -312,7 +312,7 @@ def test_alembic_has_initial_schema_revision() -> None:
     config.set_main_option("script_location", str(server_dir / "app" / "db" / "migrations"))
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == EXPECTED_ALEMBIC_HEAD == "20260816_0057"
+    assert script.get_current_head() == EXPECTED_ALEMBIC_HEAD == "20260816_0058"
 
 
 def test_phase3_migration_does_not_recreate_existing_document_version_constraint() -> None:

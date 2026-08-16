@@ -250,15 +250,30 @@ Dependencies: Phases 2–3.
 
 Implemented scope:
 
-- `career-selection-policy.v1` deterministically selects the closest role-family and track context, uses the primary selection only as a class-5 fallback, and persists the selection revision and reason code.
-- Qualification input contains validated atomic Job Profile requirements and only non-derived Candidate Profile evidence spans. `qualification-input.v1` enforces a deterministic UTF-8 byte limit and records omitted evidence explicitly.
-- The strict qualification provider contract can emit only requirement classifications, confidence, evidence, approved alternatives, reasons, and missing evidence; it cannot emit scores, weights, recommendations, or application-owned artifact IDs.
-- Semantic validation enforces exact normal and hard-constraint coverage, collection ownership, valid candidate evidence, positive-status evidence, explicit or registered alternatives, low-confidence conversion, and `not_demonstrated` for ordinary evidence absence.
+- `career-selection-policy.v2` deterministically selects the closest role-family and track context, uses the primary selection only as a class-5 fallback, and persists the selection revision and reason code.
+- Qualification input contains validated Job Profile v3 requirements, structured alternative groups, the non-derived Candidate Profile collections, and their evidence spans. `qualification-input.v2` enforces a deterministic UTF-8 byte limit and records omitted evidence explicitly.
+- The strict Qualification Assessment v2 provider contract emits exactly one requirement collection using `met`, `met_by_alternative`, `partially_met`, or `not_demonstrated`; it cannot emit scores, weights, recommendations, eligibility outcomes, hard-constraint collections, or application-owned artifact IDs.
+- Semantic validation enforces exact requirement coverage, valid candidate evidence, positive-status evidence, exact employer alternative-group references, registered server policy references, partial gaps, and evidence-free `not_demonstrated` decisions. Model confidence is retained for auditability but cannot rewrite an evidence status.
 - Immutable private Qualification Assessments and normalized requirement-assessment rows persist complete version and policy identities, selected career context, bounded-input quality, and provider execution references.
 - The complete cache key includes Candidate Profile, exact career-selection revision, Job Profile, schema, prompt, model, selection, matching, input, semantic-validator, and applicable alternative-policy hashes.
 - `POST /api/v1/qualification-assessments` and `GET /api/v1/qualification-assessments/{qualification_assessment_id}` are available only through the existing internal/shadow access gate and enforce tenant ownership.
 
 ### Phase 5: Deterministic Preferences, Eligibility, Scoring, And Explanation
+
+**Status:** Complete in the internal/shadow implementation as of 2026-08-15. Public orchestration and caller cutover remain in Phase 6 and later phases.
+
+Implemented scope:
+
+- Added deterministic User Preference evaluation for roles, location, workplace type, compensation, employment type, desired skills, avoided industries, and single-owner user hard constraints.
+- Added deterministic Candidate Eligibility evaluation for employer-stated work authorization, sponsorship, travel, and clearance constraints. Missing user facts remain `unknown` and never become inferred violations.
+- Added the pure `score.v1` engine with approved role/track resolution, level-aware requirement weights, qualification and preference coverage, decimal half-up rounding, publication thresholds, recommendation thresholds, and deterministic gate precedence.
+- Added deterministic explanation rendering from validated assessments and reason codes only; it cannot invent evidence, scores, or recommendations.
+- Added the executable architecture fixture asserting qualification score `68`, preference score `50`, and overall score `63`, plus focused edge-case tests for unsupported policies, provisional job level, insufficient coverage, incomplete preferences, and gates.
+
+- Added immutable preference and AES-256-GCM-encrypted eligibility revisions with optimistic concurrency and authenticated owner scoping. Encryption keys remain outside the database and missing keys fail closed.
+- Added immutable, content-addressed Preference Assessments, Eligibility Assessments, and Match Results with explicit policy identities and reusable cache keys.
+- Added internal/shadow authenticated preference and eligibility revision APIs plus Match Result creation/retrieval APIs.
+- Added the legacy 0–10 adapter only when an overall score is publishable and the compatibility flag is enabled.
 
 **Outcome:** Validated assessments become a fully reproducible Match Result.
 

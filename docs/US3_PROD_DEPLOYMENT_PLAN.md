@@ -311,6 +311,7 @@ Suggested contents:
 DALIJOB_SMTP_PASSWORD=<production smtp password>
 OPENAI_API_KEY=<production openai key>
 APIFY_API_TOKEN=<production apify token>
+DALIJOB_ELIGIBILITY_ENCRYPTION_KEY=<high-entropy eligibility encryption key>
 ```
 
 Permissions:
@@ -325,6 +326,7 @@ The DaliJob server reads all production secrets from the process environment:
 - `DALIJOB_SMTP_PASSWORD` authenticates verification and password-recovery email delivery when the configured relay requires credentials.
 - `OPENAI_API_KEY` is used by OpenAI-backed parsing and matching.
 - `APIFY_API_TOKEN` is used by the Indeed job-search integration.
+- `DALIJOB_ELIGIBILITY_ENCRYPTION_KEY` encrypts private eligibility revisions with AES-256-GCM and must be backed up separately from the database.
 
 The run script source step is enough for these values. Keep non-secret runtime settings in `/data/dali/prod/config/app_dali_job.ini`.
 

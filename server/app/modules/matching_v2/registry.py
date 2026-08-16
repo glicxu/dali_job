@@ -599,7 +599,17 @@ DEFAULT_REGISTRY.register(
     RegistryEntry(
         artifact_type="deterministic_policy",
         version="preference-policy.v1",
-        content={"architecture_section": "10", "implementation_status": "pending"},
+        content={
+            "architecture_section": "10",
+            "status_values": {"met": 1.0, "partially_met": 0.5, "conflict": 0.0},
+            "importance_weights": {"low": 1, "medium": 2, "high": 3},
+            "minimum_coverage_for_overall_score": 0.60,
+            "dependencies": [
+                "matching-taxonomy.v2",
+                "career-selection-policy.v2",
+                "general-purpose-programming-language.v2",
+            ],
+        },
     )
 )
 
@@ -607,7 +617,52 @@ DEFAULT_REGISTRY.register(
     RegistryEntry(
         artifact_type="deterministic_policy",
         version="eligibility-policy.v1",
-        content={"architecture_section": "8.2", "implementation_status": "pending"},
+        content={
+            "architecture_section": "8.2",
+            "statuses": ["satisfied", "violated", "unknown", "not_applicable"],
+            "missing_fact_status": "unknown",
+        },
+    )
+)
+
+DEFAULT_REGISTRY.register(
+    RegistryEntry(
+        artifact_type="deterministic_policy",
+        version="score.v1",
+        content={
+            "architecture_section": "11",
+            "qualification_status_values": {
+                "met": 1.0,
+                "met_by_alternative": 0.9,
+                "partially_met": 0.5,
+                "not_demonstrated": 0.0,
+                "not_met": 0.0,
+            },
+            "qualification_importance_weights": {"required": 3, "optional": 1},
+            "minimum_qualification_coverage": 0.80,
+            "qualification_overall_weight": 0.70,
+            "preference_overall_weight": 0.30,
+            "rounding": "decimal_half_up",
+            "recommendation_thresholds": {
+                "strong_match": 85,
+                "good_match": 70,
+                "consider": 55,
+                "stretch": 40,
+                "unlikely_fit": 0,
+            },
+        },
+    )
+)
+
+DEFAULT_REGISTRY.register(
+    RegistryEntry(
+        artifact_type="deterministic_policy",
+        version="match-explanation.v1",
+        content={
+            "architecture_section": "12",
+            "source": "validated_assessments_and_score_only",
+            "language_model_required": False,
+        },
     )
 )
 

@@ -382,6 +382,85 @@ class RequirementAssessment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
+class PreferenceRevision(Base):
+    __tablename__ = "matching_preference_revisions"
+    __table_args__ = (UniqueConstraint("user_id", "revision", name="uq_matching_preference_revision"), Index("ix_matching_preference_owner", "workspace_id", "user_id"), Index("ix_matching_preference_public", "public_id", unique=True))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    public_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    workspace_id: Mapped[int] = mapped_column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    artifact: Mapped[dict] = mapped_column(JSON, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(71), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class EligibilityRevision(Base):
+    __tablename__ = "matching_eligibility_revisions"
+    __table_args__ = (UniqueConstraint("user_id", "revision", name="uq_matching_eligibility_revision"), Index("ix_matching_eligibility_owner", "workspace_id", "user_id"), Index("ix_matching_eligibility_public", "public_id", unique=True))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    public_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    workspace_id: Mapped[int] = mapped_column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    encrypted_artifact: Mapped[str] = mapped_column(Text, nullable=False)
+    encryption_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(71), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PreferenceAssessment(Base):
+    __tablename__ = "matching_preference_assessments"
+    __table_args__ = (Index("ix_matching_preference_assessment_public", "public_id", unique=True), Index("ix_matching_preference_assessment_cache", "cache_key", unique=True), Index("ix_matching_preference_assessment_owner", "workspace_id", "user_id"))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    public_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    workspace_id: Mapped[int] = mapped_column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    job_profile_version_id: Mapped[int] = mapped_column(Integer, ForeignKey("matching_job_profile_versions.id", ondelete="CASCADE"), nullable=False)
+    preference_revision_id: Mapped[int] = mapped_column(Integer, ForeignKey("matching_preference_revisions.id", ondelete="CASCADE"), nullable=False)
+    policy_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
+    artifact: Mapped[dict] = mapped_column(JSON, nullable=False)
+    cache_key: Mapped[str] = mapped_column(String(71), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class EligibilityAssessment(Base):
+    __tablename__ = "matching_eligibility_assessments"
+    __table_args__ = (Index("ix_matching_eligibility_assessment_public", "public_id", unique=True), Index("ix_matching_eligibility_assessment_cache", "cache_key", unique=True), Index("ix_matching_eligibility_assessment_owner", "workspace_id", "user_id"))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    public_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    workspace_id: Mapped[int] = mapped_column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    job_profile_version_id: Mapped[int] = mapped_column(Integer, ForeignKey("matching_job_profile_versions.id", ondelete="CASCADE"), nullable=False)
+    eligibility_revision_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("matching_eligibility_revisions.id", ondelete="CASCADE"), nullable=True)
+    policy_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
+    artifact: Mapped[dict] = mapped_column(JSON, nullable=False)
+    cache_key: Mapped[str] = mapped_column(String(71), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class MatchResult(Base):
+    __tablename__ = "matching_match_results"
+    __table_args__ = (CheckConstraint("legacy_score IS NULL OR (legacy_score >= 0 AND legacy_score <= 10)", name="ck_matching_result_legacy_score"), Index("ix_matching_result_public", "public_id", unique=True), Index("ix_matching_result_cache", "cache_key", unique=True), Index("ix_matching_result_owner", "workspace_id", "user_id"), Index("ix_matching_result_qualification", "qualification_assessment_id"))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    public_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    workspace_id: Mapped[int] = mapped_column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    qualification_assessment_id: Mapped[int] = mapped_column(Integer, ForeignKey("matching_qualification_assessments.id", ondelete="CASCADE"), nullable=False)
+    preference_assessment_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("matching_preference_assessments.id", ondelete="SET NULL"), nullable=True)
+    eligibility_assessment_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("matching_eligibility_assessments.id", ondelete="SET NULL"), nullable=True)
+    score_artifact: Mapped[dict] = mapped_column(JSON, nullable=False)
+    explanation_artifact: Mapped[dict] = mapped_column(JSON, nullable=False)
+    policy_versions: Mapped[dict] = mapped_column(JSON, nullable=False)
+    legacy_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cache_key: Mapped[str] = mapped_column(String(71), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class PromptPolicyRegistryRecord(Base):
     __tablename__ = "matching_policy_registry"
     __table_args__ = (

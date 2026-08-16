@@ -11,6 +11,7 @@ LOGGER = logging.getLogger(__name__)
 SECRET_KEY_BY_ENV = {
     "OPENAI_API_KEY": "openai",
     "APIFY_API_TOKEN": "apify",
+    "DALIJOB_ELIGIBILITY_ENCRYPTION_KEY": "eligibility_encryption",
 }
 
 

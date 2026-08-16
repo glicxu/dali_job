@@ -10,6 +10,8 @@ from app.modules.matching_v2.schemas import (
     LegacyQualificationAssessmentResponse,
     QualificationAssessmentResponse,
 )
+from app.modules.matching_v2.eligibility import CandidateEligibilityFacts
+from app.modules.matching_v2.preferences import UserPreferences
 
 
 class CandidateProfileSourceResponse(BaseModel):
@@ -119,4 +121,47 @@ class QualificationAssessmentView(BaseModel):
     assessment: QualificationAssessmentResponse | LegacyQualificationAssessmentResponse
     input_quality: dict
     generation: dict[str, str | dict | None]
+    created_at: datetime
+
+
+class PreferenceRevisionUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: int = Field(ge=0)
+    preferences: UserPreferences
+
+
+class PreferenceRevisionView(BaseModel):
+    revision: int
+    preferences: UserPreferences
+    created_at: datetime
+
+
+class EligibilityRevisionUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: int = Field(ge=0)
+    facts: CandidateEligibilityFacts
+
+
+class EligibilityRevisionView(BaseModel):
+    revision: int
+    facts: CandidateEligibilityFacts
+    created_at: datetime
+
+
+class MatchResultCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    qualification_assessment_id: str = Field(min_length=1, max_length=64)
+    preference_revision: int | None = Field(default=None, ge=1)
+    eligibility_revision: int | None = Field(default=None, ge=1)
+
+
+class MatchResultView(BaseModel):
+    match_id: str
+    qualification_assessment_id: str
+    preference_assessment_id: str | None
+    eligibility_assessment_id: str | None
+    scores: dict
+    explanation: dict
+    policy: dict
+    legacy_score: int | None
     created_at: datetime

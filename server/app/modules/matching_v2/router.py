@@ -22,6 +22,12 @@ from app.modules.matching_v2.api_schemas import (
     JobProfileSourceResponse,
     JobProfileView,
     JobRequirementView,
+    EligibilityRevisionUpdate,
+    EligibilityRevisionView,
+    MatchResultCreateRequest,
+    MatchResultView,
+    PreferenceRevisionUpdate,
+    PreferenceRevisionView,
     QualificationAssessmentCreateRequest,
     QualificationAssessmentView,
     QualificationCareerContextView,
@@ -43,6 +49,17 @@ from app.modules.matching_v2.models import (
     JobProfileVersion,
     JobRequirement,
     QualificationAssessment,
+    EligibilityAssessment,
+    PreferenceAssessment,
+)
+from app.modules.matching_v2.phase5 import (
+    create_eligibility_revision,
+    create_or_get_match_result,
+    create_preference_revision,
+    eligibility_artifact,
+    get_match_result,
+    latest_eligibility_revision,
+    latest_preference_revision,
 )
 from app.modules.matching_v2.repositories import (
     ArtifactOwner,
@@ -712,3 +729,72 @@ def _qualification_assessment_view(
         },
         created_at=assessment.created_at,
     )
+
+
+@router.get("/users/me/matching-preferences", response_model=PreferenceRevisionView | None)
+def get_matching_preferences(request: Request, db: Session = Depends(get_db_session), identity: AuthenticatedIdentity = Depends(get_current_identity)):
+    user, workspace = _require_v2_access(request, db, identity)
+    row = latest_preference_revision(db, owner=ArtifactOwner.authenticated(workspace_id=workspace.id, user_id=user.id))
+    return None if row is None else PreferenceRevisionView(revision=row.revision, preferences=row.artifact, created_at=row.created_at)
+
+
+@router.put("/users/me/matching-preferences", response_model=PreferenceRevisionView)
+def put_matching_preferences(payload: PreferenceRevisionUpdate, request: Request, db: Session = Depends(get_db_session), identity: AuthenticatedIdentity = Depends(get_current_identity)):
+    user, workspace = _require_v2_access(request, db, identity)
+    try:
+        row = create_preference_revision(db, owner=ArtifactOwner.authenticated(workspace_id=workspace.id, user_id=user.id), expected_revision=payload.expected_revision, artifact=payload.preferences)
+        db.commit()
+    except RevisionConflict as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return PreferenceRevisionView(revision=row.revision, preferences=row.artifact, created_at=row.created_at)
+
+
+@router.get("/users/me/eligibility-facts", response_model=EligibilityRevisionView | None)
+def get_eligibility_facts(request: Request, db: Session = Depends(get_db_session), identity: AuthenticatedIdentity = Depends(get_current_identity)):
+    user, workspace = _require_v2_access(request, db, identity)
+    row = latest_eligibility_revision(db, owner=ArtifactOwner.authenticated(workspace_id=workspace.id, user_id=user.id))
+    return None if row is None else EligibilityRevisionView(revision=row.revision, facts=eligibility_artifact(row), created_at=row.created_at)
+
+
+@router.put("/users/me/eligibility-facts", response_model=EligibilityRevisionView)
+def put_eligibility_facts(payload: EligibilityRevisionUpdate, request: Request, db: Session = Depends(get_db_session), identity: AuthenticatedIdentity = Depends(get_current_identity)):
+    user, workspace = _require_v2_access(request, db, identity)
+    try:
+        row = create_eligibility_revision(db, owner=ArtifactOwner.authenticated(workspace_id=workspace.id, user_id=user.id), expected_revision=payload.expected_revision, artifact=payload.facts)
+        db.commit()
+    except RevisionConflict as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return EligibilityRevisionView(revision=row.revision, facts=eligibility_artifact(row), created_at=row.created_at)
+
+
+@router.post("/matching-v2/results", response_model=MatchResultView)
+def create_match_result(payload: MatchResultCreateRequest, request: Request, db: Session = Depends(get_db_session), identity: AuthenticatedIdentity = Depends(get_current_identity)):
+    user, workspace = _require_v2_access(request, db, identity)
+    owner = ArtifactOwner.authenticated(workspace_id=workspace.id, user_id=user.id)
+    try:
+        row = create_or_get_match_result(db, owner=owner, qualification_public_id=payload.qualification_assessment_id, preference_revision=payload.preference_revision, eligibility_revision=payload.eligibility_revision, legacy_adapter_enabled=request.app.state.runtime.matching_v2.legacy_adapter_enabled)
+        db.commit()
+    except ArtifactOwnershipError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _match_result_view(db, row)
+
+
+@router.get("/matching-v2/results/{match_id}", response_model=MatchResultView)
+def read_match_result(match_id: str, request: Request, db: Session = Depends(get_db_session), identity: AuthenticatedIdentity = Depends(get_current_identity)):
+    user, workspace = _require_v2_access(request, db, identity)
+    row = get_match_result(db, owner=ArtifactOwner.authenticated(workspace_id=workspace.id, user_id=user.id), public_id=match_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Match Result not found.")
+    return _match_result_view(db, row)
+
+
+def _match_result_view(db: Session, row) -> MatchResultView:
+    qualification = db.get(QualificationAssessment, row.qualification_assessment_id)
+    preference = db.get(PreferenceAssessment, row.preference_assessment_id) if row.preference_assessment_id else None
+    eligibility = db.get(EligibilityAssessment, row.eligibility_assessment_id) if row.eligibility_assessment_id else None
+    if qualification is None:
+        raise HTTPException(status_code=409, detail="Qualification Assessment is unavailable.")
+    return MatchResultView(match_id=row.public_id, qualification_assessment_id=qualification.public_id, preference_assessment_id=preference.public_id if preference else None, eligibility_assessment_id=eligibility.public_id if eligibility else None, scores=row.score_artifact, explanation=row.explanation_artifact, policy=row.policy_versions, legacy_score=row.legacy_score, created_at=row.created_at)

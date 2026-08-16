@@ -210,6 +210,8 @@ def test_foundation_registry_contains_versioned_contract_inputs() -> None:
         ("alternative_policy", "general-purpose-programming-language.v2"),
         ("deterministic_policy", "preference-policy.v1"),
         ("deterministic_policy", "eligibility-policy.v1"),
+        ("deterministic_policy", "score.v1"),
+        ("deterministic_policy", "match-explanation.v1"),
         ("role_track_scoring_policy", "software-ic-score.v1"),
     }
 

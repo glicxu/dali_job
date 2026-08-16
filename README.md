@@ -10,18 +10,18 @@ The project design package is indexed in [docs/DESIGN_DOCS.md](docs/DESIGN_DOCS.
 
 Key documents:
 
-- [System Design](docs/SYSTEM_DESIGN.md)
+- [System Design](docs/archive/SYSTEM_DESIGN.md)
 - [Database Design](docs/DATABASE_DESIGN.md)
 - [API Specification](docs/API_SPEC.md)
-- [ER Diagram](docs/ER_DIAGRAM.md)
-- [Folder Structure](docs/FOLDER_STRUCTURE.md)
-- [Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
-- [Implementation Checklist](docs/IMPLEMENTATION_CHECKLIST.md)
-- [GitHub Issues](docs/GITHUB_ISSUES.md)
-- [Testing Strategy](docs/TESTING_STRATEGY.md)
+- [ER Diagram](docs/archive/ER_DIAGRAM.md)
+- [Folder Structure](docs/archive/FOLDER_STRUCTURE.md)
+- [Implementation Plan](docs/archive/IMPLEMENTATION_PLAN.md)
+- [Implementation Checklist](docs/archive/IMPLEMENTATION_CHECKLIST.md)
+- [GitHub Issues](docs/archive/GITHUB_ISSUES.md)
+- [Testing Strategy](docs/archive/TESTING_STRATEGY.md)
 - [Deployment Guide](docs/DEPLOYMENT_GUIDE.md)
-- [Production Readiness Tracker](docs/PRODUCTION_READINESS.md)
-- [Operations Runbook](docs/OPERATIONS_RUNBOOK.md)
+- [Production Readiness Tracker](docs/archive/PRODUCTION_READINESS.md)
+- [Operations Runbook](docs/archive/OPERATIONS_RUNBOOK.md)
 - [Release and Rollback](docs/RELEASE_AND_ROLLBACK.md)
 
 ## Architecture Direction

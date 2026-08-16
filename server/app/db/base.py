@@ -15,11 +15,13 @@ def import_all_models() -> None:
     import app.modules.automation.models  # noqa: F401
     import app.modules.applications.models  # noqa: F401
     import app.modules.documents.models  # noqa: F401
+    import app.modules.evaluation.models  # noqa: F401
     import app.modules.guest_trials.models  # noqa: F401
     import app.modules.interviews.models  # noqa: F401
     import app.modules.job_search.models  # noqa: F401
     import app.modules.jobs.models  # noqa: F401
     import app.modules.materials.models  # noqa: F401
+    import app.modules.matching_v2.models  # noqa: F401
     import app.modules.operations.models  # noqa: F401
     import app.modules.profiles.models  # noqa: F401
     import app.modules.reports.models  # noqa: F401

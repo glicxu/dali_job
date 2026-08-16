@@ -375,6 +375,69 @@ export type CurrentUser = {
   tutorial_completed: boolean;
 };
 
+export type EvaluationJobSnapshot = {
+  public_id: string;
+  benchmark_release: string;
+  coverage_slot: string;
+  source_url: string;
+  source_hash: string;
+  user_saved_job_id: number;
+  title: string;
+  company: string;
+  raw_description_text: string;
+  capture_metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type EvaluationEvidenceSpan = {
+  span_id: string;
+  section: string;
+  start_utf8_byte: number;
+  end_utf8_byte: number;
+  excerpt: string;
+};
+
+export type EvaluationRunSummary = {
+  public_id: string;
+  benchmark_release: string;
+  job_snapshot_id: string;
+  resume_profile_id: number | null;
+  candidate_profile_id: string;
+  job_profile_id: string;
+  qualification_assessment_id: string;
+  created_at: string;
+};
+
+export type EvaluationRequirementAssessment = {
+  requirement_id: string;
+  status: string;
+  confidence: number;
+  evidence_refs: string[];
+  alternative_policy_ref: string | null;
+  reason: string;
+  missing: string[];
+};
+
+export type EvaluationRunDetail = EvaluationRunSummary & {
+  resume_title: string;
+  job_title: string;
+  job_company: string;
+  source_url: string;
+  resume_source: { text: string; spans: EvaluationEvidenceSpan[] };
+  candidate_profile: Record<string, unknown>;
+  job_source: { text: string; spans: EvaluationEvidenceSpan[] };
+  job_profile: Record<string, unknown>;
+  qualification: {
+    assessment: {
+      requirement_assessments: EvaluationRequirementAssessment[];
+      hard_constraint_assessments: EvaluationRequirementAssessment[];
+    };
+    input_quality: Record<string, unknown>;
+    generation: Record<string, unknown>;
+  } & Record<string, unknown>;
+  run_metadata: Record<string, unknown>;
+};
+
 export type UserReportCategory = "bug" | "feedback" | "account" | "other";
 export type UserReportStatus = "new" | "in_review" | "resolved" | "closed";
 
@@ -1841,4 +1904,37 @@ export function applyResumeProfileSuggestions(importResult: ResumeImportResponse
       source_document_version_id: importResult.document_version_id,
     }),
   });
+}
+
+export function listEvaluationJobSnapshots(): Promise<{ snapshots: EvaluationJobSnapshot[] }> {
+  return requestJson<{ snapshots: EvaluationJobSnapshot[] }>("/internal/evaluation/job-snapshots");
+}
+
+export function importEvaluationJobSnapshot(payload: {
+  source_url: string;
+  benchmark_release: string;
+  coverage_slot: string;
+}): Promise<EvaluationJobSnapshot> {
+  return requestJson<EvaluationJobSnapshot>("/internal/evaluation/job-snapshots/import", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listEvaluationRuns(): Promise<{ runs: EvaluationRunSummary[] }> {
+  return requestJson<{ runs: EvaluationRunSummary[] }>("/internal/evaluation/runs");
+}
+
+export function createEvaluationRun(payload: {
+  job_snapshot_id: string;
+  resume_profile_id: number;
+}): Promise<EvaluationRunDetail> {
+  return requestJson<EvaluationRunDetail>("/internal/evaluation/runs", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getEvaluationRun(runId: string): Promise<EvaluationRunDetail> {
+  return requestJson<EvaluationRunDetail>(`/internal/evaluation/runs/${runId}`);
 }

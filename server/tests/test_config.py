@@ -84,6 +84,41 @@ def test_ask_scout_model_has_an_independent_environment_override(monkeypatch) ->
     assert runtime.ask_scout_model == "scout-model"
 
 
+def test_matching_v2_public_flags_default_off() -> None:
+    runtime = load_runtime_config()
+
+    assert runtime.matching_v2.shadow_enabled is False
+    assert runtime.matching_v2.internal_super_enabled is False
+    assert runtime.matching_v2.guest_enabled is False
+    assert runtime.matching_v2.automation_enabled is False
+    assert runtime.matching_v2.web_enabled is False
+    assert runtime.matching_v2.mobile_enabled is False
+    assert runtime.matching_v2.evaluation_enabled is False
+    assert runtime.matching_v2.legacy_adapter_enabled is True
+
+
+def test_matching_v2_flags_have_explicit_environment_overrides(monkeypatch) -> None:
+    monkeypatch.setenv("DALIJOB_MATCHING_V2_SHADOW_ENABLED", "true")
+    monkeypatch.setenv("DALIJOB_MATCHING_V2_INTERNAL_SUPER_ENABLED", "1")
+    monkeypatch.setenv("DALIJOB_MATCHING_V2_GUEST_ENABLED", "yes")
+    monkeypatch.setenv("DALIJOB_MATCHING_V2_AUTOMATION_ENABLED", "on")
+    monkeypatch.setenv("DALIJOB_MATCHING_V2_WEB_ENABLED", "true")
+    monkeypatch.setenv("DALIJOB_MATCHING_V2_MOBILE_ENABLED", "true")
+    monkeypatch.setenv("DALIJOB_MATCHING_V2_EVALUATION_ENABLED", "true")
+    monkeypatch.setenv("DALIJOB_MATCHING_LEGACY_ADAPTER_ENABLED", "false")
+
+    runtime = load_runtime_config()
+
+    assert runtime.matching_v2.shadow_enabled is True
+    assert runtime.matching_v2.internal_super_enabled is True
+    assert runtime.matching_v2.guest_enabled is True
+    assert runtime.matching_v2.automation_enabled is True
+    assert runtime.matching_v2.web_enabled is True
+    assert runtime.matching_v2.mobile_enabled is True
+    assert runtime.matching_v2.evaluation_enabled is True
+    assert runtime.matching_v2.legacy_adapter_enabled is False
+
+
 def test_auth_limits_can_be_configured_from_environment(monkeypatch) -> None:
     monkeypatch.setenv("DALIJOB_AUTH_LOGIN_IP_LIMIT", "12")
     monkeypatch.setenv("DALIJOB_AUTH_LOGIN_ACCOUNT_LIMIT", "4")

@@ -1,34 +1,38 @@
 # DaliJob Design Documents
 
-This folder contains the project design package for DaliJob, an AI-assisted career management platform.
+This folder contains the active project design package for DaliJob, an AI-assisted career management platform.
+Documents unchanged from `main` have been moved to [`archive/`](archive/) so the top level stays focused on current work.
 
 DaliJob is designed as a long-term career operating system, not a job board and not only a resume builder. The application should remain useful without AI enabled, while AI adds resume tailoring, cover letters, job analysis, interview preparation, email classification, and career intelligence.
 
 ## Documents
 
-- [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md) - product architecture, modules, service boundaries, workflows, AI boundaries, security, and non-functional requirements.
+- [SYSTEM_DESIGN.md](archive/SYSTEM_DESIGN.md) - archived product architecture, modules, service boundaries, workflows, AI boundaries, security, and non-functional requirements.
 - [DATABASE_DESIGN.md](DATABASE_DESIGN.md) - entities, fields, enums, relationships, indexing, and versioning rules.
-- [ER_MODEL_OVERVIEW.md](ER_MODEL_OVERVIEW.md) - plain-English explanation of current entities, relationships, and database design rules.
+- [ER_MODEL_OVERVIEW.md](archive/ER_MODEL_OVERVIEW.md) - archived plain-English explanation of entities, relationships, and database design rules.
 - [ARCHITECTURE_REVIEW.md](ARCHITECTURE_REVIEW.md) - functional and architectural review of current risks, gaps, low-value areas, and recommended next steps.
-- [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) - use-case-first delivery plan with dependencies, work packages, acceptance criteria, and release boundaries.
+- [IMPLEMENTATION_PLAN.md](archive/IMPLEMENTATION_PLAN.md) - archived use-case-first delivery plan with dependencies, work packages, acceptance criteria, and release boundaries.
 - [MOBILE_AUTOMATED_MATCHING_IMPLEMENTATION_PLAN.md](MOBILE_AUTOMATED_MATCHING_IMPLEMENTATION_PLAN.md) - mobile-first account onboarding, tier-based recurring searches, automatic resume matching, quotas, notifications, and phased delivery plan.
 - [GUEST_TRYOUT_EXPERIENCE_DESIGN.md](GUEST_TRYOUT_EXPERIENCE_DESIGN.md) - account-free trial journey, profile-readiness gate, one-result guest matching, conversion and claim semantics, privacy, abuse controls, APIs, and rollout plan.
-- [ASK_SCOUT_IMPLEMENTATION_PLAN.md](ASK_SCOUT_IMPLEMENTATION_PLAN.md) - passive AI navigation assistant design, capability catalog, API contract, security boundaries, phased implementation, and tests.
-- [ASK_SCOUT_V2_IMPROVEMENT_PLAN.md](ASK_SCOUT_V2_IMPROVEMENT_PLAN.md) - proposed product-knowledge registry, safe account context, bounded follow-ups, deterministic intent routing, feedback, evaluations, and phased rollout for more accurate Ask Scout guidance.
-- [JOB_SCRAPER_GENERALIZATION_PLAN.md](JOB_SCRAPER_GENERALIZATION_PLAN.md) - quality-aware job URL extraction, structured-data and DOM strategies, rendered fallback, ATS adapters, security constraints, and phased implementation.
-- [UI_OVERHAUL_IMPLEMENTATION_PLAN.md](UI_OVERHAUL_IMPLEMENTATION_PLAN.md) - blue-led Dalifin visual system, shared UI components, application-shell redesign, page-by-page requirements, responsive behavior, accessibility, and phased implementation.
-- [UI_OVERHAUL_BASELINE.md](UI_OVERHAUL_BASELINE.md) - preserved interaction inventory, selector migration notes, and the desktop/mobile screenshot and accessibility review matrix for the UI overhaul.
+- [3-step_matching_v2.md](3-step_matching_v2.md) - revised evidence-based matching architecture with separated model/code responsibilities, deterministic qualification and preference scoring, bounded trial execution, versioned artifacts, and migration guidance.
+- [THREE_STEP_MATCHING_IMPLEMENTATION_PLAN.md](THREE_STEP_MATCHING_IMPLEMENTATION_PLAN.md) - phased delivery plan for schemas, persistence, extraction, deterministic assessment and scoring, orchestration, guest and scheduled integration, clients, testing, and controlled rollout of the three-step matcher.
+- [MATCHING_EVALUATION_PLAN.md](MATCHING_EVALUATION_PLAN.md) - frozen benchmark and golden-set plan for evaluating Candidate Profiles, Job Profiles, and Qualification Assessments with an initial curated ten-job tier-1 company set and a later one-hundred-job expansion.
+- [ASK_SCOUT_IMPLEMENTATION_PLAN.md](archive/ASK_SCOUT_IMPLEMENTATION_PLAN.md) - archived passive AI navigation assistant implementation plan.
+- [ASK_SCOUT_V2_IMPROVEMENT_PLAN.md](archive/ASK_SCOUT_V2_IMPROVEMENT_PLAN.md) - archived Ask Scout V2 improvement plan.
+- [JOB_SCRAPER_GENERALIZATION_PLAN.md](archive/JOB_SCRAPER_GENERALIZATION_PLAN.md) - archived job URL extraction plan.
+- [UI_OVERHAUL_IMPLEMENTATION_PLAN.md](archive/UI_OVERHAUL_IMPLEMENTATION_PLAN.md) - archived UI overhaul implementation plan.
+- [UI_OVERHAUL_BASELINE.md](archive/UI_OVERHAUL_BASELINE.md) - archived UI overhaul baseline.
 - [DATA_LIFECYCLE.md](DATA_LIFECYCLE.md) - archive/delete semantics, immutable match history, retention, export, and account cleanup contract.
 - [API_SPEC.md](API_SPEC.md) - versioned REST API specification for the client, workers, and integrations.
-- [ER_DIAGRAM.md](ER_DIAGRAM.md) - Mermaid ER diagram and relationship notes.
-- [FOLDER_STRUCTURE.md](FOLDER_STRUCTURE.md) - recommended FastAPI, Next.js, worker, plugin, and infrastructure layout.
-- [IMPLEMENTATION_CHECKLIST.md](IMPLEMENTATION_CHECKLIST.md) - phased build checklist aligned to the MVP and later roadmap.
-- [GITHUB_ISSUES.md](GITHUB_ISSUES.md) - starter backlog that can be copied into GitHub issues.
-- [TESTING_STRATEGY.md](TESTING_STRATEGY.md) - unit, integration, end-to-end, AI evaluation, and security testing.
+- [ER_DIAGRAM.md](archive/ER_DIAGRAM.md) - archived Mermaid ER diagram and relationship notes.
+- [FOLDER_STRUCTURE.md](archive/FOLDER_STRUCTURE.md) - archived application and infrastructure layout.
+- [IMPLEMENTATION_CHECKLIST.md](archive/IMPLEMENTATION_CHECKLIST.md) - archived phased build checklist.
+- [GITHUB_ISSUES.md](archive/GITHUB_ISSUES.md) - archived starter backlog.
+- [TESTING_STRATEGY.md](archive/TESTING_STRATEGY.md) - archived testing strategy.
 - [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) - local, staging, production, CI/CD, observability, and operations guidance.
 - [US3_PROD_DEPLOYMENT_PLAN.md](US3_PROD_DEPLOYMENT_PLAN.md) - concrete plan for deploying DaliJob on us3 at `https://jobmatch.dalifin.com`.
-- [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) - current launch decision, readiness gates, prioritized production gaps, acceptance criteria, and release verification log.
-- [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md) - local structured logs, account-recovery support, readiness checks, and incident triage.
+- [PRODUCTION_READINESS.md](archive/PRODUCTION_READINESS.md) - archived launch readiness tracker.
+- [OPERATIONS_RUNBOOK.md](archive/OPERATIONS_RUNBOOK.md) - archived operations runbook.
 - [RELEASE_AND_ROLLBACK.md](RELEASE_AND_ROLLBACK.md) - versioned artifact, deployment readback, retention, and database roll-forward policy.
 
 ## Product Phases

@@ -5,6 +5,7 @@ import '../../config/app_environment.dart';
 import '../../matching/matching_repository.dart';
 import '../automation/automation_screen.dart';
 import '../matches/matches_screen.dart';
+import '../profile/candidate_profiles_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -38,10 +39,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final pages = [
       MatchesScreen(repository: _repository),
       AutomationScreen(repository: _repository),
+      CandidateProfilesScreen(repository: _repository),
       _AccountPage(session: widget.session, environment: widget.environment),
     ];
     return Scaffold(
-      appBar: AppBar(title: Text(['Matches', 'Automation', 'Account'][_index])),
+      appBar: AppBar(
+        title: Text(['Matches', 'Automation', 'Profile', 'Account'][_index]),
+      ),
       body: pages[_index],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
@@ -56,6 +60,11 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.schedule_outlined),
             selectedIcon: Icon(Icons.schedule),
             label: 'Automation',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.badge_outlined),
+            selectedIcon: Icon(Icons.badge),
+            label: 'Profile',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),

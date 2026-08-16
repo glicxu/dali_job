@@ -10,9 +10,9 @@ Use the following documents for adjacent concerns:
 
 - [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for product use cases and delivery order.
 - [IMPLEMENTATION_CHECKLIST.md](IMPLEMENTATION_CHECKLIST.md) for the detailed capability inventory.
-- [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for the target production operating model.
-- [US3_PROD_DEPLOYMENT_PLAN.md](US3_PROD_DEPLOYMENT_PLAN.md) for the current us3 topology.
-- [DATA_LIFECYCLE.md](DATA_LIFECYCLE.md) for the intended retention, export, and deletion contract.
+- [DEPLOYMENT_GUIDE.md](../DEPLOYMENT_GUIDE.md) for the target production operating model.
+- [US3_PROD_DEPLOYMENT_PLAN.md](../US3_PROD_DEPLOYMENT_PLAN.md) for the current us3 topology.
+- [DATA_LIFECYCLE.md](../DATA_LIFECYCLE.md) for the intended retention, export, and deletion contract.
 
 An implemented feature is not automatically production-ready. A gate passes only when its acceptance criteria have current evidence from tests and, where applicable, production readback.
 
@@ -108,7 +108,7 @@ The ready-now portions of SEC-001, AUTH-001, WEB-001, REL-001, FILE-001, and DEP
 
 ### SEC-001 - Revalidate every network destination used by job imports
 
-**Original finding:** [`validate_public_job_url`](../server/app/modules/resume_job_match/job_url_import.py) validated the initially resolved hostname, but `urlopen` could automatically follow redirects without revalidating every hop. The Playwright fallback permitted most subrequests and navigation without applying the same public-address check. DNS could also change between validation and connection.
+**Original finding:** [`validate_public_job_url`](../../server/app/modules/resume_job_match/job_url_import.py) validated the initially resolved hostname, but `urlopen` could automatically follow redirects without revalidating every hop. The Playwright fallback permitted most subrequests and navigation without applying the same public-address check. DNS could also change between validation and connection.
 
 **Current implementation:** Static and rendered job imports now use one destination policy. It permits only public HTTP/HTTPS destinations on standard ports, resolves and validates every destination, and connects to the validated IP while retaining the original hostname for HTTP `Host` and TLS verification. Redirects are handled explicitly. Playwright frames and subrequests are routed through the same pinned-IP fetcher, and WebSockets are disabled.
 

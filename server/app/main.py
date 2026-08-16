@@ -23,6 +23,7 @@ from app.modules.auth.rate_limit import AuthRateLimiter, AuthRateLimitPolicy
 from app.modules.automation.router import router as automation_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.documents.router import router as documents_router
+from app.modules.evaluation.router import router as evaluation_router
 from app.modules.health.router import router as health_router
 from app.modules.guest_trials.router import router as guest_trials_router
 from app.modules.guest_trials.rate_limit import GuestRateLimiter
@@ -30,6 +31,7 @@ from app.modules.job_search.router import router as job_search_router
 from app.modules.interviews.router import router as interviews_router
 from app.modules.jobs.router import router as jobs_router
 from app.modules.materials.router import router as materials_router
+from app.modules.matching_v2.router import router as matching_v2_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.operations.router import router as operations_router
 from app.modules.profiles.router import resume_profiles_router, router as profile_router
@@ -47,12 +49,14 @@ API_ROUTERS = (
     analytics_router,
     dashboard_router,
     documents_router,
+    evaluation_router,
     health_router,
     guest_trials_router,
     job_search_router,
     interviews_router,
     jobs_router,
     materials_router,
+    matching_v2_router,
     notifications_router,
     operations_router,
     profile_router,
@@ -119,12 +123,14 @@ def create_app(config_path: Optional[str] = None) -> FastAPI:
     app.include_router(analytics_router, prefix="/api/v1")
     app.include_router(dashboard_router, prefix="/api/v1")
     app.include_router(documents_router, prefix="/api/v1")
+    app.include_router(evaluation_router, prefix="/api/v1")
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(guest_trials_router, prefix="/api/v1")
     app.include_router(job_search_router, prefix="/api/v1")
     app.include_router(interviews_router, prefix="/api/v1")
     app.include_router(jobs_router, prefix="/api/v1")
     app.include_router(materials_router, prefix="/api/v1")
+    app.include_router(matching_v2_router, prefix="/api/v1")
     app.include_router(notifications_router, prefix="/api/v1")
     app.include_router(operations_router, prefix="/api/v1")
     app.include_router(profile_router, prefix="/api/v1")

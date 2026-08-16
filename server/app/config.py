@@ -42,6 +42,18 @@ SUPPORTED_AUTH_MODES = {"dev", "disabled", "local"}
 
 
 @dataclass(frozen=True)
+class MatchingV2FeatureFlags:
+    shadow_enabled: bool = False
+    internal_super_enabled: bool = False
+    guest_enabled: bool = False
+    automation_enabled: bool = False
+    web_enabled: bool = False
+    mobile_enabled: bool = False
+    evaluation_enabled: bool = False
+    legacy_adapter_enabled: bool = True
+
+
+@dataclass(frozen=True)
 class RuntimeConfig:
     config_path: Optional[str]
     env_name: str
@@ -81,6 +93,7 @@ class RuntimeConfig:
     log_backup_count: int
     audit_retention_days: int
     tier_entitlements: EntitlementCatalog
+    matching_v2: MatchingV2FeatureFlags
 
 
 def _load_process_config(config_path: Optional[str]) -> Optional[str]:
@@ -391,6 +404,48 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
     )
     audit_retention_days = _coerce_int(read_config_value("audit", "retention_days", "365"), 365)
     tier_entitlements = load_entitlement_catalog()
+    matching_v2 = MatchingV2FeatureFlags(
+        shadow_enabled=_coerce_bool(
+            os.getenv("DALIJOB_MATCHING_V2_SHADOW_ENABLED", "").strip()
+            or read_config_value("matching_v2", "shadow_enabled", "false"),
+            False,
+        ),
+        internal_super_enabled=_coerce_bool(
+            os.getenv("DALIJOB_MATCHING_V2_INTERNAL_SUPER_ENABLED", "").strip()
+            or read_config_value("matching_v2", "internal_super_enabled", "false"),
+            False,
+        ),
+        guest_enabled=_coerce_bool(
+            os.getenv("DALIJOB_MATCHING_V2_GUEST_ENABLED", "").strip()
+            or read_config_value("matching_v2", "guest_enabled", "false"),
+            False,
+        ),
+        automation_enabled=_coerce_bool(
+            os.getenv("DALIJOB_MATCHING_V2_AUTOMATION_ENABLED", "").strip()
+            or read_config_value("matching_v2", "automation_enabled", "false"),
+            False,
+        ),
+        web_enabled=_coerce_bool(
+            os.getenv("DALIJOB_MATCHING_V2_WEB_ENABLED", "").strip()
+            or read_config_value("matching_v2", "web_enabled", "false"),
+            False,
+        ),
+        mobile_enabled=_coerce_bool(
+            os.getenv("DALIJOB_MATCHING_V2_MOBILE_ENABLED", "").strip()
+            or read_config_value("matching_v2", "mobile_enabled", "false"),
+            False,
+        ),
+        evaluation_enabled=_coerce_bool(
+            os.getenv("DALIJOB_MATCHING_V2_EVALUATION_ENABLED", "").strip()
+            or read_config_value("matching_v2", "evaluation_enabled", "false"),
+            False,
+        ),
+        legacy_adapter_enabled=_coerce_bool(
+            os.getenv("DALIJOB_MATCHING_LEGACY_ADAPTER_ENABLED", "").strip()
+            or read_config_value("matching_v2", "legacy_adapter_enabled", "true"),
+            True,
+        ),
+    )
 
     runtime = RuntimeConfig(
         config_path=loaded_path,
@@ -431,6 +486,7 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         log_backup_count=max(log_backup_count, 1),
         audit_retention_days=max(audit_retention_days, 1),
         tier_entitlements=tier_entitlements,
+        matching_v2=matching_v2,
     )
     _validate_runtime_config(runtime)
     return runtime

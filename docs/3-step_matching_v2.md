@@ -653,7 +653,7 @@ Candidate Eligibility Facts contain sensitive facts that only the user may confi
 }
 ```
 
-Controlled values are defined by `eligibility-policy.v1`. Work-authorization `status` is `authorized`, `not_authorized`, or `unknown`; sponsorship is boolean or unknown; and absence of an item means unknown, not false. Guest trials may omit this artifact. The API and storage layer treat it as private, access-controlled data and do not expose it in explanations beyond the minimum question or gate reason needed by the user.
+Controlled values are defined by `eligibility-policy.v2`. Work-authorization `status` is `authorized`, `not_authorized`, or `unknown`; sponsorship is boolean or unknown; and absence of an item means unknown, not false. Guest trials may omit this artifact. The API and storage layer treat it as private, access-controlled data and do not expose it in explanations beyond the minimum question or gate reason needed by the user.
 
 ### 8.2 Eligibility Assessment v1: application output
 
@@ -676,7 +676,7 @@ The deterministic eligibility evaluator compares one immutable Candidate Eligibi
       "reason_code": "USER_TRAVEL_AVAILABILITY_UNKNOWN"
     }
   ],
-  "policy_version": "eligibility-policy.v1"
+  "policy_version": "eligibility-policy.v2"
 }
 ```
 
@@ -688,7 +688,9 @@ Eligibility statuses are `satisfied`, `violated`, `unknown`, and `not_applicable
 
 The v1 example below remains for historical artifact compatibility. New Stage 3 matching uses
 `qualification-assessment.v2`, `qualification-assessment-response.v2`,
-`qualification-match.v2`, `qualification-policy.v2`, and `qualification-input.v2`.
+`qualification-match.v3`, `qualification-policy.v2`, and `qualification-input.v2`. Version 3 adds
+one bounded full-response repair attempt after recoverable semantic validation failures; it never
+accepts a partial patch.
 
 The v2 model receives the non-derived, evidence-bearing Candidate Profile collections, their
 canonical evidence spans, the selected career context, and Job Profile v3 requirements with
@@ -722,7 +724,9 @@ The JSON shown below is the persisted Qualification Assessment envelope. The mod
 {
   "schema_version": "qualification-assessment.v1",
   "candidate_profile_id": "cp_123",
-  "candidate_career_selection_revision": 4,
+  "matching_intent_id": "intent_123",
+  "matching_intent_revision": 3,
+  "job_family_pre_match_id": "jfpm_123",
   "selected_career_profile_id": "career_software_engineering",
   "job_profile_id": "jp_456",
   "requirement_assessments": [
@@ -764,7 +768,11 @@ The JSON shown below is the persisted Qualification Assessment envelope. The mod
 
 Exactly one normal assessment must exist for every Job Profile requirement where `hard_constraint` is false. Exactly one hard-constraint assessment must exist for every requirement where `hard_constraint` is true. No requirement may appear in both collections. The model may use only cited, non-derived Candidate Profile evidence for a positive status.
 
-The matcher selects the candidate career profile with the closest role-family and track relationship to the job. It does not automatically use the candidate's primary career profile. The selected career profile ID is persisted with the Qualification Assessment for auditability. Primary status is used for search defaults and tie-breaking only.
+Before the detailed matcher runs, the deterministic **Job Family Pre-Match** selects the candidate career
+context using the user's Matching Intent and the Job Profile's normalized job family, track, and level.
+The detailed matcher consumes that persisted selection; it does not choose freely among the Candidate
+Profile's career profiles. The selected career profile ID and Job Family Pre-Match artifact ID are
+persisted with the Qualification Assessment for auditability.
 
 ### 9.1 Qualification statuses
 
@@ -806,7 +814,7 @@ Application code compares Job Profile values with the immutable User Preference 
     }
   ],
   "hard_constraint_results": [],
-  "policy_version": "preference-policy.v1"
+  "policy_version": "preference-policy.v2"
 }
 ```
 
@@ -814,7 +822,7 @@ Preference statuses are `met = 1.0`, `partially_met = 0.5`, `conflict = 0.0`, `u
 
 Importance weights are `low = 1`, `medium = 2`, and `high = 3`.
 
-`preference-policy.v1` evaluates each configured category with the following deterministic rules:
+`preference-policy.v2` evaluates each configured category with the following deterministic rules:
 
 - **Desired role:** an exact canonical role-family or title match is `met`; an approved adjacent role-family relationship is `partially_met`; a known unrelated role is `conflict`; and an unmapped job role is `unknown`. For multiple desired roles, the evaluator keeps the best status, then the highest importance, then the lexicographically smallest canonical role ID as the stable tie-breaker.
 - **Location:** a remote job with an allowed remote region is `met`. An exact or contained canonical allowed region is `met`. A trusted commute at or below the maximum is `met`; a longer commute with relocation `yes` or `maybe` is `partially_met`; and a longer commute with relocation `no` is `conflict`. Missing or ambiguous locations and unavailable trusted geospatial results are `unknown`.
@@ -983,8 +991,8 @@ This example must be generated and asserted by the scoring-engine test suite.
   "recommendation": "consider",
   "policy": {
     "qualification_policy_version": "qualification-policy.v1",
-    "preference_policy_version": "preference-policy.v1",
-    "eligibility_policy_version": "eligibility-policy.v1",
+    "preference_policy_version": "preference-policy.v2",
+    "eligibility_policy_version": "eligibility-policy.v2",
     "role_track_policy_version": "software-ic-score.v1",
     "scoring_policy_version": "score.v1"
   },
@@ -1042,6 +1050,9 @@ All routes use the deployed `/api/v1` prefix.
 POST /api/v1/resumes/{resume_id}/candidate-profile
 GET  /api/v1/candidate-profiles/{candidate_profile_id}
 
+POST /api/v1/candidate-profiles/{candidate_profile_id}/matching-intents
+GET  /api/v1/matching-intents/{matching_intent_id}
+
 POST /api/v1/jobs/{job_id}/job-profile
 GET  /api/v1/job-profiles/{job_profile_id}
 
@@ -1060,8 +1071,10 @@ Account-free trial routes remain under `/api/v1/guest-trials/current/...` and ma
 
 ```text
 candidate_profile_id
-+ candidate_career_selection_revision
++ matching_intent_id
++ matching_intent_revision
 + job_profile_id
++ job_family_pre_match_policy_version
 + preference_revision
 + eligibility_revision
 + qualification_prompt_version
@@ -1097,8 +1110,10 @@ job_profile:
 
 qualification_assessment:
   candidate_profile_id
-  + candidate_career_selection_revision
+  + matching_intent_id
+  + matching_intent_revision
   + job_profile_id
+  + job_family_pre_match_id
   + qualification_schema_version
   + qualification_prompt_version
   + qualification_policy_version
@@ -1304,34 +1319,79 @@ Role families are IDs in a versioned registry rather than unconstrained model st
 
 Aliases normalize spelling only. Adjacency permits career-profile selection but does not declare two fields equivalent. Alternative skills and technologies remain in a separate policy registry.
 
-## 21. Deterministic candidate career-profile selection
+## 21. Job Family Pre-Match
 
-Qualification matching may use all valid Candidate Profile evidence. Selecting a career profile chooses the level/track context and explanation frame; it does not hide otherwise relevant primary evidence.
+Job Family Pre-Match is a deterministic pre-step for detailed matching, not a fourth LLM stage. Candidate
+Profile extraction, Job Profile extraction, and detailed qualification matching remain independently
+versioned workflows.
 
-`career-selection-policy.v1` orders candidates as follows:
+Its inputs are the immutable Candidate Profile and its career profiles, a revisioned Matching Intent, and
+the immutable Job Profile. Matching Intent comes from a user-preferred target role or, when absent, a
+resume-derived target role that the user may later confirm. The Job Profile contributes its normalized
+`career_context.primary_role_family`, `track`, `target_level`, `acceptable_level_range`, confidence, and
+evidence references. The Job Profile's `primary_role_family` is the canonical general job family; title
+and requirements retain specialization without replacing that family.
 
-1. Exact job role family and exact track.
-2. Exact job role family and registry-compatible track.
-3. Approved adjacent role family and exact track.
-4. Approved adjacent role family and compatible track.
-5. Candidate primary career selection.
-6. Highest evidence coverage for the job's requirement dimensions.
-7. Highest career-profile confidence.
-8. Lexicographically smallest durable career-profile ID as a stable final tie-breaker.
+The output is an immutable artifact:
 
-Candidates in a higher numbered class cannot outrank a candidate in a lower numbered class. If no career profile reaches class 1–5, matching continues using all Candidate Profile evidence with `selected_career_profile_id: null` and a provisional-context warning.
+```json
+{
+  "job_family_pre_match_id": "jfpm_123",
+  "matching_intent_revision": 3,
+  "selected_candidate_career_profile_id": "career_software_engineering",
+  "selection_source": "user_preferred",
+  "family_compatibility": "exact",
+  "track_compatibility": "compatible",
+  "level_compatibility": "within_range",
+  "proceed_to_detailed_match": true,
+  "reason_codes": [],
+  "policy_version": "job-family-pre-match.v1"
+}
+```
+
+Family compatibility is `exact`, `adjacent`, `transferable`, `incompatible`, or `unknown`. Track
+compatibility is `exact`, `compatible`, `incompatible`, or `unknown`. Level compatibility is
+`within_range`, `one_level_stretch`, `multi_level_stretch`, `overqualified`, or `unknown`.
+
+Adjacent, transferable, stretch, overqualified, and unknown results are not automatic rejections. They
+continue to detailed matching with stable reason codes. Product policy may use this result for inexpensive
+ordering or scanning, but the pre-match must not claim that missing evidence proves inability.
+
+### 21.1 Deterministic candidate career-profile preselection
+
+Qualification matching may use all valid Candidate Profile evidence. Job Family Pre-Match selects the
+level/track context and explanation frame; it does not hide otherwise relevant primary evidence.
+
+`job-family-pre-match.v1` first anchors selection to Matching Intent, then orders compatible candidate
+career profiles as follows:
+
+1. User-confirmed target job family and track.
+2. User-preferred target job family and track.
+3. Resume-derived target job family and track when the user has not supplied a preference.
+4. Candidate primary career selection only when no Matching Intent exists.
+5. Exact Job Profile family and track within intent-compatible candidate profiles.
+6. Exact family and registry-compatible track.
+7. Approved adjacent family and exact or compatible track.
+8. Highest evidence coverage, career-profile confidence, then durable career-profile ID.
+
+An earlier fallback cannot outrank an explicit user intent. Within the selected intent, family/track class,
+level compatibility, evidence coverage, confidence, and durable ID provide deterministic tie-breaking.
 
 Qualification Assessment persists:
 
 ```json
 {
+  "job_family_pre_match_id": "jfpm_123",
   "selected_career_profile_id": "career_software_engineering",
-  "selection_policy_version": "career-selection-policy.v1",
-  "selection_reason_code": "EXACT_ROLE_FAMILY_AND_TRACK"
+  "selection_policy_version": "job-family-pre-match.v1",
+  "selection_reason_code": "INTENT_AND_JOB_FAMILY_EXACT"
 }
 ```
 
-Primary selection affects search defaults and class-5 fallback only. It never overrides a stronger field-specific selection.
+The pre-match never silently selects a career profile outside explicit user intent merely because it
+resembles the Job Profile. If no intent-compatible profile exists, detailed matching continues with a
+null selected profile and a stable provisional-context warning. Matching Intent revision, policy version,
+and Job Family Pre-Match artifact ID are part of the detailed-match cache and idempotency identity.
 
 ## 22. Complete scoring edge-case policy
 
@@ -1366,6 +1426,7 @@ One operation advances monotonically through:
 pending
 candidate_extracting
 job_extracting
+job_family_pre_matching
 qualification_matching
 preference_evaluating
 eligibility_evaluating
@@ -1461,7 +1522,20 @@ Success returns the composed Candidate Profile view and revision 5. A stale revi
 
 A correction identifies a field path, replacement value, expected Candidate Profile version, and supporting existing span IDs. It creates a new immutable Candidate Profile version with `correction_source: user`; it never mutates an extraction artifact. Corrections without support in the current source direct the user to upload or enter a revised resume. Regeneration creates a new version under the current extraction policy and preserves the previous version for match-history reproduction.
 
-### 25.2 Candidate Eligibility Facts
+### 25.2 Matching Intent
+
+```http
+POST /api/v1/candidate-profiles/{candidate_profile_id}/matching-intents
+GET  /api/v1/matching-intents/{matching_intent_id}
+PUT  /api/v1/matching-intents/{matching_intent_id}
+```
+
+The complete-replacement request includes `expected_revision`, target-role display text, canonical general
+job family, track, optional target level, optional selected candidate career-profile ID, and source
+`user_preferred`, `user_confirmed`, or `resume_derived`. A stale write returns
+`409 MATCHING_INTENT_REVISION_CONFLICT`. A user preference always outranks a resume-derived default.
+
+### 25.3 Candidate Eligibility Facts
 
 ```http
 GET /api/v1/users/me/eligibility-facts
@@ -1470,7 +1544,7 @@ PUT /api/v1/users/me/eligibility-facts
 
 `PUT` requires `expected_revision` and the complete replacement facts. It returns the newly created immutable revision. A stale revision returns `409 ELIGIBILITY_REVISION_CONFLICT`. Guests do not need to create this artifact; omitted facts are represented by a not-configured marker and relevant employer constraints evaluate to unknown.
 
-### 25.3 Job Profile
+### 25.4 Job Profile
 
 ```http
 POST /api/v1/jobs/{job_id}/job-profile
@@ -1479,7 +1553,7 @@ GET  /api/v1/job-profiles/{job_profile_id}
 
 Creation returns `200` for a cache hit or completed inline extraction and `202` with an operation resource when processing continues asynchronously.
 
-### 25.4 Match creation and retrieval
+### 25.5 Match creation and retrieval
 
 ```http
 POST /api/v1/matches
@@ -1493,7 +1567,8 @@ Create request:
 ```json
 {
   "candidate_profile_id": "cp_123",
-  "candidate_career_selection_revision": 4,
+  "matching_intent_id": "intent_123",
+  "matching_intent_revision": 3,
   "job_profile_id": "jp_456",
   "preference_revision": 12,
   "eligibility_revision": 3,
@@ -1639,7 +1714,7 @@ Two qualified reviewers label each rollout pair; disagreements receive adjudicat
 | Human-rated evidence support precision | ≥ 95% |
 | Atomic requirement extraction precision | ≥ 90% |
 | Atomic requirement extraction recall | ≥ 85% |
-| Required/preferred classification F1 | ≥ 90% |
+| Required/optional classification F1 | ≥ 90% |
 | Qualification-status weighted Cohen's kappa | ≥ 0.75 |
 | Career level/track weighted agreement | ≥ 0.75 |
 | Employer hard-constraint false-positive rate | ≤ 1% |

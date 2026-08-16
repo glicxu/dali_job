@@ -8,7 +8,12 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.modules.auth.dependencies import AuthenticatedIdentity
-from app.modules.evaluation.models import EvaluationAnnotation, EvaluationJobSnapshot, EvaluationRun
+from app.modules.evaluation.models import (
+    EvaluationAnnotation,
+    EvaluationJobSnapshot,
+    EvaluationMatchReview,
+    EvaluationRun,
+)
 from app.modules.evaluation.schemas import EvaluationRunManifestView
 from app.modules.jobs.models import JobCache
 from app.modules.jobs.repository import create_user_job
@@ -187,3 +192,44 @@ def list_annotations(db: Session, *, run_id: int) -> list[EvaluationAnnotation]:
     return list(db.scalars(select(EvaluationAnnotation).where(
         EvaluationAnnotation.evaluation_run_id == run_id,
     ).order_by(EvaluationAnnotation.created_at, EvaluationAnnotation.id)).all())
+
+
+def create_match_review(
+    db: Session,
+    *,
+    run: EvaluationRun,
+    reviewer_user_id: int,
+    review_kind: str,
+    overall_score: int,
+    confidence: float,
+    rationale: str,
+) -> EvaluationMatchReview:
+    review = EvaluationMatchReview(
+        public_id=f"evm_{uuid.uuid4().hex}",
+        evaluation_run_id=run.id,
+        reviewer_user_id=reviewer_user_id,
+        review_kind=review_kind,
+        overall_score=overall_score,
+        confidence=confidence,
+        rationale=rationale,
+    )
+    db.add(review)
+    db.flush()
+    db.refresh(review)
+    return review
+
+
+def list_match_reviews(
+    db: Session,
+    *,
+    run_id: int,
+    reviewer_user_id: int | None = None,
+) -> list[EvaluationMatchReview]:
+    statement = select(EvaluationMatchReview).where(
+        EvaluationMatchReview.evaluation_run_id == run_id
+    )
+    if reviewer_user_id is not None:
+        statement = statement.where(EvaluationMatchReview.reviewer_user_id == reviewer_user_id)
+    return list(db.scalars(statement.order_by(
+        EvaluationMatchReview.created_at, EvaluationMatchReview.id
+    )).all())

@@ -104,7 +104,7 @@ class PreferenceAssessmentItem(PreferenceScoreItem):
 class PreferenceAssessmentResult(StrictModel):
     items: list[PreferenceAssessmentItem]
     hard_constraint_results: list[GateResult]
-    policy_version: Literal["preference-policy.v1"] = "preference-policy.v1"
+    policy_version: Literal["preference-policy.v2"] = "preference-policy.v2"
 
 
 def _norm(value: str) -> str:

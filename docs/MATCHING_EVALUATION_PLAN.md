@@ -1,12 +1,14 @@
 # Three-Step Matching Evaluation Plan
 
-Status: E1 in progress; ten-job benchmark admitted and diagnostic pair set prepared
-Scope: Candidate Profile extraction, Job Profile extraction, and Qualification Assessment
-Out of scope initially: preferences, eligibility, numerical scoring, ranking, and recommendations
+Status: E1/E2 replay and human review pending; E3/E4 engineering foundations implemented
+Scope: Candidate Profile, Job Profile, Qualification Assessment, and deterministic Phase 5 evaluation
+Historical early scope: preferences, eligibility, numerical scoring, ranking, and recommendations
+were excluded until the three generated-artifact stages were structurally stable.
 
 ## 1. Purpose
 
-Evaluate the three-step matching scheme before Phase 5 adds deterministic scoring and product-facing recommendations.
+Evaluate the three generated-artifact stages and then evaluate Phase 5 deterministic scoring and
+product-facing recommendations without moving scoring ownership into the model.
 
 The early evaluation must answer:
 
@@ -16,7 +18,9 @@ The early evaluation must answer:
 4. Are role family, track, and level sufficiently reliable to support later scoring policies?
 5. Are results reproducible enough to compare prompt, schema, policy, and model revisions on identical inputs?
 
-Phase 5 is not required for these questions. It is required later to evaluate score calibration, ranking, thresholds, preferences, eligibility gates, and recommendations.
+The first five questions remain Phase 3/4 gates. Phase 5 evaluation extends the same frozen
+benchmark to score calibration, ranking, thresholds, preferences, eligibility gates, and
+recommendations.
 
 ## 2. Core Principle: A Frozen Benchmark, Not Random Search
 
@@ -183,7 +187,7 @@ For the ten-job pilot, create 30–50 resume/job pairs:
 - Approximately one clearly strong pair per job.
 - One plausible but incomplete or adjacent pair per job.
 - One deliberate mismatch per job.
-- Additional pairs for hard constraints, alternative skills, ambiguous requirements, and career-track selection.
+- Additional pairs for application constraints, alternative skills, ambiguous requirements, and career-track selection.
 
 Pair labels must be assigned before observing the system result when practical. This reduces confirmation bias.
 
@@ -213,14 +217,13 @@ Reviewers label:
 Reviewers label:
 
 - Atomic requirements.
-- Required, preferred, or informational importance.
-- Hard-constraint ownership.
+- Required or optional importance.
 - Scoring dimension.
 - Acceptable evidence contexts.
 - Minimum-years requirement when explicit.
 - Explicit alternatives and approved policy alternatives.
 - Role family, track, target level, and acceptable level range.
-- Application constraints.
+- Application constraints and whether unknown values are preserved for deterministic eligibility evaluation.
 - Duplicate and boilerplate content.
 - Exact supporting source spans.
 
@@ -228,8 +231,7 @@ Reviewers label:
 
 For every requirement, reviewers label:
 
-- Owning collection: normal or evidence-based hard constraint.
-- Status: `met`, `met_by_alternative`, `partially_met`, `not_demonstrated`, `not_met`, or `needs_clarification`.
+- Status: `met`, `met_by_alternative`, `partially_met`, or `not_demonstrated`.
 - Supporting candidate evidence spans.
 - Approved alternative used, if any.
 - Material missing evidence.
@@ -240,7 +242,8 @@ The golden set contains no numerical match score during early evaluation.
 ### 9.4 Review process
 
 - Two qualified reviewers independently label every pair intended for a rollout gate.
-- Pilot labeling may begin with one reviewer, but all positive qualification statuses and hard constraints require a second review.
+- Pilot labeling may begin with one reviewer, but all positive qualification statuses and all
+  material application-constraint/eligibility decisions require a second review.
 - Disagreements are resolved by an adjudicator and retained as disagreement metadata.
 - Reviewers see source text and evidence spans, not only model summaries.
 - An LLM may assist annotation preparation but cannot be the sole ground truth or adjudicator.
@@ -269,10 +272,10 @@ The golden set contains no numerical match score during early evaluation.
 ### 10.3 Job Profile
 
 - Atomic requirement precision and recall.
-- Required/preferred classification precision, recall, and F1.
+- Required/optional classification precision, recall, and F1.
 - Requirement-duplicate rate after cleanup.
 - Scoring-dimension agreement.
-- Hard-constraint false-positive and false-negative counts.
+- Application-constraint false-positive and false-negative counts.
 - Role-family, track, and level agreement.
 - Application-constraint accuracy and unknown preservation.
 
@@ -283,9 +286,8 @@ The golden set contains no numerical match score during early evaluation.
 - Positive-status precision.
 - Human-rated evidence support precision for `met`, `met_by_alternative`, and `partially_met`.
 - Approved-alternative accuracy.
-- `not_demonstrated` versus `needs_clarification` error rate.
-- `not_met` claims without directly contradictory evidence.
-- Severe hard-constraint errors.
+- `not_demonstrated` error rate and material missing-evidence quality.
+- Severe application-constraint or eligibility-gate errors.
 
 The primary early metric is:
 
@@ -302,7 +304,7 @@ Minimum pilot expectations:
 - Zero weight inflation from duplicate job text.
 - Zero model-generated scores or recommendations.
 - Zero cross-tenant access failures.
-- Zero unsupported employer hard-constraint positives.
+- Zero unsupported employer application-constraint positives.
 - Every positive-status citation manually reviewable.
 - Every failure classified into a stable error taxonomy.
 
@@ -451,7 +453,6 @@ The detailed result view displays:
 - Candidate, resume, job, and Job Profile identities and versions.
 - Deterministically selected career profile and selection reason code.
 - A row for every Job Profile requirement.
-- Owning collection: normal or evidence-based hard constraint.
 - Qualification status and confidence.
 - Model reason and material missing evidence.
 - Explicit or approved policy alternative used.
@@ -460,9 +461,13 @@ The detailed result view displays:
 - Input completeness and any omitted-evidence warning.
 - Provider execution reference, cache status, latency, token usage, and all material prompt/schema/policy/model versions.
 
-The initial workbench calls this output a **Qualification Assessment**, not a score or recommendation. Until Phase 5 exists, it must not synthesize a hidden percentage, 0–10 score, ranking, or match label from the statuses.
+The three-stage workbench calls this output a **Qualification Assessment**, not a score or
+recommendation. Although Phase 5 now exists as a separate deterministic layer, this view must not
+synthesize a hidden percentage, 0-10 score, ranking, or match label from status counts.
 
-The tester can filter the requirement table by status, importance, dimension, or hard-constraint ownership. A compact summary may show counts such as `met: 4` and `not_demonstrated: 2`, but counts must not be presented as a calibrated score.
+The tester can filter the requirement table by status, importance, or dimension. A compact summary
+may show counts such as `met: 4` and `not_demonstrated: 2`, but counts must not be presented as a
+calibrated score.
 
 ### 15.6 Evidence navigation
 
@@ -623,23 +628,126 @@ The immutable sample and observed results are recorded in `MATCHING_AGENT_SAMPLE
 - Fill and review the ten coverage slots. **Complete.**
 - Create 8–12 candidate fixtures and 30–50 intentional pairs. **Complete: 11 fixtures and 30 pairs.**
 - Complete initial annotations and adjudication.
-- Run the current three-step matcher and classify every disagreement.
+- Run the current three-step matcher and classify every disagreement. **Automated replay complete:
+  `qualification-match.v2` completed 27/30; all three failures were Stage 3 semantic-contract
+  failures. Human disagreement classification remains.**
 - Complete the pilot through the tester workbench without direct database access.
 
 Exit: the pilot expectations in Section 11 pass or every failure has an agreed remediation owner.
 
 ### E2: Prompt and validator iteration
 
-- Change one versioned component at a time.
-- Replay the identical benchmark.
+First iteration checkpoint (2026-08-16): `qualification-match.v3` adds one bounded, complete-response
+repair attempt with sanitized semantic-validation feedback. The identical 30-pair replay completed
+28/30 (93.3%); six completed pairs used repair, and all 28 completed runs passed evidence-reference,
+requirement-coverage, manifest, and no-score structural gates. The two residual failures were safely
+rejected in Stage 3. The internal pilot accepts a low bounded failure rate and routes terminal failures
+to a separate retry/evaluator process instead of pursuing a 100% model completion rate. Full results
+and the initial >=90% reliability policy are in `MATCHING_E1_E2_REPLAY_RESULTS.md`.
+
+Human-QA handoff checkpoint (2026-08-16): the 28 structurally valid v3 runs are frozen as
+`matching-human-qa.v1`; the two execution failures are excluded from correctness metrics and remain in
+the failure report. Two independently shuffled reviewer packets contain only opaque run IDs and direct
+blind-review links. The `/evaluation?review=blind&run_id=...` mode hides diagnostic expectations,
+aggregate outcomes, comparisons, prior annotations, and adjudication outcomes, and forces saved reviews
+to `independent`. US3 verification found all 28 canonical runs with the required benchmark and
+`qualification-match.v3`, with zero pre-existing annotations. Reviewer and adjudicator account assignment
+is the remaining prerequisite for G3.
+
+Overall-score checkpoint (2026-08-16): each persisted evaluation run now exposes Candidate Profile
+versus Job Profile and Qualification Assessment with a human 0-100 match-review form. Independent and
+adjudicated scores are stored separately in `matching_evaluation_match_reviews`, with reviewer identity,
+confidence, rationale, recommendation band, and timestamp. `POST
+/api/v1/internal/evaluation/runs/{run_id}/match-reviews` accepts the review. Blind reads expose only the
+current reviewer's records; normal evaluator reads expose the two independent scores and the adjudicated
+golden score. Adjudication is rejected until two distinct reviewers exist and cannot be performed by
+either reviewer.
+
+- Change one versioned component at a time. **Complete for the v3 repair iteration.**
+- Replay the identical benchmark. **Complete: 30 frozen pairs.**
 - Compare improvements and regressions by role, track, level, and evidence type.
 - Promote a new component version only when it improves the target failure class without severe regressions.
+  **v3 advanced to internal human QA/super testing; it is not a QA pass or rollout approval.**
 
 Exit: Candidate Profile, Job Profile, and Qualification Assessment are stable enough to begin Phase 5 implementation.
 
 ### E3: One-hundred-job expansion
 
-- Expand employer, role, level, ATS, and description-quality coverage.
+Foundation checkpoint (2026-08-16): the machine-readable employer registry is now the shared
+source of truth for manual imports and the future crawling service. It contains 24 employers and
+eight ATS families. Sixteen companies were added to the pilot set using current S&P 500 and/or
+Nasdaq-100 membership as a selection aid: Broadcom, AMD, Micron, Intel, Cisco, Qualcomm, Applied
+Materials, Lam Research, KLA, Texas Instruments, Palo Alto Networks, CrowdStrike, Palantir,
+Workday, Intuit, and ServiceNow. Index membership dates and official index references are stored
+with the registry and must be refreshed for every new benchmark release; membership is not treated
+as a permanent company property.
+
+The source table remains at
+`server/app/modules/evaluation/company_job_sources.json`. Each company row now records ticker,
+index membership, industry focus, official career/discovery URLs, allowed detail hosts and path
+prefixes, ATS family, and E3 eligibility. URL-to-company attribution reads this registry instead of
+using hard-coded company rules. A future crawler must use these allowlists and independently honor
+the site's current robots rules, terms, and rate limits.
+
+`server/app/modules/evaluation/e3_collection_manifest.v1.json` freezes the first expansion target:
+
+- 100 accepted job snapshots from at least 20 employers, with no more than six jobs per employer.
+- Eleven role-family slices spanning software, ML/data, security/networking, silicon/hardware,
+  firmware, product, TPM, engineering management, and principal/architecture roles.
+- Five level bands from entry/junior through management and leadership.
+- At least six ATS families and three description-quality bands.
+- Official employer pages or employer-controlled ATS pages only, exact detail URLs, complete frozen
+  descriptions, manual acceptance, and no duplicate description hashes.
+
+#### E3 collection and Job Profile extraction process
+
+Use the following lifecycle for every newly discovered job. Collection and model extraction remain
+separate so a fetch or parsing defect cannot silently become benchmark truth.
+
+1. Discover a live detail URL from a company entry in the source registry.
+2. Import it through the evaluation workbench. The server verifies the URL against the registry,
+   fetches the employer detail page, and freezes the exact description as a draft snapshot in
+   `matching-benchmark-jobs.e3.v1`.
+3. A tester inspects the title, company, exact URL, complete description, role-family slot, level,
+   and description-quality band. E3 imports require both classification fields and persist them with
+   the snapshot metadata. The E3 admission report measures all manifest quotas rather than applying
+   the ten-job pilot limits. Accept only complete, correctly attributed, non-duplicate jobs.
+4. Validate all accepted inputs without calling the model or changing the database:
+
+   ```powershell
+   python scripts/extract_new_job_profiles.py `
+     -c <ProcessConfig.ini> `
+     --benchmark-release matching-benchmark-jobs.e3.v1 `
+     --dry-run `
+     --output artifacts/e3-job-profile-dry-run.json
+   ```
+
+5. Extract and persist Job Profiles for the accepted snapshots:
+
+   ```powershell
+   python scripts/extract_new_job_profiles.py `
+     -c <ProcessConfig.ini> `
+     --benchmark-release matching-benchmark-jobs.e3.v1 `
+     --output artifacts/e3-job-profile-extraction.json
+   ```
+
+6. Review the batch report and inspect each persisted source, Job Profile, and job description in
+   the evaluation workbench before admitting it to qualification-pair evaluation. Failed rows do
+   not abort or commit other rows; fix or reject their source snapshots and rerun only those rows
+   with `--snapshot-id <ejs_id>`.
+
+The persistence command uses the same `job-extract.v3` prompt, strict response schema, semantic
+validation/repair, deterministic policy assignment, and versioned cache identity as the application
+API. It commits each successful job independently. Re-running an unchanged job and model version
+returns the cached Job Profile and does not spend another provider call. Its JSON report records
+created, cached, ready, and failed counts plus artifact identifiers and extraction versions. The
+existing `scripts/evaluate_job_profile_extraction.py` remains the non-persisting prompt-analysis
+tool; it is not the E3 ingestion path.
+
+- Expand employer, role, level, ATS, and description-quality coverage. **Collection manifest and
+  24-company source registry complete; collecting 100 jobs remains.**
+- Persist validated Job Profiles for accepted new snapshots. **Repeatable batch process complete;
+  execution awaits accepted E3 jobs.**
 - Increase independently reviewed qualification pairs toward the 200-pair limited-rollout minimum.
 - Add stratified confidence intervals and slice-level regression gates.
 
@@ -647,10 +755,47 @@ Exit: upstream artifacts satisfy the applicable architecture evaluation gates on
 
 ### E4: Phase 5 extension
 
-- Add deterministic score reproduction tests.
-- Add adjudicated pairwise ranking and ordered candidate lists.
-- Measure score calibration and Spearman rank correlation.
-- Test preferences, eligibility, hard gates, coverage thresholds, and recommendation labels separately.
+Architecture-fixture checkpoint (2026-08-16): the Phase 5 evaluation harness now calls the same
+pure `score.v1` function used by Match Result creation. The versioned fixture at
+`server/app/modules/evaluation/phase5_policy_cases.v1.json` covers deterministic replay,
+preference blending and incompleteness, eligibility outcomes, employer/user gate precedence,
+the 0.80 qualification-coverage boundary, provisional levels, unsupported scoring policies, and
+every recommendation label. Boundary tests independently exercise every exact recommendation
+threshold and the 0.60 preference-coverage threshold.
+
+The fixture also defines independently ordered candidate lists plus a final adjudicated order and
+0-100 human-style scores. `phase5_ranking_annotation.schema.json` is the contract for replacing
+the synthetic architecture ordering with real reviewer data. Human sets require two uniquely
+identified independent reviewer rankings before they can be marked `human_adjudicated`; tied
+candidates are represented by equal adjudicated ranks.
+
+Run the harness with:
+
+```powershell
+python scripts/evaluate_phase5_scoring.py `
+  --fixture server/app/modules/evaluation/phase5_policy_cases.v1.json `
+  --output artifacts/phase5-evaluation-report.json
+```
+
+The report contains:
+
+- Canonical byte-for-byte replay status for every deterministic score result.
+- Policy-conformance results by preferences, eligibility, hard gates, coverage, level policy,
+  policy approval, preference blending, and recommendation labels.
+- The final human/adjudicated order and deterministic predicted order for each job group.
+- Pairwise ordering accuracy and mean Spearman rank correlation, including average ranks for ties.
+- Calibration sample count, mean absolute error, and root mean squared error against 0-100 human
+  scores.
+- Separate architecture-fixture gates and `rollout_decision_eligible`. Synthetic rankings can pass
+  regression checks but can never make the report eligible for a rollout decision.
+
+- Add deterministic score reproduction tests. **Complete for architecture and policy fixtures.**
+- Add adjudicated pairwise ranking and ordered candidate lists. **Schema, two-reviewer contract,
+  adjudication representation, and metric implementation complete; real human rankings remain.**
+- Measure score calibration and Spearman rank correlation. **Complete in the harness; rollout
+  measurement awaits human-adjudicated E3 pairs.**
+- Test preferences, eligibility, hard gates, coverage thresholds, and recommendation labels
+  separately. **Complete.**
 
 This stage extends the same frozen benchmark; it does not replace it.
 
@@ -660,18 +805,29 @@ Recommended defaults:
 
 - Start with ten frozen jobs and 30–50 pairs.
 - Use official sources only.
-- Target Amazon, Google, Apple, Microsoft, NVIDIA, and Meta, subject to active-posting availability and coverage balance.
+- Use the versioned company-source registry for pilot and E3 employer selection.
 - Limit any one employer to two pilot jobs.
 - Retain full frozen job text for reproducible internal testing; decide the production storage boundary during the later production review.
-- Use two human reviewers for positive statuses and all hard constraints from the start.
+- Use two human reviewers for positive statuses and material application-constraint decisions.
 - Treat the pilot as diagnostic; do not tune numerical scoring weights from it.
-- Begin Phase 5 only after the pilot finds no artifact-boundary or evidence-integrity defect.
+- Keep Phase 5 architecture fixtures separate from rollout calibration until human-reviewed E3 data exists.
 
-## 18. Open Decisions Before Collection
+## 18. Remaining Decisions
 
-- Which tier-1 employers and official domains should be prioritized for the pilot? This is a coverage decision, not a testing-licensing gate.
-- What production retention policy should replace the unrestricted internal-testing assumption before rollout?
-- Who will serve as the two domain reviewers and adjudicator?
-- Which real, consented resumes are available, and which coverage gaps require synthetic fixtures?
-- Should hardware evaluation initially cover electrical/silicon design, firmware/embedded work, or both? The recommended pilot includes both.
-- Where will benchmark snapshots and private candidate annotations be stored for reliable local and automated testing?
+Resolved for internal evaluation:
+
+- Employer priorities and official domains are versioned in `company_job_sources.json`.
+- Hardware coverage includes both silicon/electrical design and embedded/firmware roles.
+- Frozen jobs and annotations use internal database storage; de-identified synthetic fixtures and
+  machine-readable manifests may remain source controlled.
+
+Still open:
+
+- What production retention and source-licensing policy replaces unrestricted internal-testing
+  retention before customer rollout?
+- Who are the two qualified domain reviewers and the adjudicator for E1 and E3?
+- Which real, consented resumes are available, and which remaining coverage gaps should continue to
+  use synthetic fixtures?
+
+The controlling definition of execution failure, structural validity, human QA pass, rollout gates,
+and residual-failure handling is `MATCHING_QA_GATE.md`.

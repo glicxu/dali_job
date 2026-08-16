@@ -6,7 +6,6 @@ import hashlib
 import json
 import time
 from typing import cast
-from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
@@ -22,11 +21,20 @@ from app.modules.evaluation.benchmark import build_admission_report
 from app.modules.evaluation.catalog import build_fixture_catalog
 from app.modules.evaluation.metrics import calculate_aggregate_metrics, calculate_run_metrics, compare_runs
 from app.modules.evaluation.export import build_corpus_export, corpus_markdown
-from app.modules.evaluation.models import EvaluationAnnotation, EvaluationJobSnapshot, EvaluationRun
+from app.modules.evaluation.models import (
+    EvaluationAnnotation,
+    EvaluationJobSnapshot,
+    EvaluationMatchReview,
+    EvaluationRun,
+)
 from app.modules.evaluation.review import artifact_annotation_targets, build_disagreement_queue
+from app.modules.evaluation.sources import match_company_source, source_company
 from app.modules.evaluation.schemas import (
     EvaluationAnnotationCreateRequest,
     EvaluationAnnotationView,
+    EvaluationMatchReviewCreateRequest,
+    EvaluationMatchReviewSummaryView,
+    EvaluationMatchReviewView,
     EvaluationAggregateMetricsView,
     EvaluationComparisonView,
     DisagreementQueueView,
@@ -56,6 +64,7 @@ from app.modules.matching_v2.models import (
     SourceSpan,
 )
 from app.modules.matching_v2.qualification import QualificationMatcher
+from app.modules.matching_v2.scoring import recommendation_for_score
 from app.modules.matching_v2.router import (
     _candidate_profile_view,
     _job_profile_view,
@@ -80,22 +89,7 @@ def get_job_snapshot_fetcher() -> JobSnapshotFetcher:
 
 
 def _source_company(source_url: str) -> str:
-    parsed = urlparse(source_url)
-    hostname = (parsed.hostname or "").lower().removeprefix("www.")
-    path = parsed.path.lower()
-    if hostname == "amazon.jobs" or hostname.endswith(".amazon.jobs"):
-        return "Amazon"
-    if hostname == "google.com" or hostname.endswith(".google.com"):
-        return "Google"
-    if hostname == "apple.com" or hostname.endswith(".apple.com"):
-        return "Apple"
-    if hostname.endswith(".microsoft.com"):
-        return "Microsoft"
-    if hostname.endswith(".myworkdayjobs.com") and "nvidia" in hostname:
-        return "NVIDIA"
-    if hostname == "job-boards.greenhouse.io" and path.startswith("/cloudflare/"):
-        return "Cloudflare"
-    return ""
+    return source_company(source_url)
 
 
 def _require_evaluation_access(request: Request, db: Session, identity: AuthenticatedIdentity):
@@ -134,6 +128,19 @@ def import_job_snapshot(
 ) -> JobSnapshotView:
     _require_evaluation_access(request, db, identity)
     source_url = str(payload.source_url)
+    registry_entry = match_company_source(source_url)
+    registry_company = str(registry_entry["company_name"]) if registry_entry is not None else ""
+    is_e3 = payload.benchmark_release.startswith("matching-benchmark-jobs.e3")
+    if is_e3 and registry_entry is None:
+        raise HTTPException(
+            status_code=422,
+            detail="E3 job imports require an allowlisted employer job-detail URL.",
+        )
+    if is_e3 and (payload.level_band is None or payload.description_quality is None):
+        raise HTTPException(
+            status_code=422,
+            detail="E3 job imports require level_band and description_quality.",
+        )
     result = run_provider_call(
         request,
         identity,
@@ -152,7 +159,11 @@ def import_job_snapshot(
         source_url=source_url,
         raw_description_text=result.focused_text,
         title=(result.title or "").strip(),
-        company=(result.company or "").strip() or _source_company(source_url),
+        company=(
+            registry_company
+            if is_e3
+            else (result.company or "").strip() or registry_company
+        ),
         capture_metadata={
             "canonical_url": result.canonical_url,
             "location": result.location,
@@ -160,6 +171,12 @@ def import_job_snapshot(
             "extractor_version": result.extractor_version,
             "confidence": result.confidence,
             "warnings": result.warnings,
+            "source_registry_company_id": (
+                registry_entry["company_id"] if registry_entry is not None else None
+            ),
+            "ats_family": registry_entry["ats_family"] if registry_entry is not None else None,
+            "level_band": payload.level_band,
+            "description_quality": payload.description_quality,
         },
     )
     return _snapshot_view(snapshot)
@@ -317,7 +334,10 @@ def start_evaluation_run(
                 "cost_usd": None,
                 "availability": "provider_does_not_expose_usage_to_current_adapter",
             },
-            "validation": {"strict_schema_success": True, "retry_count": 0},
+            "validation": {
+                "strict_schema_success": True,
+                "retry_count": int(qualification.input_quality.get("validation_retry_count", 0)),
+            },
         },
         manifest=_build_manifest(
             snapshot=snapshot,
@@ -348,14 +368,15 @@ def get_evaluation_runs(
 def get_evaluation_run(
     run_id: str,
     request: Request,
+    blind: bool = False,
     db: Session = Depends(get_db_session),
     identity: AuthenticatedIdentity = Depends(get_current_identity),
 ) -> EvaluationRunDetail:
-    _, workspace = _require_evaluation_access(request, db, identity)
+    user, workspace = _require_evaluation_access(request, db, identity)
     run = repository.get_run(db, public_id=run_id, workspace_id=workspace.id)
     if run is None:
         raise HTTPException(status_code=404, detail="Evaluation run not found.")
-    return _run_detail(db, run)
+    return _run_detail(db, run, blind_reviewer_user_id=user.id if blind else None)
 
 
 @router.post("/runs/{run_id}/annotations", response_model=EvaluationAnnotationView)
@@ -394,6 +415,44 @@ def add_evaluation_annotation(
         comment=payload.comment,
     )
     return _annotation_view(db, annotation)
+
+
+@router.post("/runs/{run_id}/match-reviews", response_model=EvaluationMatchReviewView)
+def add_evaluation_match_review(
+    run_id: str,
+    payload: EvaluationMatchReviewCreateRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> EvaluationMatchReviewView:
+    user, workspace = _require_evaluation_access(request, db, identity)
+    run = repository.get_run(db, public_id=run_id, workspace_id=workspace.id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Evaluation run not found.")
+    if payload.review_kind == "adjudication":
+        independent = _latest_independent_match_reviews(
+            repository.list_match_reviews(db, run_id=run.id)
+        )
+        if len(independent) < 2:
+            raise HTTPException(
+                status_code=409,
+                detail="Two independent match reviews are required before adjudication.",
+            )
+        if user.id in independent:
+            raise HTTPException(
+                status_code=409,
+                detail="The adjudicator must be independent from both match reviewers.",
+            )
+    review = repository.create_match_review(
+        db,
+        run=run,
+        reviewer_user_id=user.id,
+        review_kind=payload.review_kind,
+        overall_score=payload.overall_score,
+        confidence=payload.confidence,
+        rationale=payload.rationale,
+    )
+    return _match_review_view(db, review)
 
 
 @router.get("/runs/{run_id}/metrics", response_model=EvaluationMetricsView)
@@ -605,7 +664,12 @@ def _annotation_targets(db: Session, run: EvaluationRun, stage: str) -> set[str]
     return targets
 
 
-def _run_detail(db: Session, run: EvaluationRun) -> EvaluationRunDetail:
+def _run_detail(
+    db: Session,
+    run: EvaluationRun,
+    *,
+    blind_reviewer_user_id: int | None = None,
+) -> EvaluationRunDetail:
     snapshot, resume, candidate, job_profile, qualification, candidate_source, job_source = _run_artifacts(db, run)
     summary = _run_summary(db, run)
     return EvaluationRunDetail(
@@ -620,10 +684,69 @@ def _run_detail(db: Session, run: EvaluationRun) -> EvaluationRunDetail:
         job_profile=_job_profile_view(db, job_profile, job_source),
         qualification=_qualification_assessment_view(db, qualification),
         manifest=cast(dict, run.manifest),
-        annotations=[_annotation_view(db, item) for item in repository.list_annotations(db, run_id=run.id)],
+        annotations=[
+            _annotation_view(db, item)
+            for item in repository.list_annotations(db, run_id=run.id)
+            if blind_reviewer_user_id is None or item.reviewer_user_id == blind_reviewer_user_id
+        ],
+        match_review=_match_review_summary(
+            db,
+            repository.list_match_reviews(
+                db,
+                run_id=run.id,
+                reviewer_user_id=blind_reviewer_user_id,
+            ),
+        ),
         annotation_targets=artifact_annotation_targets(
             db, candidate=candidate, job_profile=job_profile
         ),
         metrics=calculate_run_metrics(db, run),
         run_metadata=cast(dict, run.run_metadata),
+    )
+
+
+def _latest_independent_match_reviews(
+    reviews: list[EvaluationMatchReview],
+) -> dict[int, EvaluationMatchReview]:
+    latest: dict[int, EvaluationMatchReview] = {}
+    for review in reviews:
+        if review.review_kind == "independent":
+            latest[review.reviewer_user_id] = review
+    return latest
+
+
+def _match_review_view(db: Session, review: EvaluationMatchReview) -> EvaluationMatchReviewView:
+    reviewer = db.get(User, review.reviewer_user_id)
+    return EvaluationMatchReviewView(
+        public_id=review.public_id,
+        reviewer_user_id=review.reviewer_user_id,
+        reviewer_label=reviewer.email if reviewer is not None else f"user:{review.reviewer_user_id}",
+        review_kind=review.review_kind,
+        overall_score=review.overall_score,
+        recommendation=recommendation_for_score(review.overall_score),
+        confidence=review.confidence,
+        rationale=review.rationale,
+        created_at=review.created_at,
+    )
+
+
+def _match_review_summary(
+    db: Session,
+    reviews: list[EvaluationMatchReview],
+) -> EvaluationMatchReviewSummaryView:
+    independent = _latest_independent_match_reviews(reviews)
+    adjudications = [review for review in reviews if review.review_kind == "adjudication"]
+    adjudication = adjudications[-1] if adjudications else None
+    if adjudication is not None:
+        state = "adjudicated"
+    elif len(independent) >= 2:
+        state = "adjudication_ready"
+    else:
+        state = "review_pending"
+    displayed = [*independent.values(), *([adjudication] if adjudication is not None else [])]
+    return EvaluationMatchReviewSummaryView(
+        state=state,
+        independent_reviewer_count=len(independent),
+        reviews=[_match_review_view(db, item) for item in displayed],
+        adjudicated_review=_match_review_view(db, adjudication) if adjudication is not None else None,
     )

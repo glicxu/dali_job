@@ -33,6 +33,7 @@ from app.modules.interviews.router import router as interviews_router
 from app.modules.jobs.router import router as jobs_router
 from app.modules.materials.router import router as materials_router
 from app.modules.matching_v2.router import router as matching_v2_router
+from app.modules.matching_v2.orchestration_router import router as matching_v2_orchestration_router
 from app.modules.matching_v2.extraction import JobProfileValidationFailed
 from app.modules.notifications.router import router as notifications_router
 from app.modules.operations.router import router as operations_router
@@ -59,6 +60,7 @@ API_ROUTERS = (
     jobs_router,
     materials_router,
     matching_v2_router,
+    matching_v2_orchestration_router,
     notifications_router,
     operations_router,
     profile_router,
@@ -148,6 +150,7 @@ def create_app(config_path: Optional[str] = None) -> FastAPI:
     app.include_router(jobs_router, prefix="/api/v1")
     app.include_router(materials_router, prefix="/api/v1")
     app.include_router(matching_v2_router, prefix="/api/v1")
+    app.include_router(matching_v2_orchestration_router, prefix="/api/v1")
     app.include_router(notifications_router, prefix="/api/v1")
     app.include_router(operations_router, prefix="/api/v1")
     app.include_router(profile_router, prefix="/api/v1")

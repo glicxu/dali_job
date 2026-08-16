@@ -259,3 +259,28 @@ def build_qualification_user_prompt(
         "selected_career_context": career_context,
     }
     return "Assess this JSON data envelope:\n" + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+def build_qualification_repair_user_prompt(
+    *,
+    candidate_profile: dict[str, Any],
+    candidate_evidence: Sequence[dict[str, Any]],
+    job_requirements: Sequence[dict[str, Any]],
+    approved_alternatives: Sequence[dict[str, Any]],
+    errors: Sequence[dict[str, str]],
+    career_context: dict[str, Any] | None = None,
+) -> str:
+    payload = {
+        "candidate_profile": candidate_profile,
+        "candidate_evidence": list(candidate_evidence),
+        "job_requirements": list(job_requirements),
+        "approved_alternatives": list(approved_alternatives),
+        "selected_career_context": career_context,
+        "validation_feedback": {
+            "errors": list(errors),
+            "instruction": "Return a complete replacement Qualification Assessment, not a partial patch.",
+        },
+    }
+    return "Repair the assessment from this JSON data envelope:\n" + json.dumps(
+        payload, ensure_ascii=False, separators=(",", ":")
+    )

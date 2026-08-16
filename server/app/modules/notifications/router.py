@@ -7,6 +7,8 @@ from app.db.session import get_db_session
 from app.modules.auth.dependencies import AuthenticatedIdentity, get_current_identity
 from app.modules.notifications import service
 from app.modules.notifications.schemas import (
+    MatchFeedbackResponse,
+    MatchFeedbackUpdateRequest,
     MatchInboxItemResponse,
     MatchInboxListResponse,
     NotificationPreferenceResponse,
@@ -80,3 +82,18 @@ def mark_match_inbox_item_read(
     if item is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match inbox item not found.")
     return MatchInboxItemResponse.model_validate(item)
+
+
+@router.put("/match-inbox/{match_id}/feedback", response_model=MatchFeedbackResponse)
+def put_match_feedback(
+    match_id: int,
+    payload: MatchFeedbackUpdateRequest,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> MatchFeedbackResponse:
+    feedback = service.put_match_feedback(
+        db, identity, match_id, score=payload.score, rationale=payload.rationale
+    )
+    if feedback is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match inbox item not found.")
+    return MatchFeedbackResponse.model_validate(feedback)

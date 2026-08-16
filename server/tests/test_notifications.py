@@ -212,7 +212,32 @@ def test_match_inbox_paginates_returns_details_and_marks_read() -> None:
     detail = client.get(f"/api/v1/match-inbox/{match_ids[-1]}")
     assert detail.status_code == 200
     assert detail.json()["match_data"]["summary"] == "Strong match."
+    assert detail.json()["resume_data"]["headline"] == "Backend Engineer"
+    assert detail.json()["job_data"]["company"] == "Example Co"
+    assert detail.json()["user_feedback"] is None
     assert detail.json()["status"] == "sent"
+
+    feedback = client.put(
+        f"/api/v1/match-inbox/{match_ids[-1]}/feedback",
+        json={"score": 73, "rationale": "The role is relevant, but the domain is new."},
+    )
+    assert feedback.status_code == 200
+    assert feedback.json()["score"] == 73
+    assert feedback.json()["recommendation"] == "good_match"
+
+    revised = client.put(
+        f"/api/v1/match-inbox/{match_ids[-1]}/feedback",
+        json={"score": 82, "rationale": "A closer review found stronger overlap."},
+    )
+    assert revised.status_code == 200
+    assert revised.json()["score"] == 82
+    assert client.get(f"/api/v1/match-inbox/{match_ids[-1]}").json()["user_feedback"]["score"] == 82
+    assert client.put(
+        "/api/v1/match-inbox/999999/feedback", json={"score": 50, "rationale": "Unknown"}
+    ).status_code == 404
+    assert client.put(
+        f"/api/v1/match-inbox/{match_ids[-1]}/feedback", json={"score": 101}
+    ).status_code == 422
 
     marked = client.post(f"/api/v1/match-inbox/{match_ids[-1]}/read")
     assert marked.status_code == 200

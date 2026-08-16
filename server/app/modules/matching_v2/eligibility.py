@@ -24,7 +24,7 @@ class CandidateEligibilityFacts(StrictModel):
 
 class EligibilityAssessmentResult(StrictModel):
     items: list[GateResult]
-    policy_version: Literal["eligibility-policy.v1"] = "eligibility-policy.v1"
+    policy_version: Literal["eligibility-policy.v2"] = "eligibility-policy.v2"
 
 
 def evaluate_eligibility(

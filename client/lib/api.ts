@@ -485,9 +485,29 @@ export type EvaluationRunDetail = EvaluationRunSummary & {
   } & Record<string, unknown>;
   manifest: Record<string, unknown>;
   annotations: EvaluationAnnotation[];
+  match_review: EvaluationMatchReviewSummary;
   annotation_targets: EvaluationAnnotationTarget[];
   metrics: EvaluationMetrics;
   run_metadata: Record<string, unknown>;
+};
+
+export type EvaluationMatchReview = {
+  public_id: string;
+  reviewer_user_id: number;
+  reviewer_label: string;
+  review_kind: "independent" | "adjudication";
+  overall_score: number;
+  recommendation: "strong_match" | "good_match" | "consider" | "stretch" | "unlikely_fit";
+  confidence: number;
+  rationale: string;
+  created_at: string;
+};
+
+export type EvaluationMatchReviewSummary = {
+  state: "review_pending" | "adjudication_ready" | "adjudicated";
+  independent_reviewer_count: number;
+  reviews: EvaluationMatchReview[];
+  adjudicated_review: EvaluationMatchReview | null;
 };
 
 export type EvaluationAnnotationTarget = {
@@ -2071,6 +2091,8 @@ export function importEvaluationJobSnapshot(payload: {
   source_url: string;
   benchmark_release: string;
   coverage_slot: string;
+  level_band?: "entry_junior" | "mid" | "senior" | "staff_principal" | "management_leadership";
+  description_quality?: "structured_high" | "mixed_medium" | "sparse_or_noisy";
 }): Promise<EvaluationJobSnapshot> {
   return requestJson<EvaluationJobSnapshot>("/internal/evaluation/job-snapshots/import", {
     method: "POST",
@@ -2093,8 +2115,8 @@ export function createEvaluationRun(payload: {
   });
 }
 
-export function getEvaluationRun(runId: string): Promise<EvaluationRunDetail> {
-  return requestJson<EvaluationRunDetail>(`/internal/evaluation/runs/${runId}`);
+export function getEvaluationRun(runId: string, blind = false): Promise<EvaluationRunDetail> {
+  return requestJson<EvaluationRunDetail>(`/internal/evaluation/runs/${runId}${blind ? "?blind=true" : ""}`);
 }
 
 export function addEvaluationAnnotation(
@@ -2102,6 +2124,21 @@ export function addEvaluationAnnotation(
   payload: Omit<EvaluationAnnotation, "public_id" | "reviewer_user_id" | "reviewer_label" | "created_at">,
 ): Promise<EvaluationAnnotation> {
   return requestJson<EvaluationAnnotation>(`/internal/evaluation/runs/${runId}/annotations`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function addEvaluationMatchReview(
+  runId: string,
+  payload: {
+    review_kind: "independent" | "adjudication";
+    overall_score: number;
+    confidence: number;
+    rationale: string;
+  },
+): Promise<EvaluationMatchReview> {
+  return requestJson<EvaluationMatchReview>(`/internal/evaluation/runs/${runId}/match-reviews`, {
     method: "POST",
     body: JSON.stringify(payload),
   });

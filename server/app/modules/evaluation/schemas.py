@@ -18,6 +18,10 @@ class JobSnapshotImportRequest(BaseModel):
     source_url: HttpUrl
     benchmark_release: str = Field(default="matching-benchmark-jobs.v1", min_length=1, max_length=100)
     coverage_slot: str = Field(default="", max_length=160)
+    level_band: Literal[
+        "entry_junior", "mid", "senior", "staff_principal", "management_leadership"
+    ] | None = None
+    description_quality: Literal["structured_high", "mixed_medium", "sparse_or_noisy"] | None = None
 
 
 class JobSnapshotView(BaseModel):
@@ -158,6 +162,32 @@ class EvaluationAnnotationView(EvaluationAnnotationCreateRequest):
     created_at: datetime
 
 
+class EvaluationMatchReviewCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    review_kind: Literal["independent", "adjudication"] = "independent"
+    overall_score: int = Field(ge=0, le=100)
+    confidence: float = Field(default=1.0, ge=0, le=1)
+    rationale: str = Field(min_length=1, max_length=4000)
+
+
+class EvaluationMatchReviewView(EvaluationMatchReviewCreateRequest):
+    public_id: str
+    reviewer_user_id: int
+    reviewer_label: str
+    recommendation: Literal[
+        "strong_match", "good_match", "consider", "stretch", "unlikely_fit"
+    ]
+    created_at: datetime
+
+
+class EvaluationMatchReviewSummaryView(BaseModel):
+    state: Literal["review_pending", "adjudication_ready", "adjudicated"]
+    independent_reviewer_count: int
+    reviews: list[EvaluationMatchReviewView]
+    adjudicated_review: EvaluationMatchReviewView | None
+
+
 class EvaluationAnnotationTargetView(BaseModel):
     stage: Literal["candidate_profile", "job_profile"]
     target_ref: str
@@ -263,6 +293,7 @@ class EvaluationRunDetail(EvaluationRunSummary):
     qualification: QualificationAssessmentView
     manifest: EvaluationRunManifestView
     annotations: list[EvaluationAnnotationView]
+    match_review: EvaluationMatchReviewSummaryView
     annotation_targets: list[EvaluationAnnotationTargetView]
     metrics: EvaluationMetricsView
     run_metadata: dict[str, Any]

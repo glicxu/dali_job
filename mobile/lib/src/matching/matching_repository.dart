@@ -197,6 +197,71 @@ class MatchingRepository {
     ),
   );
 
+  Future<MatchFeedback> putMatchFeedback({
+    required int matchId,
+    required int score,
+    required String rationale,
+  }) => session.authorized(
+    (token) async => MatchFeedback.fromJson(
+      await api.put(
+        'match-inbox/$matchId/feedback',
+        accessToken: token,
+        body: {'score': score, 'rationale': rationale},
+      ),
+    ),
+  );
+
+  Future<TesterFixtures> loadTesterFixtures() =>
+      session.authorized((token) async {
+        final catalog = await api.get(
+          'internal/evaluation/fixture-catalog',
+          accessToken: token,
+        );
+        final snapshots = await api.get(
+          'internal/evaluation/job-snapshots',
+          accessToken: token,
+        );
+        return TesterFixtures(
+          catalog: catalog,
+          jobs: (snapshots['snapshots'] as List)
+              .map((item) => Map<String, dynamic>.from(item as Map))
+              .toList(),
+        );
+      });
+
+  Future<Map<String, dynamic>> startTesterEvaluation({
+    required int resumeProfileId,
+    required String jobSnapshotId,
+    required String candidateFixtureRelease,
+  }) => session.authorized(
+    (token) => api.post(
+      'internal/evaluation/runs',
+      accessToken: token,
+      body: {
+        'resume_profile_id': resumeProfileId,
+        'job_snapshot_id': jobSnapshotId,
+        'candidate_fixture_release': candidateFixtureRelease,
+      },
+    ),
+  );
+
+  Future<Map<String, dynamic>> submitTesterReview({
+    required String runId,
+    required int score,
+    required String rationale,
+  }) => session.authorized(
+    (token) => api.post(
+      'internal/evaluation/runs/$runId/match-reviews',
+      accessToken: token,
+      body: {
+        'review_kind': 'independent',
+        'overall_score': score,
+        'confidence': 1.0,
+        'rationale': rationale.trim(),
+      },
+    ),
+  );
+
   Map<String, dynamic> _resumeData({
     required String headline,
     required String summary,
@@ -217,4 +282,11 @@ class MatchingRepository {
     'target_roles': targetRoles,
     'notes': <String>[],
   };
+}
+
+class TesterFixtures {
+  const TesterFixtures({required this.catalog, required this.jobs});
+
+  final Map<String, dynamic> catalog;
+  final List<Map<String, dynamic>> jobs;
 }

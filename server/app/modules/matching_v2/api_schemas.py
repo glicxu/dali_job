@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -165,3 +166,58 @@ class MatchResultView(BaseModel):
     policy: dict
     legacy_score: int | None
     created_at: datetime
+
+
+class MatchCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_profile_id: str = Field(min_length=1, max_length=64)
+    candidate_career_selection_revision: int = Field(ge=1)
+    job_profile_id: str = Field(min_length=1, max_length=64)
+    preference_revision: int | None = Field(default=None, ge=1)
+    eligibility_revision: int | None = Field(default=None, ge=1)
+    mode: Literal["immediate", "asynchronous"] = "immediate"
+    idempotency_key: str = Field(min_length=8, max_length=128)
+
+
+class MatchRerunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_profile_id: str | None = Field(default=None, min_length=1, max_length=64)
+    candidate_career_selection_revision: int | None = Field(default=None, ge=1)
+    preference_revision: int | None = Field(default=None, ge=1)
+    eligibility_revision: int | None = Field(default=None, ge=1)
+    mode: Literal["immediate", "asynchronous"] = "immediate"
+    idempotency_key: str = Field(min_length=8, max_length=128)
+
+
+class MatchingOperationStageView(BaseModel):
+    stage: str
+    status: str
+    attempt_count: int
+    max_attempts: int
+    input_artifact_ids: dict
+    output_artifact_id: str | None = None
+    cache_hit: bool | None = None
+    provider_usage: dict
+    policy_versions: dict
+    error_code: str | None = None
+    error_message: str | None = None
+    started_at: datetime | None = None
+    heartbeat_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+class MatchingOperationView(BaseModel):
+    operation_id: str
+    status: str
+    current_stage: str | None = None
+    correlation_id: str
+    mode: Literal["immediate", "asynchronous"]
+    match: MatchResultView | None = None
+    stages: list[MatchingOperationStageView]
+    error_code: str | None = None
+    error_message: str | None = None
+    poll_after_seconds: int | None = None
+    created_at: datetime
+    updated_at: datetime

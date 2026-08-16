@@ -98,7 +98,9 @@ def _round_half_up(value: Decimal) -> int:
     return int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
-def _recommendation_for_score(score: int) -> Recommendation:
+def recommendation_for_score(score: int) -> Recommendation:
+    if score < 0 or score > 100:
+        raise ValueError("score must be between 0 and 100")
     if score >= 85:
         return "strong_match"
     if score >= 70:
@@ -226,7 +228,7 @@ def score_match(
         )
 
     recommendation: Recommendation = (
-        _recommendation_for_score(overall_score)
+        recommendation_for_score(overall_score)
         if overall_score is not None
         else "needs_more_information"
     )

@@ -1,0 +1,155 @@
+{
+  "fixture_release": "phase5-policy-cases.v1",
+  "purpose": "Architecture-level deterministic scoring, ranking, calibration, and policy-boundary regression fixture.",
+  "human_data_status": "synthetic_adjudicated_architecture_fixture",
+  "base_input": {
+    "role_family": "software_engineering",
+    "track": "individual_contributor",
+    "target_level": "senior",
+    "level_confidence": 0.95,
+    "qualification_items": [
+      {"requirement_id": "shipping", "importance": "required", "scoring_dimension": "production_delivery", "status": "partially_met"},
+      {"requirement_id": "language", "importance": "required", "scoring_dimension": "technical_skill", "status": "met_by_alternative"},
+      {"requirement_id": "python", "importance": "optional", "scoring_dimension": "technical_skill", "status": "met"}
+    ]
+  },
+  "cases": [
+    {
+      "case_id": "reference_blended_score",
+      "category": "preference_blending",
+      "input": {"preference_items": [
+        {"preference_key": "compensation.minimum_base", "importance": "high", "status": "met"},
+        {"preference_key": "workplace_types", "importance": "high", "status": "conflict"}
+      ]},
+      "expected": {"qualification_score": 68, "preference_score": 50, "overall_score": 63, "recommendation": "consider"}
+    },
+    {
+      "case_id": "strong_match_label",
+      "category": "recommendation_labels",
+      "input": {"qualification_items": [
+        {"requirement_id": "shipping", "importance": "required", "scoring_dimension": "production_delivery", "status": "met"},
+        {"requirement_id": "language", "importance": "required", "scoring_dimension": "technical_skill", "status": "met"},
+        {"requirement_id": "python", "importance": "optional", "scoring_dimension": "technical_skill", "status": "met"}
+      ]},
+      "expected": {"overall_score": 100, "recommendation": "strong_match"}
+    },
+    {
+      "case_id": "good_match_label",
+      "category": "recommendation_labels",
+      "input": {"qualification_items": [
+        {"requirement_id": "shipping", "importance": "required", "scoring_dimension": "production_delivery", "status": "met"},
+        {"requirement_id": "language", "importance": "required", "scoring_dimension": "technical_skill", "status": "partially_met"},
+        {"requirement_id": "python", "importance": "optional", "scoring_dimension": "technical_skill", "status": "met"}
+      ]},
+      "expected": {"overall_score": 84, "recommendation": "good_match"}
+    },
+    {
+      "case_id": "consider_label",
+      "category": "recommendation_labels",
+      "expected": {"overall_score": 68, "recommendation": "consider"}
+    },
+    {
+      "case_id": "stretch_label",
+      "category": "recommendation_labels",
+      "input": {"qualification_items": [
+        {"requirement_id": "shipping", "importance": "required", "scoring_dimension": "production_delivery", "status": "partially_met"},
+        {"requirement_id": "language", "importance": "required", "scoring_dimension": "technical_skill", "status": "partially_met"},
+        {"requirement_id": "python", "importance": "optional", "scoring_dimension": "technical_skill", "status": "not_demonstrated"}
+      ]},
+      "expected": {"overall_score": 45, "recommendation": "stretch"}
+    },
+    {
+      "case_id": "unlikely_fit_label",
+      "category": "recommendation_labels",
+      "input": {"qualification_items": [
+        {"requirement_id": "shipping", "importance": "required", "scoring_dimension": "production_delivery", "status": "not_demonstrated"},
+        {"requirement_id": "language", "importance": "required", "scoring_dimension": "technical_skill", "status": "not_demonstrated"}
+      ]},
+      "expected": {"overall_score": 0, "recommendation": "unlikely_fit"}
+    },
+    {
+      "case_id": "qualification_coverage_gate",
+      "category": "coverage_thresholds",
+      "input": {"qualification_items": [
+        {"requirement_id": "shipping", "importance": "required", "scoring_dimension": "production_delivery", "status": "needs_clarification"},
+        {"requirement_id": "language", "importance": "required", "scoring_dimension": "technical_skill", "status": "met_by_alternative"},
+        {"requirement_id": "python", "importance": "optional", "scoring_dimension": "technical_skill", "status": "met"}
+      ]},
+      "expected": {"qualification_score": null, "diagnostic_qualification_score": 40, "overall_score": null, "recommendation": "needs_more_information", "reason_codes_include": ["QUALIFICATION_COVERAGE_BELOW_THRESHOLD"]}
+    },
+    {
+      "case_id": "incomplete_preferences_do_not_blend",
+      "category": "preferences",
+      "input": {"preference_items": [
+        {"preference_key": "known", "importance": "low", "status": "met"},
+        {"preference_key": "unknown", "importance": "high", "status": "unknown"}
+      ]},
+      "expected": {"preference_score": 100, "preference_coverage": 0.25, "preference_state": "incomplete", "overall_score": 68, "reason_codes_include": ["PREFERENCES_INCOMPLETE"]}
+    },
+    {
+      "case_id": "unsupported_policy_gate",
+      "category": "policy_approval",
+      "input": {"role_family": "hardware_engineering"},
+      "expected": {"qualification_score": null, "overall_score": null, "recommendation": "needs_more_information", "reason_codes_include": ["SCORING_POLICY_NOT_APPROVED"]}
+    },
+    {
+      "case_id": "user_gate_precedence",
+      "category": "hard_gates",
+      "input": {"qualification_items": [
+        {"requirement_id": "shipping", "importance": "required", "scoring_dimension": "production_delivery", "status": "met"}
+      ], "gates": [
+        {"constraint_key": "workplace_type", "owner": "user", "status": "violated", "reason_code": "WORKPLACE_NOT_ALLOWED"}
+      ]},
+      "expected": {"overall_score": 100, "recommendation": "does_not_match_preferences", "reason_codes_include": ["USER_CONSTRAINT_VIOLATED"]}
+    },
+    {
+      "case_id": "employer_gate_caps_recommendation",
+      "category": "eligibility",
+      "input": {"qualification_items": [
+        {"requirement_id": "shipping", "importance": "required", "scoring_dimension": "production_delivery", "status": "met"}
+      ], "gates": [
+        {"constraint_key": "work_authorization.US", "owner": "employer", "status": "violated", "reason_code": "USER_NOT_AUTHORIZED"}
+      ]},
+      "expected": {"overall_score": 100, "recommendation": "unlikely_fit", "reason_codes_include": ["EMPLOYER_CONSTRAINT_VIOLATED"]}
+    },
+    {
+      "case_id": "unknown_employer_gate_hides_label",
+      "category": "eligibility",
+      "input": {"qualification_items": [
+        {"requirement_id": "shipping", "importance": "required", "scoring_dimension": "production_delivery", "status": "met"}
+      ], "gates": [
+        {"constraint_key": "work_authorization.US", "owner": "employer", "status": "unknown", "reason_code": "AUTHORIZATION_NOT_CONFIGURED"}
+      ]},
+      "expected": {"overall_score": 100, "recommendation": "needs_more_information", "reason_codes_include": ["EMPLOYER_CONSTRAINT_UNKNOWN"]}
+    },
+    {
+      "case_id": "provisional_level_policy",
+      "category": "level_policy",
+      "input": {"target_level": "unknown", "level_confidence": 0.2},
+      "expected": {"level_policy_provisional": true, "reason_codes_include": ["JOB_LEVEL_POLICY_PROVISIONAL"]}
+    }
+  ],
+  "ranking_sets": [
+    {
+      "ranking_id": "software_ic_architecture_order_01",
+      "adjudication_kind": "synthetic_architecture_fixture",
+      "reviewer_rankings": [
+        {"reviewer_ref": "architecture_reviewer_a", "ordered_case_groups": [["strong_match_label"], ["good_match_label"], ["consider_label"], ["stretch_label"], ["unlikely_fit_label"]]},
+        {"reviewer_ref": "architecture_reviewer_b", "ordered_case_groups": [["strong_match_label"], ["good_match_label"], ["consider_label"], ["stretch_label"], ["unlikely_fit_label"]]}
+      ],
+      "entries": [
+        {"case_id": "strong_match_label", "adjudicated_rank": 1, "human_score": 95},
+        {"case_id": "good_match_label", "adjudicated_rank": 2, "human_score": 78},
+        {"case_id": "consider_label", "adjudicated_rank": 3, "human_score": 65},
+        {"case_id": "stretch_label", "adjudicated_rank": 4, "human_score": 45},
+        {"case_id": "unlikely_fit_label", "adjudicated_rank": 5, "human_score": 10}
+      ],
+      "adjudication_notes": "Synthetic ordering used only to verify ranking and calibration calculations."
+    }
+  ],
+  "gates": {
+    "minimum_spearman_rank_correlation": 0.70,
+    "minimum_pairwise_accuracy": 0.80,
+    "maximum_mean_absolute_error": 10.0
+  }
+}

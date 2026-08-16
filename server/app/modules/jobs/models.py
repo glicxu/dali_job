@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -186,3 +186,28 @@ class JobResumeMatch(Base):
     provider_execution_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class JobMatchFeedback(Base):
+    __tablename__ = "job_match_feedback"
+    __table_args__ = (
+        CheckConstraint("score >= 0 AND score <= 100", name="ck_job_match_feedback_score"),
+        UniqueConstraint("user_id", "job_resume_match_id", name="uq_job_match_feedback_user_match"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    job_resume_match_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("job_resume_matches.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    score: Mapped[int] = mapped_column(Integer, nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )

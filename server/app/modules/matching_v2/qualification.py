@@ -26,7 +26,11 @@ from app.modules.matching_v2.models import (
     JobRequirement,
     SourceSpan,
 )
-from app.modules.matching_v2.prompts import QUALIFICATION_SYSTEM_PROMPT, build_qualification_user_prompt
+from app.modules.matching_v2.prompts import (
+    QUALIFICATION_SYSTEM_PROMPT,
+    build_qualification_repair_user_prompt,
+    build_qualification_user_prompt,
+)
 from app.modules.matching_v2.registry import DEFAULT_REGISTRY, canonical_json
 from app.modules.matching_v2.schemas import QualificationAssessmentResponse, qualification_response_format
 
@@ -69,10 +73,18 @@ class QualificationResult:
     artifact: QualificationAssessmentResponse
     model_id: str
     provider_execution_reference: str | None
+    retry_count: int = 0
 
 
 class QualificationMatcher(Protocol):
     def assess(self, qualification_input: QualificationInput) -> QualificationResult:
+        ...
+
+    def repair(
+        self,
+        qualification_input: QualificationInput,
+        errors: tuple[dict[str, str], ...],
+    ) -> QualificationResult:
         ...
 
 
@@ -117,6 +129,38 @@ class OpenAIQualificationMatcher:
                 allowed_evidence_refs=sorted(qualification_input.allowed_evidence_refs),
             ),
         }
+        return self._request(user_prompt=user_prompt, response_format=response_format, retry_count=0)
+
+    def repair(
+        self,
+        qualification_input: QualificationInput,
+        errors: tuple[dict[str, str], ...],
+    ) -> QualificationResult:
+        requirement_ids = [item["requirement_id"] for item in qualification_input.job_requirements]
+        user_prompt = build_qualification_repair_user_prompt(
+            candidate_profile=qualification_input.candidate_profile,
+            candidate_evidence=qualification_input.candidate_evidence,
+            job_requirements=qualification_input.job_requirements,
+            approved_alternatives=qualification_input.approved_alternatives,
+            career_context=qualification_input.selected_career_context,
+            errors=errors,
+        )
+        response_format = {
+            "type": "json_schema",
+            "json_schema": qualification_response_format(
+                allowed_requirement_ids=requirement_ids,
+                allowed_evidence_refs=sorted(qualification_input.allowed_evidence_refs),
+            ),
+        }
+        return self._request(user_prompt=user_prompt, response_format=response_format, retry_count=1)
+
+    def _request(
+        self,
+        *,
+        user_prompt: str,
+        response_format: dict,
+        retry_count: int,
+    ) -> QualificationResult:
         record_model_request(
             stage="qualification",
             model=self._model,
@@ -154,6 +198,7 @@ class OpenAIQualificationMatcher:
             artifact=artifact,
             model_id=self._model,
             provider_execution_reference=getattr(response, "id", None),
+            retry_count=retry_count,
         )
 
 

@@ -33,6 +33,21 @@ class NotificationPreferenceResponse(BaseModel):
     updated_at: datetime
 
 
+class MatchFeedbackResponse(BaseModel):
+    score: int = Field(ge=0, le=100)
+    recommendation: str
+    rationale: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class MatchFeedbackUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    score: int = Field(ge=0, le=100)
+    rationale: str = Field(default="", max_length=4000)
+
+
 class MatchInboxItemResponse(BaseModel):
     match_id: int
     delivery_id: int
@@ -43,7 +58,9 @@ class MatchInboxItemResponse(BaseModel):
     source_url: str | None = None
     match_score: int = Field(..., ge=0, le=10)
     match_data: dict
+    resume_data: dict
     job_data: dict
+    user_feedback: MatchFeedbackResponse | None = None
     status: str
     sent_at: datetime | None = None
     read_at: datetime | None = None

@@ -1,0 +1,56 @@
+{
+  "manifest_version": "matching-evaluation-e3-collection.v1",
+  "benchmark_release": "matching-benchmark-jobs.e3.v1",
+  "status": "collection_ready",
+  "target_job_count": 100,
+  "source_registry_schema_version": 2,
+  "employer_coverage": {
+    "minimum_distinct_employers": 20,
+    "maximum_jobs_per_employer": 6,
+    "selection_rule": "Prefer current S&P 500 and/or Nasdaq-100 members in the source registry; retain Cloudflare as a pilot regression employer."
+  },
+  "role_family_targets": {
+    "software_backend": 12,
+    "software_infrastructure": 10,
+    "software_mobile": 8,
+    "ml_data": 10,
+    "cybersecurity_networking": 8,
+    "hardware_design": 12,
+    "embedded_firmware": 8,
+    "product_management": 10,
+    "technical_program": 8,
+    "engineering_management": 7,
+    "principal_architecture": 7
+  },
+  "level_targets": {
+    "entry_junior": 15,
+    "mid": 25,
+    "senior": 30,
+    "staff_principal": 20,
+    "management_leadership": 10
+  },
+  "ats_coverage": {
+    "minimum_distinct_families": 6,
+    "families_available": ["custom", "eightfold", "greenhouse", "lever", "phenom", "smartrecruiters", "successfactors", "workday"]
+  },
+  "description_quality_targets": {
+    "structured_high": 35,
+    "mixed_medium": 45,
+    "sparse_or_noisy": 20
+  },
+  "admission": {
+    "review_status": "accepted",
+    "official_employer_or_employer_controlled_ats_only": true,
+    "exact_detail_url_required": true,
+    "complete_job_description_required": true,
+    "duplicate_source_hashes_allowed": false
+  },
+  "profile_extraction": {
+    "process": "scripts/extract_new_job_profiles.py",
+    "prompt_version": "job-extract.v3",
+    "response_schema_version": "job-extract-response.v3",
+    "semantic_validator_version": "matching-semantic-validator.v3",
+    "persistence": "matching_job_profile_versions",
+    "idempotency": "canonical source and versioned Job Profile cache identity"
+  }
+}

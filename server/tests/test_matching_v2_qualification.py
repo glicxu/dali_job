@@ -411,6 +411,40 @@ class StubQualificationMatcher:
         )
 
 
+class RepairingQualificationMatcher(StubQualificationMatcher):
+    def __init__(self) -> None:
+        super().__init__()
+        self.repair_errors: tuple[dict[str, str], ...] = ()
+
+    def assess(self, qualification_input: QualificationInput) -> QualificationResult:
+        valid = super().assess(qualification_input)
+        first = valid.artifact.requirement_assessments[0].model_copy(update={
+            "status": "not_demonstrated",
+            "missing": ["Evidence of the requirement"],
+        })
+        return valid.__class__(
+            artifact=valid.artifact.model_copy(update={
+                "requirement_assessments": [first, *valid.artifact.requirement_assessments[1:]],
+            }),
+            model_id=valid.model_id,
+            provider_execution_reference=valid.provider_execution_reference,
+        )
+
+    def repair(
+        self,
+        qualification_input: QualificationInput,
+        errors: tuple[dict[str, str], ...],
+    ) -> QualificationResult:
+        self.repair_errors = errors
+        valid = StubQualificationMatcher.assess(self, qualification_input)
+        return valid.__class__(
+            artifact=valid.artifact,
+            model_id=valid.model_id,
+            provider_execution_reference="provider-qualification-repair-1",
+            retry_count=1,
+        )
+
+
 def test_qualification_api_creates_caches_and_reads_private_assessment() -> None:
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool, future=True
@@ -487,3 +521,46 @@ def test_qualification_api_creates_caches_and_reads_private_assessment() -> None
                 user_id=other_user.id,
             ),
         ) is None
+
+
+def test_qualification_api_repairs_one_invalid_complete_response() -> None:
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool, future=True
+    )
+    Base.metadata.create_all(bind=engine)
+    factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    with factory.begin() as db:
+        _, candidate, job = _foundation(db)
+        candidate_id = candidate.public_id
+        job_id = job.public_id
+
+    def override_db():
+        session = factory()
+        try:
+            yield session
+            session.commit()
+        finally:
+            session.close()
+
+    matcher = RepairingQualificationMatcher()
+    app = create_app()
+    app.state.runtime = replace(
+        app.state.runtime,
+        matching_v2=replace(app.state.runtime.matching_v2, shadow_enabled=True),
+    )
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_qualification_matcher] = lambda: matcher
+    response = TestClient(app).post("/api/v1/qualification-assessments", json={
+        "candidate_profile_id": candidate_id,
+        "candidate_career_selection_revision": 1,
+        "job_profile_id": job_id,
+    })
+
+    assert response.status_code == 200, response.text
+    assert matcher.calls == 2
+    assert matcher.repair_errors == ({
+        "code": "NOT_DEMONSTRATED_HAS_EVIDENCE",
+        "path": "$.requirement_assessments",
+        "message": "not_demonstrated must not cite candidate evidence",
+    },)
+    assert response.json()["input_quality"]["validation_retry_count"] == 1

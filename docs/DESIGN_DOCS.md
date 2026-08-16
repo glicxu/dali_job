@@ -17,6 +17,8 @@ DaliJob is designed as a long-term career operating system, not a job board and 
 - [3-step_matching_v2.md](3-step_matching_v2.md) - revised evidence-based matching architecture with separated model/code responsibilities, deterministic qualification and preference scoring, bounded trial execution, versioned artifacts, and migration guidance.
 - [THREE_STEP_MATCHING_IMPLEMENTATION_PLAN.md](THREE_STEP_MATCHING_IMPLEMENTATION_PLAN.md) - phased delivery plan for schemas, persistence, extraction, deterministic assessment and scoring, orchestration, guest and scheduled integration, clients, testing, and controlled rollout of the three-step matcher.
 - [MATCHING_EVALUATION_PLAN.md](MATCHING_EVALUATION_PLAN.md) - frozen benchmark and golden-set plan for evaluating Candidate Profiles, Job Profiles, and Qualification Assessments with an initial curated ten-job tier-1 company set and a later one-hundred-job expansion.
+- [MATCHING_QA_GATE.md](MATCHING_QA_GATE.md) - controlling definitions and gates for execution reliability, structural validity, independent human review, quality metrics, regressions, rollout, and residual failures.
+- [MATCHING_E1_E2_REPLAY_RESULTS.md](MATCHING_E1_E2_REPLAY_RESULTS.md) - frozen 30-pair replay results and the current qualification repair candidate decision.
 - [ASK_SCOUT_IMPLEMENTATION_PLAN.md](archive/ASK_SCOUT_IMPLEMENTATION_PLAN.md) - archived passive AI navigation assistant implementation plan.
 - [ASK_SCOUT_V2_IMPROVEMENT_PLAN.md](archive/ASK_SCOUT_V2_IMPROVEMENT_PLAN.md) - archived Ask Scout V2 improvement plan.
 - [JOB_SCRAPER_GENERALIZATION_PLAN.md](archive/JOB_SCRAPER_GENERALIZATION_PLAN.md) - archived job URL extraction plan.

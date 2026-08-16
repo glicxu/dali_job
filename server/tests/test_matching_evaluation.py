@@ -4,6 +4,7 @@ from dataclasses import replace
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
@@ -15,7 +16,9 @@ from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.accounts.models import User
 from app.modules.evaluation import repository as evaluation_repository
+from app.modules.evaluation.benchmark import build_admission_report
 from app.modules.evaluation.catalog import build_fixture_catalog
+from app.modules.evaluation.job_profile_batch import prepare_evaluation_job
 from app.modules.evaluation.models import EvaluationRun
 from app.modules.evaluation.router import _source_company, get_job_snapshot_fetcher
 from app.modules.matching_v2.extraction import JobExtractionResult as ProfileExtractionResult
@@ -45,6 +48,9 @@ def test_evaluation_job_sources_supply_employer_when_extractor_omits_it() -> Non
     assert _source_company("https://apply.careers.microsoft.com/careers/job/123") == "Microsoft"
     assert _source_company("https://nvidia.wd5.myworkdayjobs.com/job/role") == "NVIDIA"
     assert _source_company("https://job-boards.greenhouse.io/cloudflare/jobs/123") == "Cloudflare"
+    assert _source_company("https://intel.wd1.myworkdayjobs.com/External/job/role/123") == "Intel"
+    assert _source_company("https://jobs.lever.co/palantir/123") == "Palantir"
+    assert _source_company("https://job-boards.greenhouse.io/another-company/jobs/123") == ""
     assert _source_company("https://example.com/jobs/123") == ""
 
 
@@ -57,14 +63,114 @@ def test_company_job_source_registry_is_machine_readable_and_excludes_aggregator
         / "company_job_sources.json"
     )
     registry = json.loads(registry_path.read_text(encoding="utf-8"))
-    assert registry["schema_version"] == 1
+    assert registry["schema_version"] == 2
     assert registry["policy"]["aggregators_allowed"] is False
-    assert len(registry["companies"]) >= 6
+    assert {item["index_id"] for item in registry["index_sources"]} == {
+        "sp_500", "nasdaq_100",
+    }
+    assert len(registry["companies"]) >= 20
+    assert len({item["company_id"] for item in registry["companies"]}) == len(
+        registry["companies"]
+    )
     assert all(item["discovery_urls"] for item in registry["companies"])
+    assert all(item["expected_detail_hosts"] for item in registry["companies"])
+    assert all(item["ats_family"] for item in registry["companies"])
+    assert sum(item["e3_enabled"] is True for item in registry["companies"]) >= 20
+    assert {
+        "workday", "custom", "phenom", "eightfold", "greenhouse", "lever"
+    } <= {item["ats_family"] for item in registry["companies"]}
     serialized = json.dumps(registry).lower()
     assert "indeed.com" not in serialized
     assert "linkedin.com" not in serialized
     assert "glassdoor.com" not in serialized
+
+
+def test_e3_collection_manifest_has_balanced_one_hundred_job_targets() -> None:
+    manifest_path = (
+        Path(__file__).parents[1]
+        / "app"
+        / "modules"
+        / "evaluation"
+        / "e3_collection_manifest.v1.json"
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["benchmark_release"] == "matching-benchmark-jobs.e3.v1"
+    assert manifest["target_job_count"] == 100
+    assert sum(manifest["role_family_targets"].values()) == 100
+    assert sum(manifest["level_targets"].values()) == 100
+    assert sum(manifest["description_quality_targets"].values()) == 100
+    assert manifest["employer_coverage"]["minimum_distinct_employers"] >= 20
+    assert manifest["employer_coverage"]["maximum_jobs_per_employer"] <= 6
+    assert manifest["ats_coverage"]["minimum_distinct_families"] >= 6
+    assert manifest["admission"]["official_employer_or_employer_controlled_ats_only"] is True
+
+
+def test_e3_job_profile_batch_prepares_only_accepted_unchanged_snapshots() -> None:
+    raw_text = "Requirements\n- Five years building Python services.\nResponsibilities\n- Ship APIs."
+    snapshot = SimpleNamespace(
+        review_status="accepted",
+        jobs_cache_id=17,
+        raw_description_text=raw_text,
+    )
+    cached_job = SimpleNamespace(deleted_at=None, raw_description_text=raw_text)
+    db = Mock()
+    db.get.return_value = cached_job
+
+    prepared = prepare_evaluation_job(db, snapshot)
+    assert prepared.canonical_text == raw_text
+    assert len(prepared.spans) >= 2
+
+    snapshot.review_status = "draft"
+    try:
+        prepare_evaluation_job(db, snapshot)
+    except ValueError as exc:
+        assert "accepted" in str(exc)
+    else:
+        raise AssertionError("A draft snapshot must not enter Job Profile extraction.")
+
+
+def test_e3_admission_report_enforces_manifest_slices() -> None:
+    evaluation_dir = Path(__file__).parents[1] / "app" / "modules" / "evaluation"
+    manifest = json.loads(
+        (evaluation_dir / "e3_collection_manifest.v1.json").read_text(encoding="utf-8")
+    )
+    roles = [
+        code
+        for code, count in manifest["role_family_targets"].items()
+        for _ in range(count)
+    ]
+    levels = [
+        code for code, count in manifest["level_targets"].items() for _ in range(count)
+    ]
+    qualities = [
+        code
+        for code, count in manifest["description_quality_targets"].items()
+        for _ in range(count)
+    ]
+    ats_families = manifest["ats_coverage"]["families_available"]
+    snapshots = [
+        SimpleNamespace(
+            public_id=f"ejs_e3_{index:03d}",
+            benchmark_release=manifest["benchmark_release"],
+            review_status="accepted",
+            coverage_slot=roles[index],
+            company=f"Employer {index % 20:02d}",
+            capture_metadata={
+                "ats_family": ats_families[index % len(ats_families)],
+                "level_band": levels[index],
+                "description_quality": qualities[index],
+            },
+        )
+        for index in range(100)
+    ]
+    report = build_admission_report(
+        snapshots,
+        benchmark_release=manifest["benchmark_release"],
+    )
+    assert report["ready"] is True
+    assert report["accepted_count"] == 100
+    assert not report["missing_slots"]
+    assert not report["balance_violations"]
 
 
 def test_synthetic_candidate_fixture_release_has_required_coverage_and_no_contact_channels() -> None:
@@ -293,6 +399,12 @@ def test_admin_can_capture_and_inspect_a_repeatable_three_stage_run(caplog) -> N
     assert "hard_constraint_assessments" not in body["qualification"]["assessment"]
     assert any(target["stage"] == "candidate_profile" for target in body["annotation_targets"])
     assert any(target["stage"] == "job_profile" for target in body["annotation_targets"])
+    assert body["match_review"] == {
+        "state": "review_pending",
+        "independent_reviewer_count": 0,
+        "reviews": [],
+        "adjudicated_review": None,
+    }
 
     fetched = client.get(f"/api/v1/internal/evaluation/runs/{body['public_id']}")
     assert fetched.status_code == 200
@@ -317,6 +429,29 @@ def test_admin_can_capture_and_inspect_a_repeatable_three_stage_run(caplog) -> N
     )
     assert review.status_code == 200, review.text
     assert review.json()["public_id"].startswith("eva_")
+
+    match_review = client.post(
+        f"/api/v1/internal/evaluation/runs/{body['public_id']}/match-reviews",
+        json={
+            "review_kind": "independent",
+            "overall_score": 82,
+            "confidence": 0.75,
+            "rationale": "Strong direct experience with one material scope gap.",
+        },
+    )
+    assert match_review.status_code == 200, match_review.text
+    assert match_review.json()["public_id"].startswith("evm_")
+    assert match_review.json()["recommendation"] == "good_match"
+    premature_adjudication = client.post(
+        f"/api/v1/internal/evaluation/runs/{body['public_id']}/match-reviews",
+        json={
+            "review_kind": "adjudication",
+            "overall_score": 80,
+            "confidence": 1,
+            "rationale": "Golden score.",
+        },
+    )
+    assert premature_adjudication.status_code == 409
 
     metrics = client.get(f"/api/v1/internal/evaluation/runs/{body['public_id']}/metrics")
     assert metrics.status_code == 200
@@ -405,6 +540,32 @@ def test_admin_can_capture_and_inspect_a_repeatable_three_stage_run(caplog) -> N
             error_taxonomy_code="candidate.unsupported_fact",
             comment="The source does not support this fact.",
         )
+        evaluation_repository.create_match_review(
+            session,
+            run=persisted_run,
+            reviewer_user_id=second_reviewer.id,
+            review_kind="independent",
+            overall_score=76,
+            confidence=0.9,
+            rationale="Good match with meaningful missing evidence.",
+        )
+        adjudicator = User(
+            email="match-adjudicator@dalifin.local",
+            display_name="Match Adjudicator",
+            role="admin",
+            auth_provider="dalijob",
+        )
+        session.add(adjudicator)
+        session.flush()
+        evaluation_repository.create_match_review(
+            session,
+            run=persisted_run,
+            reviewer_user_id=adjudicator.id,
+            review_kind="adjudication",
+            overall_score=79,
+            confidence=1,
+            rationale="Adjudicated from both independent reviews.",
+        )
     queue = client.get("/api/v1/internal/evaluation/adjudication-queue")
     assert queue.status_code == 200
     assert queue.json()["items"][0]["status"] == "pending"
@@ -422,6 +583,19 @@ def test_admin_can_capture_and_inspect_a_repeatable_three_stage_run(caplog) -> N
     )
     assert adjudicated.status_code == 200
     assert client.get("/api/v1/internal/evaluation/adjudication-queue").json()["items"][0]["status"] == "resolved"
+    reviewed_run = client.get(f"/api/v1/internal/evaluation/runs/{body['public_id']}").json()
+    assert reviewed_run["match_review"]["state"] == "adjudicated"
+    assert reviewed_run["match_review"]["independent_reviewer_count"] == 2
+    assert reviewed_run["match_review"]["adjudicated_review"]["overall_score"] == 79
+    blind_run = client.get(
+        f"/api/v1/internal/evaluation/runs/{body['public_id']}?blind=true"
+    ).json()
+    assert len(blind_run["annotations"]) < len(reviewed_run["annotations"])
+    assert blind_run["match_review"]["independent_reviewer_count"] == 1
+    assert all(
+        item["reviewer_label"] != "second-reviewer@dalifin.local"
+        for item in blind_run["match_review"]["reviews"]
+    )
     assert "job@candidate.example" not in caplog.text
     assert "415-555-1212" not in caplog.text
     assert "TypeScript, JavaScript, or a comparable language" not in caplog.text

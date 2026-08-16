@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 from app.modules.auth.dependencies import AuthenticatedIdentity
 from app.modules.accounts.models import User
 from app.modules.automation.models import NotificationDelivery, NotificationPreference
-from app.modules.jobs.models import JobCache, JobResumeMatch, UserSavedJob
+from app.modules.jobs.models import JobCache, JobMatchFeedback, JobResumeMatch, UserSavedJob
+from app.modules.matching_v2.scoring import recommendation_for_score
 from app.modules.profiles.repository import ensure_account_for_identity
 
 
@@ -204,12 +205,54 @@ def mark_inbox_match_read(
     return get_inbox_match(db, identity, match_id)
 
 
+def put_match_feedback(
+    db: Session,
+    identity: AuthenticatedIdentity,
+    match_id: int,
+    *,
+    score: int,
+    rationale: str,
+) -> dict | None:
+    if get_inbox_match(db, identity, match_id) is None:
+        return None
+    user, workspace = ensure_account_for_identity(db, identity)
+    feedback = db.scalar(
+        select(JobMatchFeedback).where(
+            JobMatchFeedback.user_id == user.id,
+            JobMatchFeedback.workspace_id == workspace.id,
+            JobMatchFeedback.job_resume_match_id == match_id,
+        )
+    )
+    if feedback is None:
+        feedback = JobMatchFeedback(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            job_resume_match_id=match_id,
+            score=score,
+            rationale=rationale.strip(),
+        )
+        db.add(feedback)
+    else:
+        feedback.score = score
+        feedback.rationale = rationale.strip()
+        feedback.updated_at = datetime.now(timezone.utc)
+    db.flush()
+    db.refresh(feedback)
+    return _feedback_response(feedback)
+
+
 def _inbox_statement(user_id: int, workspace_id: int):
     return (
-        select(NotificationDelivery, JobResumeMatch, UserSavedJob, JobCache)
+        select(NotificationDelivery, JobResumeMatch, UserSavedJob, JobCache, JobMatchFeedback)
         .join(JobResumeMatch, JobResumeMatch.id == NotificationDelivery.job_resume_match_id)
         .join(UserSavedJob, UserSavedJob.id == JobResumeMatch.user_job_id)
         .outerjoin(JobCache, JobCache.id == UserSavedJob.jobs_cache_id)
+        .outerjoin(
+            JobMatchFeedback,
+            (JobMatchFeedback.job_resume_match_id == JobResumeMatch.id)
+            & (JobMatchFeedback.user_id == user_id)
+            & (JobMatchFeedback.workspace_id == workspace_id),
+        )
         .where(
             NotificationDelivery.user_id == user_id,
             NotificationDelivery.workspace_id == workspace_id,
@@ -227,8 +270,10 @@ def _inbox_response(
     match: JobResumeMatch,
     user_job: UserSavedJob,
     cache: JobCache | None,
+    stored_feedback: JobMatchFeedback | None,
 ) -> dict:
     job_data = match.job_data_snapshot or {}
+    feedback = _feedback_response(stored_feedback) if stored_feedback is not None else None
     return {
         "match_id": match.id,
         "delivery_id": delivery.id,
@@ -239,9 +284,21 @@ def _inbox_response(
         "source_url": cache.source_url if cache else None,
         "match_score": match.match_score,
         "match_data": match.match_data,
+        "resume_data": match.resume_data_snapshot or {},
         "job_data": job_data,
+        "user_feedback": feedback,
         "status": delivery.status,
         "sent_at": delivery.sent_at,
         "read_at": delivery.read_at,
         "created_at": delivery.created_at,
+    }
+
+
+def _feedback_response(feedback: JobMatchFeedback) -> dict:
+    return {
+        "score": feedback.score,
+        "recommendation": recommendation_for_score(feedback.score),
+        "rationale": feedback.rationale,
+        "created_at": feedback.created_at,
+        "updated_at": feedback.updated_at,
     }

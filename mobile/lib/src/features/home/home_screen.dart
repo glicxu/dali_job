@@ -4,6 +4,7 @@ import '../../auth/session_controller.dart';
 import '../../config/app_environment.dart';
 import '../../matching/matching_repository.dart';
 import '../automation/automation_screen.dart';
+import '../evaluation/tester_evaluation_screen.dart';
 import '../matches/matches_screen.dart';
 import '../profile/candidate_profiles_screen.dart';
 
@@ -36,42 +37,56 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isTester = widget.session.user?.role == 'admin';
     final pages = [
       MatchesScreen(repository: _repository),
       AutomationScreen(repository: _repository),
       CandidateProfilesScreen(repository: _repository),
+      if (isTester) TesterEvaluationScreen(repository: _repository),
       _AccountPage(session: widget.session, environment: widget.environment),
     ];
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(['Matches', 'Automation', 'Profile', 'Account'][_index]),
+    final titles = [
+      'Matches',
+      'Automation',
+      'Profile',
+      if (isTester) 'Test lab',
+      'Account',
+    ];
+    final destinations = [
+      const NavigationDestination(
+        icon: Icon(Icons.auto_awesome_outlined),
+        selectedIcon: Icon(Icons.auto_awesome),
+        label: 'Matches',
       ),
+      const NavigationDestination(
+        icon: Icon(Icons.schedule_outlined),
+        selectedIcon: Icon(Icons.schedule),
+        label: 'Automation',
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.badge_outlined),
+        selectedIcon: Icon(Icons.badge),
+        label: 'Profile',
+      ),
+      if (isTester)
+        const NavigationDestination(
+          icon: Icon(Icons.science_outlined),
+          selectedIcon: Icon(Icons.science),
+          label: 'Test lab',
+        ),
+      const NavigationDestination(
+        icon: Icon(Icons.person_outline),
+        selectedIcon: Icon(Icons.person),
+        label: 'Account',
+      ),
+    ];
+    return Scaffold(
+      appBar: AppBar(title: Text(titles[_index])),
       body: pages[_index],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (value) => setState(() => _index = value),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.auto_awesome_outlined),
-            selectedIcon: Icon(Icons.auto_awesome),
-            label: 'Matches',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.schedule_outlined),
-            selectedIcon: Icon(Icons.schedule),
-            label: 'Automation',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.badge_outlined),
-            selectedIcon: Icon(Icons.badge),
-            label: 'Profile',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'Account',
-          ),
-        ],
+        destinations: destinations,
       ),
     );
   }

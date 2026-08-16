@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { FileUp, FlaskConical, Play, RefreshCw, SearchCheck } from "lucide-react";
 import {
   addEvaluationAnnotation,
+  addEvaluationMatchReview,
   applyResumeProfileSuggestions,
   BenchmarkAdmissionReport,
   compareEvaluationRuns,
@@ -16,6 +17,7 @@ import {
   EvaluationEvidenceSpan,
   EvaluationFixtureCatalog,
   EvaluationJobSnapshot,
+  EvaluationMatchReviewSummary,
   EvaluationRequirementAssessment,
   EvaluationRunDetail,
   EvaluationRunSummary,
@@ -42,12 +44,21 @@ const COVERAGE_SLOTS = [
   ["software_infrastructure", "Infrastructure, cloud, or SRE"],
   ["software_mobile", "Mobile or client platform"],
   ["ml_data", "Machine learning or data platform"],
+  ["cybersecurity_networking", "Cybersecurity or networking"],
   ["hardware_design", "Silicon, electrical, or hardware design"],
   ["embedded_firmware", "Embedded systems or firmware"],
   ["product_management", "Product Manager"],
   ["technical_program", "Technical Program Manager"],
   ["engineering_management", "Engineering Manager"],
   ["principal_architecture", "Principal, architect, or technical leader"],
+] as const;
+const LEVEL_BANDS = [
+  ["entry_junior", "Entry or junior"], ["mid", "Mid-level"], ["senior", "Senior"],
+  ["staff_principal", "Staff or principal"], ["management_leadership", "Management or leadership"],
+] as const;
+const DESCRIPTION_QUALITY_BANDS = [
+  ["structured_high", "Structured and detailed"], ["mixed_medium", "Mixed or medium detail"],
+  ["sparse_or_noisy", "Sparse or noisy"],
 ] as const;
 const QUALIFICATION_STATUSES = [
   "met", "met_by_alternative", "partially_met", "not_demonstrated", "not_met", "needs_clarification",
@@ -58,6 +69,8 @@ type AnnotationPayload = Omit<
 >;
 
 export function MatchingEvaluationWorkbench() {
+  const [blindReview] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("review") === "blind");
+  const [requestedRunId] = useState(() => typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("run_id") ?? "" : "");
   const [resumes, setResumes] = useState<ResumeProfile[]>([]);
   const [snapshots, setSnapshots] = useState<EvaluationJobSnapshot[]>([]);
   const [runs, setRuns] = useState<EvaluationRunSummary[]>([]);
@@ -70,6 +83,8 @@ export function MatchingEvaluationWorkbench() {
   const [jobUrl, setJobUrl] = useState("");
   const [release, setRelease] = useState(DEFAULT_RELEASE);
   const [coverageSlot, setCoverageSlot] = useState("");
+  const [levelBand, setLevelBand] = useState("");
+  const [descriptionQuality, setDescriptionQuality] = useState("");
   const [fixtureLabel, setFixtureLabel] = useState("");
   const [pastedResume, setPastedResume] = useState("");
   const [result, setResult] = useState<EvaluationRunDetail | null>(null);
@@ -81,10 +96,10 @@ export function MatchingEvaluationWorkbench() {
   const [error, setError] = useState("");
   const selectedSnapshot = snapshots.find((snapshot) => snapshot.public_id === snapshotId) ?? null;
 
-  async function refresh() {
+  const refresh = useCallback(async (activeRelease: string) => {
     const [resumePayload, snapshotPayload, runPayload, metricsPayload, admissionPayload, queuePayload, catalogPayload] = await Promise.all([
-      listResumeProfiles(), listEvaluationJobSnapshots(), listEvaluationRuns(), getAggregateEvaluationMetrics(),
-      getBenchmarkAdmissionReport(), getEvaluationAdjudicationQueue(), getEvaluationFixtureCatalog(),
+      listResumeProfiles(), listEvaluationJobSnapshots(), listEvaluationRuns(), getAggregateEvaluationMetrics(activeRelease),
+      getBenchmarkAdmissionReport(activeRelease), getEvaluationAdjudicationQueue(), getEvaluationFixtureCatalog(),
     ]);
     setResumes(resumePayload.resume_profiles);
     setSnapshots(snapshotPayload.snapshots);
@@ -95,17 +110,18 @@ export function MatchingEvaluationWorkbench() {
     setFixtureCatalog(catalogPayload);
     setResumeId((current) => current || resumePayload.resume_profiles[0]?.id || 0);
     setSnapshotId((current) => current || snapshotPayload.snapshots[0]?.public_id || "");
-  }
+  }, []);
 
   useEffect(() => {
     getCurrentUser()
-      .then((user) => {
+      .then(async (user) => {
         if (user.role !== "admin") throw new Error("Admin access is required.");
-        return refresh();
+        await refresh(DEFAULT_RELEASE);
+        if (requestedRunId) setResult(await getEvaluationRun(requestedRunId, blindReview));
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Could not load evaluation data."))
       .finally(() => setLoading(false));
-  }, []);
+  }, [blindReview, refresh, requestedRunId]);
 
   async function captureJob(event: FormEvent) {
     event.preventDefault();
@@ -113,8 +129,12 @@ export function MatchingEvaluationWorkbench() {
     try {
       const captured = await importEvaluationJobSnapshot({
         source_url: jobUrl, benchmark_release: release, coverage_slot: coverageSlot,
+        ...(levelBand ? { level_band: levelBand as (typeof LEVEL_BANDS)[number][0] } : {}),
+        ...(descriptionQuality ? {
+          description_quality: descriptionQuality as (typeof DESCRIPTION_QUALITY_BANDS)[number][0],
+        } : {}),
       });
-      await refresh(); setSnapshotId(captured.public_id); setJobUrl("");
+      await refresh(release); setSnapshotId(captured.public_id); setJobUrl("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not capture the job posting.");
     } finally { setWorking(""); }
@@ -125,7 +145,7 @@ export function MatchingEvaluationWorkbench() {
     setWorking("resume"); setError("");
     try {
       const profile = await applyResumeProfileSuggestions(await importResumePdf(file));
-      await refresh(); setResumeId(profile.id);
+      await refresh(release); setResumeId(profile.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load the resume.");
     } finally { setWorking(""); }
@@ -143,7 +163,7 @@ export function MatchingEvaluationWorkbench() {
           target_roles: [], notes: ["Internal matching evaluation fixture"],
         },
       });
-      await refresh(); setResumeId(profile.id); setPastedResume(""); setFixtureLabel("");
+      await refresh(release); setResumeId(profile.id); setPastedResume(""); setFixtureLabel("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load the pasted resume fixture.");
     } finally { setWorking(""); }
@@ -158,7 +178,7 @@ export function MatchingEvaluationWorkbench() {
         job_snapshot_id: snapshotId,
         candidate_fixture_release: fixtureCatalog?.candidate_fixture_release,
       }));
-      await refresh();
+      await refresh(release);
     } catch (err) {
       setError(err instanceof Error ? err.message : "The evaluation run failed.");
     } finally { setWorking(""); }
@@ -173,12 +193,29 @@ export function MatchingEvaluationWorkbench() {
 
   async function saveAnnotation(payload: AnnotationPayload) {
     if (!result) return;
+    const reviewPayload = blindReview
+      ? { ...payload, review_kind: "independent" as const, expected_value: null }
+      : payload;
     setWorking(`annotation:${payload.target_ref}`); setError("");
     try {
-      await addEvaluationAnnotation(result.public_id, payload);
-      setResult(await getEvaluationRun(result.public_id));
+      await addEvaluationAnnotation(result.public_id, reviewPayload);
+      setResult(await getEvaluationRun(result.public_id, blindReview));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save the annotation.");
+    } finally { setWorking(""); }
+  }
+
+  async function saveMatchReview(payload: { review_kind: "independent" | "adjudication"; overall_score: number; confidence: number; rationale: string }) {
+    if (!result) return;
+    const reviewPayload = blindReview
+      ? { ...payload, review_kind: "independent" as const }
+      : payload;
+    setWorking("match-review"); setError("");
+    try {
+      await addEvaluationMatchReview(result.public_id, reviewPayload);
+      setResult(await getEvaluationRun(result.public_id, blindReview));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save the human match review.");
     } finally { setWorking(""); }
   }
 
@@ -200,7 +237,7 @@ export function MatchingEvaluationWorkbench() {
           ? "Reviewed for official source, completeness, and assigned coverage slot."
           : "Rejected during benchmark admission review.",
       });
-      await refresh();
+      await refresh(release);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not review the snapshot.");
     } finally { setWorking(""); }
@@ -214,6 +251,25 @@ export function MatchingEvaluationWorkbench() {
   }
 
   if (loading) return <p>Loading evaluation workbench…</p>;
+  if (blindReview) {
+    const blindResult = result ? {
+      ...result,
+      annotations: [],
+      metrics: {
+        ...result.metrics,
+        annotation_count: 0,
+        adjudicated_count: 0,
+        positive_evidence_support_precision: null,
+        positive_evidence_support_counts: { supported: 0, reviewed: 0 },
+        qualification_confusion_matrix: {},
+      },
+    } : null;
+    return <div className="evaluation-workbench">
+      {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
+      <AlertBanner tone="info">Blind independent review: expected match categories, aggregate results, comparisons, prior reviews, and adjudication outcomes are hidden.</AlertBanner>
+      {blindResult ? <EvaluationResult detail={blindResult} selectedEvidence={selectedEvidence} annotatingTarget={working.startsWith("annotation:") ? working.slice(11) : ""} onSelectEvidence={setSelectedEvidence} onAnnotate={saveAnnotation} onMatchReview={saveMatchReview} matchReviewSaving={working === "match-review"} blindReview /> : <EmptyState icon={FlaskConical} title="Review run unavailable" description="Open a valid blind-review link containing a canonical run ID." />}
+    </div>;
+  }
   return <div className="evaluation-workbench">
     {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
     <section className="evaluation-setup-grid">
@@ -221,7 +277,11 @@ export function MatchingEvaluationWorkbench() {
         <SectionHeader title="1. Freeze a job posting" description="The server fetches and stores an immutable JD snapshot for repeatable tests." />
         <label>Job URL<input type="url" required value={jobUrl} onChange={(event) => setJobUrl(event.target.value)} placeholder="https://company.com/jobs/123" /></label>
         <label>Benchmark release<input required value={release} onChange={(event) => setRelease(event.target.value)} /></label>
-        <label>Coverage slot<select required value={coverageSlot} onChange={(event) => setCoverageSlot(event.target.value)}><option value="">Select a pilot slot</option>{COVERAGE_SLOTS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
+        <label>Coverage slot<select required value={coverageSlot} onChange={(event) => setCoverageSlot(event.target.value)}><option value="">Select a role family</option>{COVERAGE_SLOTS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
+        {release.startsWith("matching-benchmark-jobs.e3") ? <>
+          <label>Level band<select required value={levelBand} onChange={(event) => setLevelBand(event.target.value)}><option value="">Select a level band</option>{LEVEL_BANDS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
+          <label>Description quality<select required value={descriptionQuality} onChange={(event) => setDescriptionQuality(event.target.value)}><option value="">Classify the frozen JD</option>{DESCRIPTION_QUALITY_BANDS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
+        </> : null}
         <Button type="submit" icon={SearchCheck} loading={working === "capture"}>Fetch and freeze</Button>
       </form>
       <section className="profile-card">
@@ -256,7 +316,7 @@ export function MatchingEvaluationWorkbench() {
     {runs.length ? <RunHistory runs={runs} onOpen={openRun} /> : null}
     {result ? <>
       <RunComparison currentRunId={result.public_id} runs={runs} selectedRunId={comparisonRunId} comparison={comparison} loading={working === "comparison"} onSelect={setComparisonRunId} onCompare={runComparison} />
-      <EvaluationResult detail={result} selectedEvidence={selectedEvidence} annotatingTarget={working.startsWith("annotation:") ? working.slice(11) : ""} onSelectEvidence={setSelectedEvidence} onAnnotate={saveAnnotation} />
+      <EvaluationResult detail={result} selectedEvidence={selectedEvidence} annotatingTarget={working.startsWith("annotation:") ? working.slice(11) : ""} onSelectEvidence={setSelectedEvidence} onAnnotate={saveAnnotation} onMatchReview={saveMatchReview} matchReviewSaving={working === "match-review"} />
     </> : <EmptyState icon={FlaskConical} title="No evaluation selected" description="Choose a resume and frozen job, then run the three-stage pipeline." />}
   </div>;
 }
@@ -322,11 +382,11 @@ function FixtureLibrary({ catalog, resumes, snapshots, resumeId, snapshotId, onS
 }
 
 function SnapshotReview({ snapshot, loading, onReview }: { snapshot: EvaluationJobSnapshot; loading: boolean; onReview: (status: "accepted" | "rejected") => Promise<void> }) {
-  return <section className="profile-card"><SectionHeader title="Snapshot admission" description={`${snapshot.company || "Unknown company"} — ${snapshot.title || snapshot.coverage_slot}`} /><p><strong>Status:</strong> {snapshot.review_status} · <strong>Source confidence:</strong> {String(snapshot.capture_metadata.confidence ?? "unknown")}</p><p>{snapshot.raw_description_text.slice(0, 600)}{snapshot.raw_description_text.length > 600 ? "…" : ""}</p>{snapshot.capture_metadata.warnings instanceof Array && snapshot.capture_metadata.warnings.length ? <AlertBanner tone="warning">Extraction warnings: {snapshot.capture_metadata.warnings.join(", ")}</AlertBanner> : null}<div className="button-row"><Button type="button" loading={loading} onClick={() => void onReview("accepted")}>Accept snapshot</Button><Button type="button" variant="danger" loading={loading} onClick={() => void onReview("rejected")}>Reject snapshot</Button></div></section>;
+  return <section className="profile-card"><SectionHeader title="Snapshot admission" description={`${snapshot.company || "Unknown company"} — ${snapshot.title || snapshot.coverage_slot}`} /><p><strong>Status:</strong> {snapshot.review_status} · <strong>Source confidence:</strong> {String(snapshot.capture_metadata.confidence ?? "unknown")}</p>{snapshot.benchmark_release.startsWith("matching-benchmark-jobs.e3") ? <p><strong>Level:</strong> {String(snapshot.capture_metadata.level_band).replaceAll("_", " ")} · <strong>JD quality:</strong> {String(snapshot.capture_metadata.description_quality).replaceAll("_", " ")} · <strong>ATS:</strong> {String(snapshot.capture_metadata.ats_family)}</p> : null}<p>{snapshot.raw_description_text.slice(0, 600)}{snapshot.raw_description_text.length > 600 ? "…" : ""}</p>{snapshot.capture_metadata.warnings instanceof Array && snapshot.capture_metadata.warnings.length ? <AlertBanner tone="warning">Extraction warnings: {snapshot.capture_metadata.warnings.join(", ")}</AlertBanner> : null}<div className="button-row"><Button type="button" loading={loading} onClick={() => void onReview("accepted")}>Accept snapshot</Button><Button type="button" variant="danger" loading={loading} onClick={() => void onReview("rejected")}>Reject snapshot</Button></div></section>;
 }
 
 function AdmissionReport({ report }: { report: BenchmarkAdmissionReport }) {
-  return <section className="profile-card"><SectionHeader title="Pilot coverage admission" description={`${report.accepted_count} accepted · ${report.draft_count} awaiting review · ${report.rejected_count} rejected`} /><div className="evaluation-coverage-grid">{report.slots.map((slot) => <article key={slot.code} className={`coverage-${slot.status}`}><strong>{slot.label}</strong><span>{slot.status.replaceAll("_", " ")}</span></article>)}</div>{report.balance_violations.length ? <AlertBanner tone="warning">Balance checks: {report.balance_violations.join(", ")}</AlertBanner> : null}<small>Storage policy: {report.storage_policy}</small></section>;
+  return <section className="profile-card"><SectionHeader title={report.benchmark_release.startsWith("matching-benchmark-jobs.e3") ? "E3 coverage admission" : "Pilot coverage admission"} description={`${report.accepted_count} accepted · ${report.draft_count} awaiting review · ${report.rejected_count} rejected`} /><div className="evaluation-coverage-grid">{report.slots.map((slot) => <article key={slot.code} className={`coverage-${slot.status}`}><strong>{slot.label}</strong><span>{slot.status.replaceAll("_", " ")}</span></article>)}</div>{report.balance_violations.length ? <AlertBanner tone="warning">Balance checks: {report.balance_violations.join(", ")}</AlertBanner> : null}<small>Storage policy: {report.storage_policy}</small></section>;
 }
 
 function AdjudicationQueue({ queue, onOpen }: { queue: EvaluationDisagreementQueue; onOpen: (id: string) => Promise<void> }) {
@@ -346,7 +406,7 @@ function RunComparison({ currentRunId, runs, selectedRunId, comparison, loading,
   return <section className="profile-card evaluation-compare"><SectionHeader title="Compare frozen runs" description="Changed source snapshots are reported as incompatible rather than as model-only changes." /><div className="evaluation-compare-controls"><select value={selectedRunId} onChange={(event) => onSelect(event.target.value)}><option value="">Select another run</option>{runs.filter((run) => run.public_id !== currentRunId).map((run) => <option key={run.public_id} value={run.public_id}>{new Date(run.created_at).toLocaleString()} · {run.public_id}</option>)}</select><Button type="button" variant="secondary" loading={loading} disabled={!selectedRunId} onClick={() => void onCompare()}>Compare</Button></div>{comparison ? <div className={`evaluation-comparison-result ${comparison.comparable ? "compatible" : "incompatible"}`}><strong>{comparison.comparable ? "Comparable frozen inputs" : "Inputs are not comparable"}</strong>{comparison.incompatibilities.length ? <p>{comparison.incompatibilities.join(", ")}</p> : null}<p>{comparison.qualification_changes.length} qualification changes · Candidate Profile {comparison.candidate_profile_changed ? "changed" : "unchanged"} · Job Profile {comparison.job_profile_changed ? "changed" : "unchanged"}</p><details><summary>Version and artifact differences</summary><pre className="text-preview">{JSON.stringify(comparison, null, 2)}</pre></details></div> : null}</section>;
 }
 
-function EvaluationResult({ detail, selectedEvidence, annotatingTarget, onSelectEvidence, onAnnotate }: { detail: EvaluationRunDetail; selectedEvidence: string; annotatingTarget: string; onSelectEvidence: (value: string) => void; onAnnotate: (payload: AnnotationPayload) => Promise<void> }) {
+function EvaluationResult({ detail, selectedEvidence, annotatingTarget, onSelectEvidence, onAnnotate, onMatchReview, matchReviewSaving, blindReview = false }: { detail: EvaluationRunDetail; selectedEvidence: string; annotatingTarget: string; onSelectEvidence: (value: string) => void; onAnnotate: (payload: AnnotationPayload) => Promise<void>; onMatchReview: (payload: { review_kind: "independent" | "adjudication"; overall_score: number; confidence: number; rationale: string }) => Promise<void>; matchReviewSaving: boolean; blindReview?: boolean }) {
   const assessments = useMemo(() => [
     ...(detail.qualification.assessment.hard_constraint_assessments ?? []),
     ...detail.qualification.assessment.requirement_assessments,
@@ -357,6 +417,33 @@ function EvaluationResult({ detail, selectedEvidence, annotatingTarget, onSelect
     <div className="evaluation-source-grid"><SourcePanel title="Resume source" text={detail.resume_source.text} spans={detail.resume_source.spans} selectedEvidence={selectedEvidence} /><JsonPanel title="Candidate Profile" value={detail.candidate_profile} /><SourcePanel title="Job description snapshot" text={detail.job_source.text} spans={detail.job_source.spans} selectedEvidence={selectedEvidence} /><JsonPanel title="Job Profile" value={detail.job_profile} /></div>
     <div className="evaluation-source-grid"><ArtifactReviewPanel title="Candidate Profile fact review" stage="candidate_profile" targets={detail.annotation_targets.filter((target) => target.stage === "candidate_profile")} annotations={detail.annotations} annotatingTarget={annotatingTarget} onSelectEvidence={onSelectEvidence} onAnnotate={onAnnotate} /><ArtifactReviewPanel title="Job Profile fact review" stage="job_profile" targets={detail.annotation_targets.filter((target) => target.stage === "job_profile")} annotations={detail.annotations} annotatingTarget={annotatingTarget} onSelectEvidence={onSelectEvidence} onAnnotate={onAnnotate} /></div>
     <section className="profile-card"><SectionHeader title="Qualification Assessment" description={`${assessments.length} requirement decisions with evidence and reviewer labels.`} /><div className="evaluation-assessments">{assessments.map((item) => <AssessmentCard key={item.requirement_id} item={item} annotations={detail.annotations.filter((annotation) => annotation.stage === "qualification" && annotation.target_ref === item.requirement_id)} saving={annotatingTarget === item.requirement_id} onSelectEvidence={onSelectEvidence} onAnnotate={onAnnotate} />)}</div><details><summary>Run manifest and generation metadata</summary><pre className="text-preview">{JSON.stringify({ manifest: detail.manifest, input_quality: detail.qualification.input_quality, generation: detail.qualification.generation, run: detail.run_metadata }, null, 2)}</pre></details></section>
+    <HumanMatchReview summary={detail.match_review} saving={matchReviewSaving} independentOnly={blindReview} onSubmit={onMatchReview} />
+  </section>;
+}
+
+function HumanMatchReview({ summary, saving, independentOnly, onSubmit }: { summary: EvaluationMatchReviewSummary; saving: boolean; independentOnly: boolean; onSubmit: (payload: { review_kind: "independent" | "adjudication"; overall_score: number; confidence: number; rationale: string }) => Promise<void> }) {
+  const [reviewKind, setReviewKind] = useState<"independent" | "adjudication">("independent");
+  const [score, setScore] = useState(50);
+  const [confidence, setConfidence] = useState(0.75);
+  const [rationale, setRationale] = useState("");
+  const recommendation = score >= 85 ? "strong match" : score >= 70 ? "good match" : score >= 55 ? "consider" : score >= 40 ? "stretch" : "unlikely fit";
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    await onSubmit({ review_kind: independentOnly ? "independent" : reviewKind, overall_score: score, confidence, rationale });
+    setRationale("");
+  }
+  return <section className="profile-card evaluation-human-match-review">
+    <SectionHeader title="Human match review" description="Compare the Candidate Profile with the Job Profile and submit your overall 0–100 assessment. This score is human QA data, not the model score." />
+    {summary.reviews.length ? <div className="evaluation-review-list">{summary.reviews.map((review) => <p key={review.public_id}><strong>{review.review_kind}:</strong> {review.overall_score}/100 · {review.recommendation.replaceAll("_", " ")} · {review.reviewer_label}</p>)}</div> : <p>No visible human match score has been submitted for this reviewer.</p>}
+    <form className="evaluation-annotation-form" onSubmit={submit}>
+      {!independentOnly ? <label>Review type<select value={reviewKind} onChange={(event) => setReviewKind(event.target.value as typeof reviewKind)}><option value="independent">Independent review</option><option value="adjudication">Adjudicated golden score</option></select></label> : null}
+      <label>Overall match score<input type="number" min={0} max={100} required value={score} onChange={(event) => setScore(Math.max(0, Math.min(100, Number(event.target.value))))} /></label>
+      <p><strong>Score interpretation:</strong> {recommendation}</p>
+      <label>Confidence<select value={confidence} onChange={(event) => setConfidence(Number(event.target.value))}><option value={0.5}>Low (50%)</option><option value={0.75}>Medium (75%)</option><option value={1}>High (100%)</option></select></label>
+      <label className="evaluation-comment">Rationale<textarea required minLength={1} maxLength={4000} rows={4} value={rationale} onChange={(event) => setRationale(event.target.value)} placeholder="Explain the strongest evidence, material gaps, and why this score is appropriate." /></label>
+      <Button type="submit" loading={saving}>Submit human match score</Button>
+    </form>
+    <small>Review state: {summary.state.replaceAll("_", " ")} · {summary.independent_reviewer_count}/2 independent reviewers</small>
   </section>;
 }
 

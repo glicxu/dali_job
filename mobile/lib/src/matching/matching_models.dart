@@ -103,8 +103,11 @@ class MatchInboxItem {
     required this.matchScore,
     required this.status,
     required this.matchData,
+    required this.resumeData,
+    required this.jobData,
     required this.createdAt,
     this.sourceUrl,
+    this.userFeedback,
   });
 
   final int matchId;
@@ -113,8 +116,11 @@ class MatchInboxItem {
   final int matchScore;
   final String status;
   final Map<String, dynamic> matchData;
+  final Map<String, dynamic> resumeData;
+  final Map<String, dynamic> jobData;
   final DateTime createdAt;
   final String? sourceUrl;
+  final MatchFeedback? userFeedback;
 
   bool get isRead => status == 'read';
 
@@ -125,8 +131,41 @@ class MatchInboxItem {
     matchScore: json['match_score'] as int,
     status: json['status'] as String,
     matchData: Map<String, dynamic>.from(json['match_data'] as Map),
+    resumeData: Map<String, dynamic>.from(
+      json['resume_data'] as Map? ?? const {},
+    ),
+    jobData: Map<String, dynamic>.from(json['job_data'] as Map? ?? const {}),
     createdAt: DateTime.parse(json['created_at'] as String),
     sourceUrl: json['source_url'] as String?,
+    userFeedback: json['user_feedback'] is Map
+        ? MatchFeedback.fromJson(
+            Map<String, dynamic>.from(json['user_feedback'] as Map),
+          )
+        : null,
+  );
+}
+
+class MatchFeedback {
+  const MatchFeedback({
+    required this.score,
+    required this.recommendation,
+    required this.rationale,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  final int score;
+  final String recommendation;
+  final String rationale;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  factory MatchFeedback.fromJson(Map<String, dynamic> json) => MatchFeedback(
+    score: json['score'] as int,
+    recommendation: json['recommendation'] as String,
+    rationale: json['rationale'] as String? ?? '',
+    createdAt: DateTime.parse(json['created_at'] as String),
+    updatedAt: DateTime.parse(json['updated_at'] as String),
   );
 }
 

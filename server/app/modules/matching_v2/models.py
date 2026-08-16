@@ -311,9 +311,7 @@ class QualificationAssessment(Base):
     workspace_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True
     )
-    user_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True
-    )
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     guest_trial_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("guest_trials.id", ondelete="CASCADE"), nullable=True
     )
@@ -384,7 +382,11 @@ class RequirementAssessment(Base):
 
 class PreferenceRevision(Base):
     __tablename__ = "matching_preference_revisions"
-    __table_args__ = (UniqueConstraint("user_id", "revision", name="uq_matching_preference_revision"), Index("ix_matching_preference_owner", "workspace_id", "user_id"), Index("ix_matching_preference_public", "public_id", unique=True))
+    __table_args__ = (
+        UniqueConstraint("user_id", "revision", name="uq_matching_preference_revision"),
+        Index("ix_matching_preference_owner", "workspace_id", "user_id"),
+        Index("ix_matching_preference_public", "public_id", unique=True),
+    )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     public_id: Mapped[str] = mapped_column(String(64), nullable=False)
     workspace_id: Mapped[int] = mapped_column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
@@ -398,7 +400,11 @@ class PreferenceRevision(Base):
 
 class EligibilityRevision(Base):
     __tablename__ = "matching_eligibility_revisions"
-    __table_args__ = (UniqueConstraint("user_id", "revision", name="uq_matching_eligibility_revision"), Index("ix_matching_eligibility_owner", "workspace_id", "user_id"), Index("ix_matching_eligibility_public", "public_id", unique=True))
+    __table_args__ = (
+        UniqueConstraint("user_id", "revision", name="uq_matching_eligibility_revision"),
+        Index("ix_matching_eligibility_owner", "workspace_id", "user_id"),
+        Index("ix_matching_eligibility_public", "public_id", unique=True),
+    )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     public_id: Mapped[str] = mapped_column(String(64), nullable=False)
     workspace_id: Mapped[int] = mapped_column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
@@ -413,13 +419,21 @@ class EligibilityRevision(Base):
 
 class PreferenceAssessment(Base):
     __tablename__ = "matching_preference_assessments"
-    __table_args__ = (Index("ix_matching_preference_assessment_public", "public_id", unique=True), Index("ix_matching_preference_assessment_cache", "cache_key", unique=True), Index("ix_matching_preference_assessment_owner", "workspace_id", "user_id"))
+    __table_args__ = (
+        Index("ix_matching_preference_assessment_public", "public_id", unique=True),
+        Index("ix_matching_preference_assessment_cache", "cache_key", unique=True),
+        Index("ix_matching_preference_assessment_owner", "workspace_id", "user_id"),
+    )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     public_id: Mapped[str] = mapped_column(String(64), nullable=False)
     workspace_id: Mapped[int] = mapped_column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    job_profile_version_id: Mapped[int] = mapped_column(Integer, ForeignKey("matching_job_profile_versions.id", ondelete="CASCADE"), nullable=False)
-    preference_revision_id: Mapped[int] = mapped_column(Integer, ForeignKey("matching_preference_revisions.id", ondelete="CASCADE"), nullable=False)
+    job_profile_version_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("matching_job_profile_versions.id", ondelete="CASCADE"), nullable=False
+    )
+    preference_revision_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("matching_preference_revisions.id", ondelete="CASCADE"), nullable=False
+    )
     policy_version: Mapped[str] = mapped_column(String(100), nullable=False)
     policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
     artifact: Mapped[dict] = mapped_column(JSON, nullable=False)
@@ -429,13 +443,21 @@ class PreferenceAssessment(Base):
 
 class EligibilityAssessment(Base):
     __tablename__ = "matching_eligibility_assessments"
-    __table_args__ = (Index("ix_matching_eligibility_assessment_public", "public_id", unique=True), Index("ix_matching_eligibility_assessment_cache", "cache_key", unique=True), Index("ix_matching_eligibility_assessment_owner", "workspace_id", "user_id"))
+    __table_args__ = (
+        Index("ix_matching_eligibility_assessment_public", "public_id", unique=True),
+        Index("ix_matching_eligibility_assessment_cache", "cache_key", unique=True),
+        Index("ix_matching_eligibility_assessment_owner", "workspace_id", "user_id"),
+    )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     public_id: Mapped[str] = mapped_column(String(64), nullable=False)
     workspace_id: Mapped[int] = mapped_column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    job_profile_version_id: Mapped[int] = mapped_column(Integer, ForeignKey("matching_job_profile_versions.id", ondelete="CASCADE"), nullable=False)
-    eligibility_revision_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("matching_eligibility_revisions.id", ondelete="CASCADE"), nullable=True)
+    job_profile_version_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("matching_job_profile_versions.id", ondelete="CASCADE"), nullable=False
+    )
+    eligibility_revision_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("matching_eligibility_revisions.id", ondelete="CASCADE"), nullable=True
+    )
     policy_version: Mapped[str] = mapped_column(String(100), nullable=False)
     policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
     artifact: Mapped[dict] = mapped_column(JSON, nullable=False)
@@ -445,20 +467,115 @@ class EligibilityAssessment(Base):
 
 class MatchResult(Base):
     __tablename__ = "matching_match_results"
-    __table_args__ = (CheckConstraint("legacy_score IS NULL OR (legacy_score >= 0 AND legacy_score <= 10)", name="ck_matching_result_legacy_score"), Index("ix_matching_result_public", "public_id", unique=True), Index("ix_matching_result_cache", "cache_key", unique=True), Index("ix_matching_result_owner", "workspace_id", "user_id"), Index("ix_matching_result_qualification", "qualification_assessment_id"))
+    __table_args__ = (
+        CheckConstraint(
+            "legacy_score IS NULL OR (legacy_score >= 0 AND legacy_score <= 10)", name="ck_matching_result_legacy_score"
+        ),
+        Index("ix_matching_result_public", "public_id", unique=True),
+        Index("ix_matching_result_cache", "cache_key", unique=True),
+        Index("ix_matching_result_owner", "workspace_id", "user_id"),
+        Index("ix_matching_result_qualification", "qualification_assessment_id"),
+    )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     public_id: Mapped[str] = mapped_column(String(64), nullable=False)
     workspace_id: Mapped[int] = mapped_column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    qualification_assessment_id: Mapped[int] = mapped_column(Integer, ForeignKey("matching_qualification_assessments.id", ondelete="CASCADE"), nullable=False)
-    preference_assessment_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("matching_preference_assessments.id", ondelete="SET NULL"), nullable=True)
-    eligibility_assessment_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("matching_eligibility_assessments.id", ondelete="SET NULL"), nullable=True)
+    qualification_assessment_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("matching_qualification_assessments.id", ondelete="CASCADE"), nullable=False
+    )
+    preference_assessment_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("matching_preference_assessments.id", ondelete="SET NULL"), nullable=True
+    )
+    eligibility_assessment_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("matching_eligibility_assessments.id", ondelete="SET NULL"), nullable=True
+    )
     score_artifact: Mapped[dict] = mapped_column(JSON, nullable=False)
     explanation_artifact: Mapped[dict] = mapped_column(JSON, nullable=False)
     policy_versions: Mapped[dict] = mapped_column(JSON, nullable=False)
     legacy_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cache_key: Mapped[str] = mapped_column(String(71), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class MatchingOperation(Base):
+    __tablename__ = "matching_operations"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'running', 'completed', 'retryable_failure', 'terminal_failure', 'cancelled')",
+            name="ck_matching_operations_status",
+        ),
+        UniqueConstraint(
+            "workspace_id",
+            "user_id",
+            "idempotency_key",
+            name="uq_matching_operations_owner_idempotency",
+        ),
+        Index("ix_matching_operations_public", "public_id", unique=True),
+        Index("ix_matching_operations_owner", "workspace_id", "user_id"),
+        Index("ix_matching_operations_status", "status"),
+        Index("ix_matching_operations_lease", "lease_expires_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    public_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    workspace_id: Mapped[int] = mapped_column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(71), nullable=False)
+    request_payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    mode: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
+    current_stage: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    correlation_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    match_result_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("matching_match_results.id", ondelete="SET NULL"), nullable=True
+    )
+    lease_owner: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )
+
+
+class MatchingOperationStage(Base):
+    __tablename__ = "matching_operation_stages"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'running', 'completed', 'retryable_failure', 'terminal_failure')",
+            name="ck_matching_operation_stages_status",
+        ),
+        CheckConstraint("attempt_count >= 0", name="ck_matching_operation_stages_attempts"),
+        CheckConstraint("max_attempts >= 1", name="ck_matching_operation_stages_max_attempts"),
+        UniqueConstraint("matching_operation_id", "stage", name="uq_matching_operation_stage"),
+        Index("ix_matching_operation_stages_operation", "matching_operation_id"),
+        Index("ix_matching_operation_stages_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    matching_operation_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("matching_operations.id", ondelete="CASCADE"), nullable=False
+    )
+    stage: Mapped[str] = mapped_column(String(40), nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False)
+    input_artifact_ids: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    output_artifact_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    cache_hit: Mapped[bool | None] = mapped_column(nullable=True)
+    provider_usage: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    policy_versions: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class PromptPolicyRegistryRecord(Base):

@@ -158,3 +158,38 @@ class EvaluationAnnotation(Base):
     error_taxonomy_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
     comment: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class EvaluationMatchReview(Base):
+    __tablename__ = "matching_evaluation_match_reviews"
+    __table_args__ = (
+        CheckConstraint(
+            "review_kind IN ('independent', 'adjudication')",
+            name="ck_matching_eval_match_reviews_kind",
+        ),
+        CheckConstraint(
+            "overall_score >= 0 AND overall_score <= 100",
+            name="ck_matching_eval_match_reviews_score",
+        ),
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 1",
+            name="ck_matching_eval_match_reviews_confidence",
+        ),
+        Index("ix_matching_eval_match_reviews_public", "public_id", unique=True),
+        Index("ix_matching_eval_match_reviews_run", "evaluation_run_id"),
+        Index("ix_matching_eval_match_reviews_reviewer", "reviewer_user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    public_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    evaluation_run_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("matching_evaluation_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    reviewer_user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    review_kind: Mapped[str] = mapped_column(String(30), nullable=False)
+    overall_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)

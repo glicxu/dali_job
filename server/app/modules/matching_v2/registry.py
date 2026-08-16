@@ -10,9 +10,6 @@ from typing import Any, Mapping
 from app.modules.matching_v2.schemas import (
     CandidateExtractionResponse,
     JobExtractionProviderResponse,
-    LegacyJobExtractionProviderResponse,
-    LegacyJobExtractionResponse,
-    LegacyQualificationAssessmentResponse,
     QualificationAssessmentResponse,
     normalized_json_schema,
 )
@@ -165,12 +162,12 @@ class RoleTrackPolicyRegistry:
 
 DEFAULT_REGISTRY = ImmutableRegistry()
 
+# Register only active schemas. Historical schema rows remain immutable in the
+# database; rebuilding them from legacy models can change their hashes when a
+# shared nested model evolves.
 for model, version in (
     (CandidateExtractionResponse, "candidate-extract-response.v1"),
-    (LegacyJobExtractionResponse, "job-extract-response.v1"),
-    (LegacyJobExtractionProviderResponse, "job-extract-response.v2"),
     (JobExtractionProviderResponse, "job-extract-response.v3"),
-    (LegacyQualificationAssessmentResponse, "qualification-assessment-response.v1"),
     (QualificationAssessmentResponse, "qualification-assessment-response.v2"),
 ):
     DEFAULT_REGISTRY.register(
@@ -222,6 +219,16 @@ for version, content in (
         {
             "system": QUALIFICATION_SYSTEM_PROMPT,
             "user_template": "json-envelope.candidate_profile_evidence_job_requirements_alternatives.v2",
+        },
+    ),
+    (
+        "qualification-match.v3",
+        {
+            "system": QUALIFICATION_SYSTEM_PROMPT,
+            "user_template": (
+                "json-envelope.candidate_profile_evidence_job_requirements_alternatives."
+                "with-full-replacement-repair.v3"
+            ),
         },
     ),
 ):
@@ -598,7 +605,7 @@ def match_explicit_alternative_policy(explicit_alternatives: list[str]) -> str |
 DEFAULT_REGISTRY.register(
     RegistryEntry(
         artifact_type="deterministic_policy",
-        version="preference-policy.v1",
+        version="preference-policy.v2",
         content={
             "architecture_section": "10",
             "status_values": {"met": 1.0, "partially_met": 0.5, "conflict": 0.0},
@@ -616,7 +623,7 @@ DEFAULT_REGISTRY.register(
 DEFAULT_REGISTRY.register(
     RegistryEntry(
         artifact_type="deterministic_policy",
-        version="eligibility-policy.v1",
+        version="eligibility-policy.v2",
         content={
             "architecture_section": "8.2",
             "statuses": ["satisfied", "violated", "unknown", "not_applicable"],

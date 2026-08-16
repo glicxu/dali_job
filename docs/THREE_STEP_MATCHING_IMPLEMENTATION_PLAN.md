@@ -302,7 +302,44 @@ Dependencies: Phase 4 for end-to-end results; deterministic engines can be devel
 
 ### Phase 6: Orchestration, API, Retry, And Idempotency
 
+**Status:** In progress as of 2026-08-16. The first authenticated orchestration slice is implemented
+locally and remains behind the existing V2 internal/shadow access gate.
+
 **Outcome:** V2 runs through one durable operation contract for synchronous and asynchronous callers.
+
+Implementation checkpoint:
+
+- Candidate Profile extraction and Job Profile extraction remain independently callable workflows with
+  their own persisted immutable outputs. `POST /api/v1/matches` accepts those output IDs and never
+  silently invokes either extractor.
+- The deterministic pre-step immediately before detailed matching is named **Job Family Pre-Match**. It
+  consumes the Candidate Profile, revisioned Matching Intent, and Job Profile general family/track/level;
+  it selects the candidate career context and persists compatibility dimensions and reason codes.
+- Added owner-scoped `matching_operations` and `matching_operation_stages` persistence with correlation
+  IDs, request hashes, leases, heartbeats, per-stage attempts, stable errors, input/output artifact IDs,
+  cache markers, provider-usage fields, policy versions, and timestamps.
+- Added match creation/retrieval, operation polling, explicit retry, and rerun API contracts.
+- Matching retries resume from the first incomplete stage. Completed Candidate Profile and Job Profile
+  dependencies are reused, and a failed Qualification Assessment retry does not rerun either extraction.
+- Identical owner/idempotency/input tuples return the original operation. Reusing a key with different
+  artifact or revision inputs returns `409 IDEMPOTENCY_KEY_REUSED`.
+- Routine operation responses and logs contain artifact IDs and stable diagnostics, not resume text, job
+  text, prompts, contact data, or eligibility facts.
+
+Remaining Phase 6 work:
+
+- Add revisioned Matching Intent and immutable Job Family Pre-Match schemas, persistence, deterministic
+  policy, APIs, and orchestration stage. Include the intent revision and pre-match policy/artifact identity
+  in qualification cache keys and full-request idempotency.
+- Move independent Candidate Profile and Job Profile extraction onto the same durable asynchronous
+  operation/lease contract while retaining their direct cache-hit responses.
+- Enforce the 45-second immediate-response boundary and return a still-running operation as `202`
+  without waiting for a long provider call.
+- Add durable worker pickup for pending and expired-lease operations instead of relying only on the
+  initial in-process background task or explicit retry.
+- Add cancellation, periodic heartbeat renewal during long provider calls, backoff with jitter, and the
+  remaining latency/provider-usage metrics.
+- Generate and check in the updated OpenAPI artifact after the complete Phase 6 contract stabilizes.
 
 Work:
 

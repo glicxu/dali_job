@@ -412,19 +412,29 @@ def create_qualification_assessment(
     requirements = list(db.scalars(select(JobRequirement).where(
         JobRequirement.job_profile_version_id == job_profile.id
     )).all())
+    validation_arguments = {
+        "requirements": requirements,
+        "allowed_evidence_refs": qualification_input.allowed_evidence_refs,
+        "allowed_alternative_group_refs": qualification_input.allowed_alternative_group_refs,
+        "incomplete_evidence_input": bool(qualification_input.omitted_evidence_refs),
+    }
     try:
-        artifact = validate_qualification_assessment(
-            result.artifact,
-            requirements=requirements,
-            allowed_evidence_refs=qualification_input.allowed_evidence_refs,
-            allowed_alternative_group_refs=qualification_input.allowed_alternative_group_refs,
-            incomplete_evidence_input=bool(qualification_input.omitted_evidence_refs),
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail={"code": "INVALID_QUALIFICATION_RESPONSE", "message": str(exc)},
-        ) from exc
+        artifact = validate_qualification_assessment(result.artifact, **validation_arguments)
+    except ValueError as first_exc:
+        repair = getattr(matcher, "repair", None)
+        if repair is None:
+            raise HTTPException(
+                status_code=502,
+                detail={"code": "INVALID_QUALIFICATION_RESPONSE", "message": str(first_exc)},
+            ) from first_exc
+        result = repair(qualification_input, (_qualification_repair_error(first_exc),))
+        try:
+            artifact = validate_qualification_assessment(result.artifact, **validation_arguments)
+        except ValueError as repair_exc:
+            raise HTTPException(
+                status_code=502,
+                detail={"code": "INVALID_QUALIFICATION_RESPONSE", "message": str(repair_exc)},
+            ) from repair_exc
     warnings = []
     if qualification_input.omitted_evidence_refs:
         warnings.append(
@@ -443,6 +453,7 @@ def create_qualification_assessment(
             "warnings": warnings,
             "omitted_evidence_count": len(qualification_input.omitted_evidence_refs),
             "complete": not qualification_input.omitted_evidence_refs,
+            "validation_retry_count": result.retry_count,
         },
         model_id=result.model_id,
         provider_execution_reference=result.provider_execution_reference,
@@ -798,3 +809,36 @@ def _match_result_view(db: Session, row) -> MatchResultView:
     if qualification is None:
         raise HTTPException(status_code=409, detail="Qualification Assessment is unavailable.")
     return MatchResultView(match_id=row.public_id, qualification_assessment_id=qualification.public_id, preference_assessment_id=preference.public_id if preference else None, eligibility_assessment_id=eligibility.public_id if eligibility else None, scores=row.score_artifact, explanation=row.explanation_artifact, policy=row.policy_versions, legacy_score=row.legacy_score, created_at=row.created_at)
+
+
+def _qualification_repair_error(error: ValueError) -> dict[str, str]:
+    message = str(error)
+    known_errors = (
+        (
+            "met_by_alternative requires",
+            "ALTERNATIVE_NOT_ALLOWED",
+            "met_by_alternative requires a supplied alternative group or approved policy",
+        ),
+        (
+            "not_demonstrated cannot cite evidence",
+            "NOT_DEMONSTRATED_HAS_EVIDENCE",
+            "not_demonstrated must not cite candidate evidence",
+        ),
+        (
+            "Alternative references are valid only",
+            "ALTERNATIVE_REFERENCE_STATUS_MISMATCH",
+            "alternative references are valid only for met_by_alternative",
+        ),
+    )
+    for fragment, code, safe_message in known_errors:
+        if fragment in message:
+            return {
+                "code": code,
+                "path": "$.requirement_assessments",
+                "message": safe_message,
+            }
+    return {
+        "code": "QUALIFICATION_SEMANTIC_VALIDATION_FAILED",
+        "path": "$.requirement_assessments",
+        "message": "the complete qualification assessment must satisfy all semantic rules",
+    }

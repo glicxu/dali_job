@@ -1,101 +1,169 @@
 {
-  "schema_version": 1,
-  "last_verified": "2026-08-15",
+  "schema_version": 2,
+  "last_verified": "2026-08-16",
+  "index_sources": [
+    {"index_id": "sp_500", "name": "S&P 500", "official_url": "https://www.spglobal.com/spdji/en/indices/equity/sp-500/", "membership_as_of": "2026-08-16"},
+    {"index_id": "nasdaq_100", "name": "Nasdaq-100", "official_url": "https://www.nasdaq.com/products/global-indexes/nasdaq-100", "constituent_reference_url": "https://www.nasdaq.com/docs/2026/05/04/NDX.pdf", "membership_as_of": "2026-05-04"}
+  ],
   "policy": {
-    "purpose": "Internal matching-evaluation job discovery",
+    "purpose": "Internal matching-evaluation job discovery and future crawler allowlist",
     "detail_fetch_rule": "Discover from a listed employer source, then fetch and freeze an exact job detail URL.",
-    "aggregators_allowed": false
+    "aggregators_allowed": false,
+    "membership_rule": "Index membership is a cohort-selection aid, not a permanent company attribute; reverify it before each benchmark release.",
+    "crawl_rule": "A future crawler must honor robots.txt, site terms, rate limits, and the expected host/path allowlist."
   },
   "companies": [
     {
-      "company_id": "amazon",
-      "company_name": "Amazon",
-      "company_career_url": "https://amazon.jobs/",
-      "discovery_urls": [
-        "https://amazon.jobs/en/search",
-        "https://amazon.jobs/content/en-gb/teams/principal-engineering#jobs-search"
-      ],
-      "expected_detail_hosts": ["amazon.jobs", "www.amazon.jobs"],
-      "detail_url_template": "https://amazon.jobs/en/jobs/{job_id}",
-      "pilot_enabled": true
+      "company_id": "amazon", "company_name": "Amazon", "ticker": "AMZN", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["cloud", "commerce", "devices"], "company_career_url": "https://amazon.jobs/",
+      "discovery_urls": ["https://amazon.jobs/en/search"], "expected_detail_hosts": ["amazon.jobs", "www.amazon.jobs"],
+      "detail_path_prefixes": ["/en/jobs/"], "detail_url_template": "https://amazon.jobs/en/jobs/{job_id}",
+      "ats_family": "custom", "pilot_enabled": true, "e3_enabled": true
     },
     {
-      "company_id": "google",
-      "company_name": "Google",
-      "company_career_url": "https://www.google.com/about/careers/",
-      "discovery_urls": [
-        "https://www.google.com/about/careers/applications/jobs/results"
-      ],
-      "expected_detail_hosts": ["www.google.com"],
-      "detail_url_template": "https://www.google.com/about/careers/applications/jobs/results/{job_id}-{slug}",
-      "pilot_enabled": true
+      "company_id": "google", "company_name": "Google", "ticker": "GOOGL", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["software", "cloud", "ai", "hardware"], "company_career_url": "https://www.google.com/about/careers/",
+      "discovery_urls": ["https://www.google.com/about/careers/applications/jobs/results"], "expected_detail_hosts": ["www.google.com"],
+      "detail_path_prefixes": ["/about/careers/applications/jobs/results/"], "detail_url_template": "https://www.google.com/about/careers/applications/jobs/results/{job_id}-{slug}",
+      "ats_family": "custom", "pilot_enabled": true, "e3_enabled": true
     },
     {
-      "company_id": "microsoft",
-      "company_name": "Microsoft",
-      "company_career_url": "https://careers.microsoft.com/",
-      "discovery_urls": [
-        "https://apply.careers.microsoft.com/careers"
-      ],
-      "expected_detail_hosts": ["apply.careers.microsoft.com"],
-      "detail_url_template": "https://apply.careers.microsoft.com/careers/job/{job_id}",
-      "pilot_enabled": true
+      "company_id": "microsoft", "company_name": "Microsoft", "ticker": "MSFT", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["software", "cloud", "ai", "devices"], "company_career_url": "https://careers.microsoft.com/",
+      "discovery_urls": ["https://apply.careers.microsoft.com/careers"], "expected_detail_hosts": ["apply.careers.microsoft.com"],
+      "detail_path_prefixes": ["/careers/job/"], "detail_url_template": "https://apply.careers.microsoft.com/careers/job/{job_id}",
+      "ats_family": "eightfold", "pilot_enabled": true, "e3_enabled": true
     },
     {
-      "company_id": "apple",
-      "company_name": "Apple",
-      "company_career_url": "https://jobs.apple.com/",
-      "discovery_urls": [
-        "https://jobs.apple.com/en-us/search"
-      ],
-      "expected_detail_hosts": ["jobs.apple.com"],
-      "detail_url_template": "https://jobs.apple.com/en-us/details/{role_number}/{slug}",
-      "pilot_enabled": true
+      "company_id": "apple", "company_name": "Apple", "ticker": "AAPL", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["consumer_hardware", "software", "silicon"], "company_career_url": "https://jobs.apple.com/",
+      "discovery_urls": ["https://jobs.apple.com/en-us/search"], "expected_detail_hosts": ["jobs.apple.com"],
+      "detail_path_prefixes": ["/en-us/details/"], "detail_url_template": "https://jobs.apple.com/en-us/details/{role_number}/{slug}",
+      "ats_family": "custom", "pilot_enabled": true, "e3_enabled": true
     },
     {
-      "company_id": "nvidia",
-      "company_name": "NVIDIA",
-      "company_career_url": "https://www.nvidia.com/en-us/about-nvidia/careers/",
-      "discovery_urls": [
-        "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite"
-      ],
-      "expected_detail_hosts": ["nvidia.wd5.myworkdayjobs.com"],
-      "detail_url_template": "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/{slug}_{requisition_id}",
-      "pilot_enabled": true
+      "company_id": "nvidia", "company_name": "NVIDIA", "ticker": "NVDA", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["semiconductors", "ai", "systems"], "company_career_url": "https://www.nvidia.com/en-us/about-nvidia/careers/",
+      "discovery_urls": ["https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite"], "expected_detail_hosts": ["nvidia.wd5.myworkdayjobs.com"],
+      "detail_path_prefixes": ["/en-us/nvidiaexternalcareersite/job/", "/job/"], "detail_url_template": "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/{slug}_{requisition_id}",
+      "ats_family": "workday", "pilot_enabled": true, "e3_enabled": true
     },
     {
-      "company_id": "cloudflare",
-      "company_name": "Cloudflare",
-      "company_career_url": "https://www.cloudflare.com/careers/jobs/",
-      "discovery_urls": [
-        "https://job-boards.greenhouse.io/cloudflare"
-      ],
-      "expected_detail_hosts": ["job-boards.greenhouse.io"],
-      "detail_url_template": "https://job-boards.greenhouse.io/cloudflare/jobs/{job_id}",
-      "source_note": "Employer-controlled Cloudflare board hosted by its applicant-tracking provider.",
-      "pilot_enabled": true
+      "company_id": "cloudflare", "company_name": "Cloudflare", "ticker": "NET", "index_memberships": [],
+      "industry_focus": ["cloud", "security", "networking"], "company_career_url": "https://www.cloudflare.com/careers/jobs/",
+      "discovery_urls": ["https://job-boards.greenhouse.io/cloudflare"], "expected_detail_hosts": ["job-boards.greenhouse.io"],
+      "detail_path_prefixes": ["/cloudflare/jobs/"], "detail_url_template": "https://job-boards.greenhouse.io/cloudflare/jobs/{job_id}",
+      "ats_family": "greenhouse", "source_note": "Employer-controlled Cloudflare board hosted by its ATS.", "pilot_enabled": true, "e3_enabled": true
     },
     {
-      "company_id": "tesla",
-      "company_name": "Tesla",
-      "company_career_url": "https://www.tesla.com/careers",
-      "discovery_urls": [
-        "https://www.tesla.com/careers/search/"
-      ],
-      "expected_detail_hosts": ["www.tesla.com"],
-      "detail_url_template": "https://www.tesla.com/careers/search/job/{slug}-{job_id}",
-      "pilot_enabled": false
+      "company_id": "tesla", "company_name": "Tesla", "ticker": "TSLA", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["automotive", "energy", "ai", "hardware"], "company_career_url": "https://www.tesla.com/careers",
+      "discovery_urls": ["https://www.tesla.com/careers/search/"], "expected_detail_hosts": ["www.tesla.com"],
+      "detail_path_prefixes": ["/careers/search/job/"], "detail_url_template": "https://www.tesla.com/careers/search/job/{slug}-{job_id}",
+      "ats_family": "custom", "pilot_enabled": false, "e3_enabled": true
     },
     {
-      "company_id": "meta",
-      "company_name": "Meta",
-      "company_career_url": "https://www.metacareers.com/",
-      "discovery_urls": [
-        "https://www.metacareers.com/jobs/"
-      ],
-      "expected_detail_hosts": ["www.metacareers.com"],
-      "detail_url_template": "https://www.metacareers.com/jobs/{job_id}/",
-      "pilot_enabled": false
+      "company_id": "meta", "company_name": "Meta", "ticker": "META", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["software", "ai", "consumer_hardware"], "company_career_url": "https://www.metacareers.com/",
+      "discovery_urls": ["https://www.metacareers.com/jobs/"], "expected_detail_hosts": ["www.metacareers.com"],
+      "detail_path_prefixes": ["/jobs/"], "detail_url_template": "https://www.metacareers.com/jobs/{job_id}/",
+      "ats_family": "custom", "pilot_enabled": false, "e3_enabled": true
+    },
+    {
+      "company_id": "broadcom", "company_name": "Broadcom", "ticker": "AVGO", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["semiconductors", "infrastructure_software"], "company_career_url": "https://www.broadcom.com/company/careers",
+      "discovery_urls": ["https://broadcom.wd1.myworkdayjobs.com/External_Career"], "expected_detail_hosts": ["broadcom.wd1.myworkdayjobs.com"],
+      "detail_path_prefixes": ["/external_career/job/"], "ats_family": "workday", "pilot_enabled": false, "e3_enabled": true
+    },
+    {
+      "company_id": "amd", "company_name": "AMD", "ticker": "AMD", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["semiconductors", "software", "ai"], "company_career_url": "https://careers.amd.com/careers-home",
+      "discovery_urls": ["https://careers.amd.com/careers-home/jobs"], "expected_detail_hosts": ["careers.amd.com"],
+      "detail_path_prefixes": ["/careers-home/jobs/"], "ats_family": "phenom", "pilot_enabled": false, "e3_enabled": true
+    },
+    {
+      "company_id": "micron", "company_name": "Micron", "ticker": "MU", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["memory", "semiconductors", "manufacturing"], "company_career_url": "https://careers.micron.com/careers",
+      "discovery_urls": ["https://careers.micron.com/careers/search-jobs"], "expected_detail_hosts": ["careers.micron.com"],
+      "detail_path_prefixes": ["/careers/job/", "/careers/search-jobs/"], "ats_family": "phenom", "pilot_enabled": false, "e3_enabled": true
+    },
+    {
+      "company_id": "intel", "company_name": "Intel", "ticker": "INTC", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["semiconductors", "software", "manufacturing"], "company_career_url": "https://jobs.intel.com/",
+      "discovery_urls": ["https://intel.wd1.myworkdayjobs.com/External"], "expected_detail_hosts": ["intel.wd1.myworkdayjobs.com"],
+      "detail_path_prefixes": ["/external/job/"], "ats_family": "workday", "pilot_enabled": false, "e3_enabled": true
+    },
+    {
+      "company_id": "cisco", "company_name": "Cisco", "ticker": "CSCO", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["networking", "security", "software"], "company_career_url": "https://careers.cisco.com/global/en",
+      "discovery_urls": ["https://careers.cisco.com/global/en/search-results"], "expected_detail_hosts": ["careers.cisco.com", "jobs.cisco.com"],
+      "detail_path_prefixes": ["/global/en/job/", "/job/"], "ats_family": "phenom", "pilot_enabled": false, "e3_enabled": true
+    },
+    {
+      "company_id": "qualcomm", "company_name": "Qualcomm", "ticker": "QCOM", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["wireless", "semiconductors", "software"], "company_career_url": "https://careers.qualcomm.com/careers",
+      "discovery_urls": ["https://careers.qualcomm.com/careers/search"], "expected_detail_hosts": ["careers.qualcomm.com"],
+      "detail_path_prefixes": ["/careers/job/"], "ats_family": "eightfold", "pilot_enabled": false, "e3_enabled": true
+    },
+    {
+      "company_id": "applied_materials", "company_name": "Applied Materials", "ticker": "AMAT", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["semiconductor_equipment", "manufacturing", "hardware"], "company_career_url": "https://careers.appliedmaterials.com/",
+      "discovery_urls": ["https://amat.wd1.myworkdayjobs.com/External"], "expected_detail_hosts": ["amat.wd1.myworkdayjobs.com"],
+      "detail_path_prefixes": ["/external/job/"], "ats_family": "workday", "pilot_enabled": false, "e3_enabled": true
+    },
+    {
+      "company_id": "lam_research", "company_name": "Lam Research", "ticker": "LRCX", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["semiconductor_equipment", "manufacturing", "hardware"], "company_career_url": "https://opportunities.lamresearch.com/",
+      "discovery_urls": ["https://opportunities.lamresearch.com/search/"], "expected_detail_hosts": ["opportunities.lamresearch.com"],
+      "detail_path_prefixes": ["/job/"], "ats_family": "successfactors", "pilot_enabled": false, "e3_enabled": true
+    },
+    {
+      "company_id": "kla", "company_name": "KLA", "ticker": "KLAC", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["semiconductor_equipment", "optics", "software"], "company_career_url": "https://www.kla.com/careers",
+      "discovery_urls": ["https://kla.wd1.myworkdayjobs.com/Search"], "expected_detail_hosts": ["kla.wd1.myworkdayjobs.com"],
+      "detail_path_prefixes": ["/search/job/"], "ats_family": "workday", "pilot_enabled": false, "e3_enabled": true
+    },
+    {
+      "company_id": "texas_instruments", "company_name": "Texas Instruments", "ticker": "TXN", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["analog_semiconductors", "embedded", "manufacturing"], "company_career_url": "https://careers.ti.com/",
+      "discovery_urls": ["https://careers.ti.com/search-jobs"], "expected_detail_hosts": ["careers.ti.com"],
+      "detail_path_prefixes": ["/job/", "/search-jobs/"], "ats_family": "phenom", "pilot_enabled": false, "e3_enabled": true
+    },
+    {
+      "company_id": "palo_alto_networks", "company_name": "Palo Alto Networks", "ticker": "PANW", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["cybersecurity", "cloud", "ai"], "company_career_url": "https://jobs.paloaltonetworks.com/en/",
+      "discovery_urls": ["https://jobs.paloaltonetworks.com/en/jobs/"], "expected_detail_hosts": ["jobs.paloaltonetworks.com"],
+      "detail_path_prefixes": ["/en/job/", "/en/jobs/"], "ats_family": "custom", "pilot_enabled": false, "e3_enabled": true
+    },
+    {
+      "company_id": "crowdstrike", "company_name": "CrowdStrike", "ticker": "CRWD", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["cybersecurity", "cloud", "ai"], "company_career_url": "https://www.crowdstrike.com/en-us/careers/",
+      "discovery_urls": ["https://crowdstrike.wd5.myworkdayjobs.com/crowdstrikecareers"], "expected_detail_hosts": ["crowdstrike.wd5.myworkdayjobs.com"],
+      "detail_path_prefixes": ["/crowdstrikecareers/job/"], "ats_family": "workday", "pilot_enabled": false, "e3_enabled": true
+    },
+    {
+      "company_id": "palantir", "company_name": "Palantir", "ticker": "PLTR", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["data_platforms", "ai", "defense"], "company_career_url": "https://www.palantir.com/careers/",
+      "discovery_urls": ["https://jobs.lever.co/palantir"], "expected_detail_hosts": ["jobs.lever.co"],
+      "detail_path_prefixes": ["/palantir/"], "ats_family": "lever", "source_note": "Employer-controlled Palantir board hosted by its ATS.", "pilot_enabled": false, "e3_enabled": true
+    },
+    {
+      "company_id": "workday", "company_name": "Workday", "ticker": "WDAY", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["enterprise_software", "cloud", "ai"], "company_career_url": "https://www.workday.com/en-us/company/careers/overview.html",
+      "discovery_urls": ["https://workday.wd5.myworkdayjobs.com/Workday"], "expected_detail_hosts": ["workday.wd5.myworkdayjobs.com"],
+      "detail_path_prefixes": ["/workday/job/"], "ats_family": "workday", "pilot_enabled": false, "e3_enabled": true
+    },
+    {
+      "company_id": "intuit", "company_name": "Intuit", "ticker": "INTU", "index_memberships": ["sp_500", "nasdaq_100"],
+      "industry_focus": ["fintech", "software", "ai"], "company_career_url": "https://jobs.intuit.com/",
+      "discovery_urls": ["https://jobs.intuit.com/search-jobs"], "expected_detail_hosts": ["jobs.intuit.com"],
+      "detail_path_prefixes": ["/job/", "/search-jobs/"], "ats_family": "phenom", "pilot_enabled": false, "e3_enabled": true
+    },
+    {
+      "company_id": "servicenow", "company_name": "ServiceNow", "ticker": "NOW", "index_memberships": ["sp_500"],
+      "industry_focus": ["enterprise_software", "cloud", "ai"], "company_career_url": "https://careers.servicenow.com/",
+      "discovery_urls": ["https://careers.servicenow.com/jobs/"], "expected_detail_hosts": ["careers.servicenow.com"],
+      "detail_path_prefixes": ["/jobs/"], "ats_family": "smartrecruiters", "pilot_enabled": false, "e3_enabled": true
     }
   ]
 }

@@ -103,7 +103,7 @@ def _job_facts(job: dict) -> JobPreferenceFacts:
 
 def _preference_assessment(db: Session, *, owner: ArtifactOwner, job: JobProfileVersion, revision: PreferenceRevision) -> PreferenceAssessment:
     workspace_id, user_id = _authenticated(owner)
-    policy = DEFAULT_REGISTRY.get("deterministic_policy", "preference-policy.v1")
+    policy = DEFAULT_REGISTRY.get("deterministic_policy", "preference-policy.v2")
     selection_policy = DEFAULT_REGISTRY.get("career_selection_policy", "career-selection-policy.v2")
     taxonomy = DEFAULT_REGISTRY.get("taxonomy", "matching-taxonomy.v2")
     alternative_policy = DEFAULT_REGISTRY.get("alternative_policy", "general-purpose-programming-language.v2")
@@ -137,7 +137,7 @@ def _preference_assessment(db: Session, *, owner: ArtifactOwner, job: JobProfile
 
 def _eligibility_assessment(db: Session, *, owner: ArtifactOwner, job: JobProfileVersion, revision: EligibilityRevision | None) -> EligibilityAssessment:
     workspace_id, user_id = _authenticated(owner)
-    policy = DEFAULT_REGISTRY.get("deterministic_policy", "eligibility-policy.v1")
+    policy = DEFAULT_REGISTRY.get("deterministic_policy", "eligibility-policy.v2")
     cache_key = content_sha256({"owner": owner.cache_value(), "job": job.cache_key, "revision": revision.content_hash if revision else "not_configured", "policy": policy.content_hash})
     existing = db.scalar(select(EligibilityAssessment).where(EligibilityAssessment.cache_key == cache_key))
     if existing is not None:
@@ -171,7 +171,7 @@ def create_or_get_match_result(db: Session, *, owner: ArtifactOwner, qualificati
     career = job.artifact["career_context"]
     score = score_match(role_family=career["primary_role_family"], track=career["track"], target_level=career["target_level"], level_confidence=career["confidence"], qualification_items=qualification_items, preference_items=preference_items, gates=gates)
     explanation = render_match_explanation(qualification_items=qa.requirement_assessments, requirement_statements={item.requirement_id: item.statement for item in requirements}, preference_items=preference_items, gates=score.gates, score=score)
-    policies = {"qualification": qualification.matching_policy_version, "preference": "preference-policy.v1", "eligibility": "eligibility-policy.v1", "role_track": score.role_track_policy_version, "scoring": score.scoring_policy_version, "explanation": explanation.renderer_version}
+    policies = {"qualification": qualification.matching_policy_version, "preference": "preference-policy.v2", "eligibility": "eligibility-policy.v2", "role_track": score.role_track_policy_version, "scoring": score.scoring_policy_version, "explanation": explanation.renderer_version}
     cache_key = content_sha256({"qualification": qualification.cache_key, "preference": pref_assessment.cache_key if pref_assessment else "not_configured", "eligibility": elig_assessment.cache_key, "policies": policies})
     existing = db.scalar(select(MatchResult).where(MatchResult.cache_key == cache_key))
     if existing is not None:

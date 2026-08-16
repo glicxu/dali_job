@@ -1785,10 +1785,12 @@ export async function downloadDocumentFile(documentId: number, fileName: string)
   await downloadTicketFile(ticket, fileName);
 }
 
+/** @deprecated Use cached Job Profile extraction followed by the V2 match API. */
 export async function compareResumeToJob(payload: ResumeJobMatchRequest): Promise<ResumeJobMatchResponse> {
   return runManagedOperation<ResumeJobMatchResponse>("resume_job_match", "/operations/resume-job-match", payload);
 }
 
+/** @deprecated Use cached Job Profile extraction followed by the V2 match API. */
 export async function compareResumeToSavedJobs(
   payload: BulkSavedJobMatchRequest,
 ): Promise<BulkSavedJobMatchResponse> {
@@ -1836,13 +1838,12 @@ export function discoverJobList(listUrl: string, maxResults = 25): Promise<JobLi
 
 export function importJobList(
   selectedUrls: string[],
-  options?: { listUrl?: string; resumeProfileId?: number; runMatching?: boolean },
+  options?: { listUrl?: string },
 ): Promise<JobListImportResponse> {
   return runManagedOperation<JobListImportResponse>("job_list_import", "/operations/job-list-import", {
       list_url: options?.listUrl || undefined,
       selected_urls: selectedUrls,
-      resume_profile_id: options?.resumeProfileId || undefined,
-      run_matching: Boolean(options?.runMatching),
+      run_matching: false,
   });
 }
 
@@ -1913,12 +1914,10 @@ export function saveQuickFindJobs(operationId: number, jobsCacheIds: number[]): 
 
 export function importIndeedSearchResults(
   selectedResults: IndeedJobSearchResult[],
-  options?: { resumeProfileId?: number; runMatching?: boolean },
 ): Promise<JobListImportResponse> {
   return runManagedOperation<JobListImportResponse>("provider_job_import", "/operations/provider-job-import", {
       selected_results: selectedResults,
-      resume_profile_id: options?.resumeProfileId || undefined,
-      run_matching: Boolean(options?.runMatching),
+      run_matching: false,
   });
 }
 

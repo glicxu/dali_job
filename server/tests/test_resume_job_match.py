@@ -225,6 +225,8 @@ def test_resume_job_match_returns_score_and_skills() -> None:
     )
 
     assert response.status_code == 200
+    assert response.headers["deprecation"] == "true"
+    assert "/api/v1/matches" in response.headers["link"]
     payload = response.json()
     assert payload["match_score"] == 7
     assert payload["score_scale"] == "0-10"

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { BriefcaseBusiness, Check, ListPlus, Plus, SearchCheck, X } from "lucide-react";
 import {
   discoverJobList,
@@ -9,8 +9,6 @@ import {
   JobListCandidate,
   JobListDiscoverResponse,
   JobListImportResponse,
-  listResumeProfiles,
-  ResumeProfile,
 } from "../lib/api";
 import {
   AlertBanner,
@@ -35,9 +33,6 @@ function AuthenticatedJobListImportManager() {
   const [listUrl, setListUrl] = useState("");
   const [result, setResult] = useState<JobListDiscoverResponse | null>(null);
   const [selectedUrls, setSelectedUrls] = useState<Set<string>>(new Set());
-  const [resumeProfiles, setResumeProfiles] = useState<ResumeProfile[]>([]);
-  const [runMatching, setRunMatching] = useState(false);
-  const [resumeProfileId, setResumeProfileId] = useState("");
   const [importResult, setImportResult] = useState<JobListImportResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -47,25 +42,11 @@ function AuthenticatedJobListImportManager() {
 
   const candidates = result?.candidates ?? [];
   const selectedCount = selectedUrls.size;
-  const canImport = selectedCount > 0 && (!runMatching || Boolean(resumeProfileId));
-
-  const sortedResumeProfiles = useMemo(
-    () =>
-      [...resumeProfiles].sort((left, right) => {
-        if (left.is_default !== right.is_default) return left.is_default ? -1 : 1;
-        return left.title.localeCompare(right.title);
-      }),
-    [resumeProfiles],
-  );
+  const canImport = selectedCount > 0;
 
   useEffect(() => {
     const value = new URLSearchParams(window.location.search).get("list_url")?.trim();
     if (value && /^https?:\/\//i.test(value)) setListUrl(value);
-    listResumeProfiles()
-      .then((payload) => setResumeProfiles(payload.resume_profiles))
-      .catch(() => {
-        setResumeProfiles([]);
-      });
   }, []);
 
   async function discover(event: FormEvent<HTMLFormElement>) {
@@ -156,8 +137,6 @@ function AuthenticatedJobListImportManager() {
     try {
       const payload = await importJobList([...selectedUrls], {
         listUrl: result.list_url,
-        resumeProfileId: resumeProfileId ? Number(resumeProfileId) : undefined,
-        runMatching,
       });
       setImportResult(payload);
       setStatus(`Imported ${payload.imported.length} job${payload.imported.length === 1 ? "" : "s"}.`);
@@ -233,27 +212,6 @@ function AuthenticatedJobListImportManager() {
                 <Badge tone={candidate.status === "new" ? "info" : "neutral"}>{candidate.status.replace("_", " ")}</Badge>
               </label>
             ))}
-          </div>
-
-          <div className="bulk-import-options">
-            <label className="checkbox-row">
-              <input type="checkbox" checked={runMatching} onChange={(event) => setRunMatching(event.target.checked)} />
-              Run matching after import
-            </label>
-            {runMatching ? (
-              <label>
-                Resume profile
-                <select value={resumeProfileId} onChange={(event) => setResumeProfileId(event.target.value)} required>
-                  <option value="">Select resume profile</option>
-                  {sortedResumeProfiles.map((profile) => (
-                    <option value={profile.id} key={profile.id}>
-                      {profile.is_default ? "Default - " : ""}
-                      {profile.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
           </div>
 
           {result.next_page_url ? (

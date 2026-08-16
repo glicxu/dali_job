@@ -7,7 +7,7 @@ import json
 import time
 from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -270,11 +270,25 @@ def start_evaluation_run(
     try:
         stage_started = time.monotonic()
         candidate_view = create_candidate_profile(
-            payload.resume_profile_id, request, db, identity, candidate_extractor
+            payload.resume_profile_id,
+            request,
+            Response(),
+            BackgroundTasks(),
+            db,
+            identity,
+            candidate_extractor,
         )
         candidate_latency_ms = round((time.monotonic() - stage_started) * 1000, 2)
         stage_started = time.monotonic()
-        job_view = create_job_profile(snapshot.user_saved_job_id, request, db, identity, job_extractor)
+        job_view = create_job_profile(
+            snapshot.user_saved_job_id,
+            request,
+            Response(),
+            BackgroundTasks(),
+            db,
+            identity,
+            job_extractor,
+        )
         job_latency_ms = round((time.monotonic() - stage_started) * 1000, 2)
         stage_started = time.monotonic()
         qualification_view = create_qualification_assessment(

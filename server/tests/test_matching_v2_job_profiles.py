@@ -230,10 +230,13 @@ def test_job_profile_api_creates_reuses_and_reads_shared_profile() -> None:
     first = client.post(f"/api/v1/jobs/{saved.json()['id']}/job-profile")
     second = client.post(f"/api/v1/jobs/{saved.json()['id']}/job-profile")
 
-    assert first.status_code == 200, first.text
+    assert first.status_code == 202, first.text
     assert second.status_code == 200
     assert extractor.calls == 1
-    body = first.json()
+    operation = client.get(f"/api/v1/matching-operations/{first.json()['operation_id']}")
+    assert operation.json()["status"] == "completed"
+    assert operation.json()["operation_type"] == "job_profile_extraction"
+    body = second.json()
     assert body["job_profile_id"].startswith("jp_")
     assert body["source"]["source_hash"].startswith("sha256:")
     assert len(body["requirements"]) == 1

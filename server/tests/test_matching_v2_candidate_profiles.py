@@ -177,10 +177,13 @@ def test_candidate_profile_api_creates_caches_reads_and_revises_selection() -> N
     first = client.post(f"/api/v1/resumes/{resume_id}/candidate-profile")
     second = client.post(f"/api/v1/resumes/{resume_id}/candidate-profile")
 
-    assert first.status_code == 200
+    assert first.status_code == 202
     assert second.status_code == 200
     assert extractor.calls == 1
-    body = first.json()
+    operation = client.get(f"/api/v1/matching-operations/{first.json()['operation_id']}")
+    assert operation.json()["status"] == "completed"
+    assert operation.json()["operation_type"] == "candidate_profile_extraction"
+    body = second.json()
     assert body["candidate_profile_id"].startswith("cp_")
     assert body["source"]["source_hash"].startswith("sha256:")
     assert body["extracted"]["skills"][0]["observed_name"] == "Python"
@@ -247,3 +250,59 @@ def test_candidate_profile_api_is_hidden_when_v2_flags_are_disabled() -> None:
     response = client.post("/api/v1/resumes/1/candidate-profile")
 
     assert response.status_code == 404
+
+
+def test_candidate_extraction_operation_retries_without_exposing_provider_error() -> None:
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        future=True,
+    )
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    Base.metadata.create_all(bind=engine)
+
+    def override_db():
+        with session_factory() as session:
+            try:
+                yield session
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
+
+    extractor = StubCandidateExtractor()
+    original_extract = extractor.extract
+
+    def fail_once(spans):
+        if extractor.calls == 0:
+            extractor.calls += 1
+            raise TimeoutError("private provider timeout payload")
+        return original_extract(spans)
+
+    extractor.extract = fail_once
+    app = create_app()
+    app.state.runtime = replace(
+        app.state.runtime,
+        matching_v2=replace(app.state.runtime.matching_v2, shadow_enabled=True),
+    )
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_candidate_profile_extractor] = lambda: extractor
+    client = TestClient(app)
+    resume = client.post("/api/v1/resume-profiles", json={
+        "title": "Retry Resume",
+        "is_default": True,
+        "resume_data": {"headline": "Software Engineer", "skills": ["Python"]},
+    })
+
+    queued = client.post(f"/api/v1/resumes/{resume.json()['id']}/candidate-profile")
+    failed = client.get(f"/api/v1/matching-operations/{queued.json()['operation_id']}")
+    retried = client.post(f"/api/v1/matching-operations/{queued.json()['operation_id']}/retry")
+    completed = client.get(f"/api/v1/matching-operations/{queued.json()['operation_id']}")
+
+    assert queued.status_code == 202
+    assert failed.json()["status"] == "retryable_failure"
+    assert "private provider" not in failed.text
+    assert retried.status_code == 202
+    assert completed.json()["status"] == "completed"
+    assert completed.json()["stages"][0]["attempt_count"] == 2

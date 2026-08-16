@@ -3,13 +3,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.matching_v2.schemas import (
     CandidateExtractionResponse,
     JobExtractionResponse,
     LegacyQualificationAssessmentResponse,
     QualificationAssessmentResponse,
+    CareerLevel,
+    JobCareerTrack,
+    JobRoleFamily,
 )
 from app.modules.matching_v2.eligibility import CandidateEligibilityFacts
 from app.modules.matching_v2.preferences import UserPreferences
@@ -61,6 +64,48 @@ class CandidateCareerSelectionRequest(BaseModel):
     primary_career_profile_id: str | None = Field(max_length=64)
 
 
+class MatchingIntentWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_revision: int = Field(ge=0)
+    target_role_text: str = Field(min_length=1, max_length=300)
+    job_family: JobRoleFamily
+    track: JobCareerTrack
+    target_level: CareerLevel | None = None
+    selected_candidate_career_profile_id: str | None = Field(default=None, max_length=64)
+    source: Literal["user_preferred", "user_confirmed", "resume_derived"]
+
+
+class MatchingIntentView(BaseModel):
+    matching_intent_id: str
+    candidate_profile_id: str
+    revision: int
+    target_role_text: str
+    job_family: str
+    track: str
+    target_level: str | None
+    selected_candidate_career_profile_id: str | None
+    source: str
+    created_at: datetime
+
+
+class JobFamilyPreMatchView(BaseModel):
+    job_family_pre_match_id: str
+    matching_intent_id: str
+    matching_intent_revision: int
+    candidate_profile_id: str
+    job_profile_id: str
+    selected_candidate_career_profile_id: str | None
+    selection_source: str
+    family_compatibility: str
+    track_compatibility: str
+    level_compatibility: str
+    proceed_to_detailed_match: bool
+    reason_codes: list[str]
+    policy_version: str
+    created_at: datetime
+
+
 class JobProfileSourceResponse(BaseModel):
     source_id: str
     source_hash: str
@@ -100,12 +145,20 @@ class QualificationAssessmentCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     candidate_profile_id: str = Field(min_length=1, max_length=64)
-    candidate_career_selection_revision: int = Field(ge=1)
+    candidate_career_selection_revision: int | None = Field(default=None, ge=1)
+    job_family_pre_match_id: str | None = Field(default=None, min_length=1, max_length=64)
     job_profile_id: str = Field(min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def require_one_context(self):
+        if (self.candidate_career_selection_revision is None) == (self.job_family_pre_match_id is None):
+            raise ValueError("Provide exactly one career selection revision or Job Family Pre-Match ID.")
+        return self
 
 
 class QualificationCareerContextView(BaseModel):
-    selection_revision: int
+    selection_revision: int | None
+    job_family_pre_match_id: str | None = None
     selected_career_profile_id: str | None
     selection_policy_version: str
     selection_reason_code: str
@@ -172,7 +225,8 @@ class MatchCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     candidate_profile_id: str = Field(min_length=1, max_length=64)
-    candidate_career_selection_revision: int = Field(ge=1)
+    matching_intent_id: str = Field(min_length=1, max_length=64)
+    matching_intent_revision: int = Field(ge=1)
     job_profile_id: str = Field(min_length=1, max_length=64)
     preference_revision: int | None = Field(default=None, ge=1)
     eligibility_revision: int | None = Field(default=None, ge=1)
@@ -184,7 +238,8 @@ class MatchRerunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     candidate_profile_id: str | None = Field(default=None, min_length=1, max_length=64)
-    candidate_career_selection_revision: int | None = Field(default=None, ge=1)
+    matching_intent_id: str | None = Field(default=None, min_length=1, max_length=64)
+    matching_intent_revision: int | None = Field(default=None, ge=1)
     preference_revision: int | None = Field(default=None, ge=1)
     eligibility_revision: int | None = Field(default=None, ge=1)
     mode: Literal["immediate", "asynchronous"] = "immediate"
@@ -210,6 +265,7 @@ class MatchingOperationStageView(BaseModel):
 
 class MatchingOperationView(BaseModel):
     operation_id: str
+    operation_type: str
     status: str
     current_stage: str | None = None
     correlation_id: str

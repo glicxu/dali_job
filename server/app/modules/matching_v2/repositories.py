@@ -14,6 +14,7 @@ from app.modules.matching_v2.models import (
     CandidateProfileVersion,
     CanonicalSource,
     JobProfileVersion,
+    JobFamilyPreMatch,
     JobRequirement,
     QualificationAssessment,
     RequirementAssessment,
@@ -297,7 +298,7 @@ def create_or_get_job_profile(
     source: CanonicalSource,
     artifact: JobExtractionResponse,
     model_id: str,
-    jobs_cache_id: int | None = None,
+    jobs_cache_id: int,
     provider_execution_reference: str | None = None,
     schema_version: str = "job-profile.v3",
     response_schema_version: str = "job-extract-response.v3",
@@ -311,10 +312,9 @@ def create_or_get_job_profile(
 
     if source.source_type != "job" or source.owner_kind != "shared":
         raise ValueError("Job Profiles require a shared canonical job source.")
-    if jobs_cache_id is not None:
-        cache_job = db.get(JobCache, jobs_cache_id)
-        if cache_job is None or cache_job.deleted_at is not None or not cache_job.raw_description_text.strip():
-            raise ValueError("Cached job is unavailable.")
+    cache_job = db.get(JobCache, jobs_cache_id)
+    if cache_job is None or cache_job.deleted_at is not None or not cache_job.raw_description_text.strip():
+        raise ValueError("An active cached job with usable source text is required.")
     allowed_refs = set(db.scalars(
         select(SourceSpan.span_id).where(SourceSpan.canonical_source_id == source.id)
     ).all())
@@ -441,13 +441,19 @@ def job_profile_cache_identity(
 
 
 def get_job_profile_by_public_id(db: Session, *, public_id: str) -> JobProfileVersion | None:
+    from app.modules.jobs.models import JobCache
+
     return db.scalar(select(JobProfileVersion).join(
         CanonicalSource, CanonicalSource.id == JobProfileVersion.canonical_source_id
+    ).join(
+        JobCache, JobCache.id == JobProfileVersion.jobs_cache_id
     ).where(
         JobProfileVersion.public_id == public_id,
         JobProfileVersion.deleted_at.is_(None),
         CanonicalSource.owner_kind == "shared",
         CanonicalSource.source_type == "job",
+        JobCache.deleted_at.is_(None),
+        JobCache.raw_description_text != "",
     ))
 
 
@@ -456,13 +462,14 @@ def create_or_get_qualification_assessment(
     *,
     owner: ArtifactOwner,
     candidate_profile: CandidateProfileVersion,
-    career_selection: CandidateCareerSelection,
+    career_selection: CandidateCareerSelection | None,
     selected_career_profile: CandidateCareerProfile | None,
     selection_reason_code: str,
     job_profile: JobProfileVersion,
     artifact: QualificationAssessmentResponse,
     input_quality: dict,
     model_id: str,
+    job_family_pre_match: JobFamilyPreMatch | None = None,
     provider_execution_reference: str | None = None,
     schema_version: str = "qualification-assessment.v2",
     response_schema_version: str = "qualification-assessment-response.v2",
@@ -476,12 +483,25 @@ def create_or_get_qualification_assessment(
         raise ArtifactOwnershipError("Qualification Assessments must have a private owner.")
     if not _candidate_profile_belongs_to_owner(db, candidate_profile, owner):
         raise ArtifactOwnershipError("Candidate Profile does not belong to qualification owner.")
-    if career_selection.candidate_profile_version_id != candidate_profile.id:
+    if career_selection is None and job_family_pre_match is None:
+        raise ValueError("Qualification requires a career selection or Job Family Pre-Match.")
+    if career_selection is not None and job_family_pre_match is not None:
+        raise ValueError("Qualification career context is ambiguous.")
+    if career_selection is not None and career_selection.candidate_profile_version_id != candidate_profile.id:
         raise ArtifactOwnershipError("Career selection does not belong to Candidate Profile.")
+    if job_family_pre_match is not None and (
+        job_family_pre_match.candidate_profile_version_id != candidate_profile.id
+        or job_family_pre_match.job_profile_version_id != job_profile.id
+        or job_family_pre_match.workspace_id != owner.workspace_id
+        or job_family_pre_match.user_id != owner.user_id
+    ):
+        raise ArtifactOwnershipError("Job Family Pre-Match does not belong to qualification inputs.")
     if selected_career_profile is not None and (
         selected_career_profile.candidate_profile_version_id != candidate_profile.id
     ):
         raise ArtifactOwnershipError("Selected career context does not belong to Candidate Profile.")
+    if job_family_pre_match is not None:
+        selection_policy_version = job_family_pre_match.policy_version
     source = db.get(CanonicalSource, job_profile.canonical_source_id)
     if source is None or source.owner_kind != "shared" or source.source_type != "job":
         raise ArtifactOwnershipError("Job Profile is not reusable shared data.")
@@ -494,7 +514,8 @@ def create_or_get_qualification_assessment(
         raise ValueError("Qualification Assessment does not cover the Job Profile requirements.")
     cache_key, response_schema_hash, alternative_hashes = qualification_cache_identity(
         candidate_profile=candidate_profile,
-        selection_revision=career_selection.revision,
+        selection_revision=career_selection.revision if career_selection else None,
+        job_family_pre_match=job_family_pre_match,
         job_profile=job_profile,
         requirements=requirements,
         model_id=model_id,
@@ -518,8 +539,9 @@ def create_or_get_qualification_assessment(
         user_id=owner.user_id,
         guest_trial_id=owner.guest_trial_id,
         candidate_profile_version_id=candidate_profile.id,
-        candidate_career_selection_id=career_selection.id,
-        candidate_career_selection_revision=career_selection.revision,
+        candidate_career_selection_id=career_selection.id if career_selection else None,
+        candidate_career_selection_revision=career_selection.revision if career_selection else None,
+        job_family_pre_match_id=job_family_pre_match.id if job_family_pre_match else None,
         selected_candidate_career_profile_id=(
             selected_career_profile.id if selected_career_profile is not None else None
         ),
@@ -564,9 +586,10 @@ def find_cached_qualification_assessment(
     db: Session,
     *,
     candidate_profile: CandidateProfileVersion,
-    selection_revision: int,
+    selection_revision: int | None,
     job_profile: JobProfileVersion,
     model_id: str,
+    job_family_pre_match: JobFamilyPreMatch | None = None,
     schema_version: str = "qualification-assessment.v2",
     response_schema_version: str = "qualification-assessment-response.v2",
     prompt_version: str = "qualification-match.v3",
@@ -575,12 +598,15 @@ def find_cached_qualification_assessment(
     input_policy_version: str = "qualification-input.v2",
     semantic_validator_version: str = "matching-semantic-validator.v4",
 ) -> QualificationAssessment | None:
+    if job_family_pre_match is not None:
+        selection_policy_version = job_family_pre_match.policy_version
     requirements = list(db.scalars(select(JobRequirement).where(
         JobRequirement.job_profile_version_id == job_profile.id
     )).all())
     cache_key, _, _ = qualification_cache_identity(
         candidate_profile=candidate_profile,
         selection_revision=selection_revision,
+        job_family_pre_match=job_family_pre_match,
         job_profile=job_profile,
         requirements=requirements,
         model_id=model_id,
@@ -601,7 +627,7 @@ def find_cached_qualification_assessment(
 def qualification_cache_identity(
     *,
     candidate_profile: CandidateProfileVersion,
-    selection_revision: int,
+    selection_revision: int | None,
     job_profile: JobProfileVersion,
     requirements: list[JobRequirement],
     model_id: str,
@@ -612,10 +638,15 @@ def qualification_cache_identity(
     matching_policy_version: str,
     input_policy_version: str,
     semantic_validator_version: str,
+    job_family_pre_match: JobFamilyPreMatch | None = None,
 ) -> tuple[str, str, dict[str, str]]:
     schema = DEFAULT_REGISTRY.get("response_schema", response_schema_version)
     prompt = DEFAULT_REGISTRY.get("prompt", prompt_version)
-    selection = DEFAULT_REGISTRY.get("career_selection_policy", selection_policy_version)
+    selection = (
+        DEFAULT_REGISTRY.get("job_family_pre_match_policy", selection_policy_version)
+        if job_family_pre_match is not None
+        else DEFAULT_REGISTRY.get("career_selection_policy", selection_policy_version)
+    )
     matching = DEFAULT_REGISTRY.get("qualification_policy", matching_policy_version)
     input_policy = DEFAULT_REGISTRY.get("input_policy", input_policy_version)
     semantic = DEFAULT_REGISTRY.get("semantic_validator", semantic_validator_version)
@@ -631,6 +662,8 @@ def qualification_cache_identity(
         content_sha256({
             "candidate_profile_id": candidate_profile.public_id,
             "candidate_career_selection_revision": selection_revision,
+            "job_family_pre_match_id": job_family_pre_match.public_id if job_family_pre_match else None,
+            "job_family_pre_match_policy_hash": job_family_pre_match.policy_hash if job_family_pre_match else None,
             "job_profile_id": job_profile.public_id,
             "schema_version": schema_version,
             "response_schema_hash": schema.content_hash,

@@ -11,11 +11,12 @@ from app.db.base import Base
 from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.matching_v2.models import MatchingOperation, MatchingOperationStage
+from app.modules.matching_v2.pre_match import create_matching_intent
 from app.modules.matching_v2.router import get_qualification_matcher
 from test_matching_v2_qualification import StubQualificationMatcher, _foundation
 
 
-def _client() -> tuple[TestClient, sessionmaker, StubQualificationMatcher, str, str]:
+def _client() -> tuple[TestClient, sessionmaker, StubQualificationMatcher, str, str, str]:
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -25,9 +26,22 @@ def _client() -> tuple[TestClient, sessionmaker, StubQualificationMatcher, str, 
     Base.metadata.create_all(bind=engine)
     factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
     with factory.begin() as db:
-        _, candidate, job = _foundation(db)
+        owner, candidate, job = _foundation(db)
+        intent = create_matching_intent(
+            db,
+            owner=owner,
+            candidate_profile=candidate,
+            expected_revision=0,
+            target_role_text="Senior Software Engineer",
+            job_family="software_engineering",
+            track="individual_contributor",
+            target_level="senior",
+            selected_candidate_career_profile_id=None,
+            source="user_preferred",
+        )
         candidate_id = candidate.public_id
         job_id = job.public_id
+        intent_id = intent.public_id
 
     def override_db():
         session = factory()
@@ -48,13 +62,14 @@ def _client() -> tuple[TestClient, sessionmaker, StubQualificationMatcher, str, 
     )
     app.dependency_overrides[get_db_session] = override_db
     app.dependency_overrides[get_qualification_matcher] = lambda: matcher
-    return TestClient(app), factory, matcher, candidate_id, job_id
+    return TestClient(app), factory, matcher, candidate_id, job_id, intent_id
 
 
-def _payload(candidate_id: str, job_id: str) -> dict:
+def _payload(candidate_id: str, job_id: str, intent_id: str) -> dict:
     return {
         "candidate_profile_id": candidate_id,
-        "candidate_career_selection_revision": 1,
+        "matching_intent_id": intent_id,
+        "matching_intent_revision": 1,
         "job_profile_id": job_id,
         "preference_revision": None,
         "eligibility_revision": None,
@@ -64,22 +79,22 @@ def _payload(candidate_id: str, job_id: str) -> dict:
 
 
 def test_match_operation_consumes_persisted_profiles_and_is_idempotent() -> None:
-    client, factory, matcher, candidate_id, job_id = _client()
+    client, factory, matcher, candidate_id, job_id, intent_id = _client()
 
-    first = client.post("/api/v1/matches", json=_payload(candidate_id, job_id))
-    repeated = client.post("/api/v1/matches", json=_payload(candidate_id, job_id))
+    first = client.post("/api/v1/matches", json=_payload(candidate_id, job_id, intent_id))
+    repeated = client.post("/api/v1/matches", json=_payload(candidate_id, job_id, intent_id))
 
     assert first.status_code == 200, first.text
     assert repeated.status_code == 200
     assert first.json()["operation_id"] == repeated.json()["operation_id"]
     assert first.json()["status"] == "completed"
     assert first.json()["match"]["match_id"].startswith("match_")
-    assert [stage["status"] for stage in first.json()["stages"]] == ["completed"] * 6
+    assert [stage["status"] for stage in first.json()["stages"]] == ["completed"] * 7
     assert first.json()["stages"][0]["cache_hit"] is True
     assert first.json()["stages"][1]["cache_hit"] is True
     assert matcher.calls == 1
 
-    changed = _payload(candidate_id, "jp_different_input")
+    changed = _payload(candidate_id, "jp_different_input", intent_id)
     conflict = client.post("/api/v1/matches", json=changed)
     assert conflict.status_code == 409
     assert conflict.json()["detail"]["code"] == "IDEMPOTENCY_KEY_REUSED"
@@ -97,7 +112,8 @@ def test_match_operation_consumes_persisted_profiles_and_is_idempotent() -> None
         )
         assert operation.request_payload.keys() == {
             "candidate_profile_id",
-            "candidate_career_selection_revision",
+            "matching_intent_id",
+            "matching_intent_revision",
             "job_profile_id",
             "preference_revision",
             "eligibility_revision",
@@ -106,7 +122,7 @@ def test_match_operation_consumes_persisted_profiles_and_is_idempotent() -> None
 
 
 def test_match_operation_retry_resumes_at_qualification_without_revalidating_profiles() -> None:
-    client, factory, matcher, candidate_id, job_id = _client()
+    client, factory, matcher, candidate_id, job_id, intent_id = _client()
     original_assess = matcher.assess
     calls = 0
 
@@ -118,11 +134,12 @@ def test_match_operation_retry_resumes_at_qualification_without_revalidating_pro
         return original_assess(value)
 
     matcher.assess = fail_once
-    failed = client.post("/api/v1/matches", json=_payload(candidate_id, job_id))
+    failed = client.post("/api/v1/matches", json=_payload(candidate_id, job_id, intent_id))
 
     assert failed.status_code == 202
     assert failed.json()["status"] == "retryable_failure"
-    assert [stage["status"] for stage in failed.json()["stages"][:3]] == [
+    assert [stage["status"] for stage in failed.json()["stages"][:4]] == [
+        "completed",
         "completed",
         "completed",
         "retryable_failure",
@@ -134,7 +151,30 @@ def test_match_operation_retry_resumes_at_qualification_without_revalidating_pro
     assert retried.json()["status"] == "completed"
     assert retried.json()["stages"][0]["attempt_count"] == 1
     assert retried.json()["stages"][1]["attempt_count"] == 1
-    assert retried.json()["stages"][2]["attempt_count"] == 2
+    assert retried.json()["stages"][2]["attempt_count"] == 1
+    assert retried.json()["stages"][3]["attempt_count"] == 2
 
     with factory() as db:
         assert db.scalar(select(MatchingOperation)).status == "completed"
+
+
+def test_matching_intent_api_revises_without_mutating_history() -> None:
+    client, _, _, candidate_id, _, intent_id = _client()
+
+    current = client.get(f"/api/v1/matching-intents/{intent_id}")
+    revised = client.put(f"/api/v1/matching-intents/{intent_id}", json={
+        "expected_revision": 1,
+        "target_role_text": "Staff Software Engineer",
+        "job_family": "software_engineering",
+        "track": "individual_contributor",
+        "target_level": "staff",
+        "selected_candidate_career_profile_id": None,
+        "source": "user_confirmed",
+    })
+    historical = client.get(f"/api/v1/matching-intents/{intent_id}?revision=1")
+
+    assert current.status_code == 200
+    assert current.json()["candidate_profile_id"] == candidate_id
+    assert revised.status_code == 200, revised.text
+    assert revised.json()["revision"] == 2
+    assert historical.json()["target_level"] == "senior"

@@ -1,63 +1,68 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+import re
+from datetime import datetime, timezone
 
 from fastapi import HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.provider_ops import run_provider_call
-from app.modules.auth.dependencies import AuthenticatedIdentity
 from app.modules.guest_trials.models import (
+    GuestDocument,
     GuestMatchCandidate,
     GuestMatchOperation,
     GuestMatchResult,
-    GuestProviderAttempt,
     GuestResumeProfile,
     GuestSearchCriterion,
     GuestTrial,
 )
 from app.modules.guest_trials.schemas import GuestBestMatchResponse, GuestMatchStatusResponse
-from app.modules.jobs.schemas import IndeedJobSearchResult
+from app.modules.jobs.models import JobCache
+from app.modules.matching_v2.canonical import (
+    CANONICALIZATION_VERSION,
+    EvidenceSpan,
+    build_evidence_spans,
+    canonicalize_text,
+)
+from app.modules.matching_v2.explanations import render_match_explanation
+from app.modules.matching_v2.extraction import CandidateProfileExtractor
+from app.modules.matching_v2.models import (
+    CandidateCareerProfile,
+    CandidateProfileVersion,
+    JobProfileVersion,
+    JobRequirement,
+)
+from app.modules.matching_v2.qualification import (
+    QualificationMatcher,
+    build_qualification_input,
+    select_candidate_career_context,
+    validate_qualification_assessment,
+)
+from app.modules.matching_v2.registry import DEFAULT_REGISTRY, ROLE_TRACK_POLICIES
+from app.modules.matching_v2.repositories import (
+    ArtifactOwner,
+    SpanInput,
+    create_or_get_candidate_profile,
+    create_or_get_canonical_source,
+    create_or_get_qualification_assessment,
+    find_cached_candidate_profile,
+    sync_policy_registry,
+)
+from app.modules.matching_v2.schemas import QualificationAssessmentResponse
+from app.modules.matching_v2.scoring import QualificationScoreItem, score_match
 from app.modules.profiles.readiness import evaluate_profile_readiness
 from app.modules.profiles.schemas import ResumeData
-from app.modules.resume_job_match.schemas import ResumeJobMatchRequest
-from app.modules.resume_job_match.service import ResumeJobMatcher
 
-MAX_GUEST_CANDIDATES = 5
-SEARCH_RESERVATION_TIMEOUT = timedelta(minutes=10)
+
 MAX_GUEST_JOB_DESCRIPTION_CHARS = 6_000
+CATALOG_POLICY_VERSION = "guest-cached-job-catalog.v1"
+_WORD_RE = re.compile(r"[a-z0-9+#.]+")
+_LEVELS = ("student_or_intern", "entry", "junior", "mid", "senior", "staff", "principal")
 
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def _as_utc(value: datetime) -> datetime:
-    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
-
-
-def _guest_identity(trial: GuestTrial) -> AuthenticatedIdentity:
-    return AuthenticatedIdentity(
-        external_user_id=f"guest:{trial.public_id}",
-        email="guest@invalid.local",
-        display_name="Guest trial",
-        provider="guest",
-    )
-
-
-def _raw_job_text(result: IndeedJobSearchResult) -> str:
-    parts = [
-        result.title,
-        result.company,
-        result.location,
-        result.summary,
-        result.raw_description_text,
-        result.employment_type,
-        result.salary_range,
-    ]
-    return "\n\n".join(part.strip() for part in parts if part and part.strip()).strip()
 
 
 def get_match_operation(db: Session, trial: GuestTrial) -> GuestMatchOperation | None:
@@ -88,18 +93,23 @@ def _result_response(result: GuestMatchResult) -> GuestBestMatchResponse:
         supported_requirements=list(match.get("supported_requirements") or []),
         unsupported_requirements=list(match.get("unsupported_requirements") or []),
         recommended_resume_updates=list(match.get("recommended_resume_updates") or []),
+        result_context="Best matching profile from the cached job catalog",
     )
 
 
 def match_status(db: Session, trial: GuestTrial) -> GuestMatchStatusResponse:
     operation = get_match_operation(db, trial)
     result = get_match_result(db, trial)
-    status_value = operation.status if operation else "not_started"
     return GuestMatchStatusResponse(
         operation_id=operation.id if operation else None,
-        status=status_value,
+        status=operation.status if operation else "not_started",
         provider_search_state=trial.provider_search_state,
-        retryable=bool(operation and operation.status == "failed" and result is None),
+        retryable=bool(
+            operation
+            and operation.status == "failed"
+            and result is None
+            and operation.error_code != "cached_job_catalog_empty"
+        ),
         error_code=operation.error_code if operation else None,
         result=_result_response(result) if result else None,
     )
@@ -134,12 +144,7 @@ def require_ready_inputs(
     return profile, criterion
 
 
-def reserve_provider_search(
-    db: Session,
-    trial: GuestTrial,
-    *,
-    idempotency_key: str,
-) -> tuple[GuestMatchOperation, GuestProviderAttempt | None, bool]:
+def begin_cached_match(db: Session, trial: GuestTrial) -> GuestMatchOperation:
     locked_trial = db.scalar(select(GuestTrial).where(GuestTrial.id == trial.id).with_for_update())
     if locked_trial is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guest trial not found.")
@@ -148,194 +153,106 @@ def reserve_provider_search(
         operation = GuestMatchOperation(guest_trial_id=locked_trial.id, status="pending", attempt_count=0)
         db.add(operation)
         db.flush()
-    if get_match_result(db, locked_trial) is not None:
-        return operation, None, False
-    if locked_trial.provider_search_state == "consumed":
-        return operation, None, False
-    if locked_trial.provider_search_state == "reserved":
-        reserved_attempt = db.scalar(
-            select(GuestProviderAttempt)
-            .where(
-                GuestProviderAttempt.guest_trial_id == locked_trial.id,
-                GuestProviderAttempt.state == "reserved",
-            )
-            .order_by(GuestProviderAttempt.reserved_at.desc())
-            .limit(1)
-        )
-        if reserved_attempt is None or _as_utc(reserved_attempt.reserved_at) > utc_now() - SEARCH_RESERVATION_TIMEOUT:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Guest match is already in progress.")
-        reserved_attempt.state = "released"
-        reserved_attempt.safe_outcome = "stale_reservation_recovered"
-        reserved_attempt.failure_category = "worker_interrupted"
-        reserved_attempt.released_at = utc_now()
-        locked_trial.provider_search_state = "released"
-
-    attempt = db.scalar(
-        select(GuestProviderAttempt).where(
-            GuestProviderAttempt.guest_trial_id == locked_trial.id,
-            GuestProviderAttempt.idempotency_key == idempotency_key,
-        )
-    )
-    if attempt is None:
-        attempt = GuestProviderAttempt(
-            guest_trial_id=locked_trial.id,
-            idempotency_key=idempotency_key,
-            provider_feature="job_search",
-            state="reserved",
-        )
-        db.add(attempt)
-    else:
-        attempt.state = "reserved"
-        attempt.safe_outcome = None
-        attempt.failure_category = None
-        attempt.reserved_at = utc_now()
-        attempt.released_at = None
-    locked_trial.provider_search_state = "reserved"
+    if operation.status in {"searching", "matching"}:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Guest match is already in progress.")
+    # Retained for backwards API compatibility only. This flow performs no provider search.
+    locked_trial.provider_search_state = "available"
     locked_trial.status = "matching"
-    operation.status = "searching"
-    operation.error_code = None
-    operation.attempt_count += 1
-    db.flush()
-    return operation, attempt, True
-
-
-def release_provider_search(
-    db: Session,
-    trial: GuestTrial,
-    operation: GuestMatchOperation,
-    attempt: GuestProviderAttempt,
-    *,
-    error_code: str,
-    failure_category: str,
-) -> None:
-    attempt.state = "released"
-    attempt.safe_outcome = error_code
-    attempt.failure_category = failure_category
-    attempt.released_at = utc_now()
-    trial.provider_search_state = "released"
-    trial.status = "active"
-    operation.status = "failed"
-    operation.error_code = error_code
-    db.flush()
-
-
-def retain_and_consume_candidates(
-    db: Session,
-    trial: GuestTrial,
-    operation: GuestMatchOperation,
-    attempt: GuestProviderAttempt,
-    results: list[IndeedJobSearchResult],
-) -> list[GuestMatchCandidate]:
-    candidates: list[GuestMatchCandidate] = []
-    for provider_rank, result in enumerate(results, start=1):
-        raw_text = _raw_job_text(result)
-        if not raw_text or not result.source_url:
-            continue
-        candidate = GuestMatchCandidate(
-            guest_trial_id=trial.id,
-            operation_id=operation.id,
-            provider_rank=provider_rank,
-            job_snapshot={**result.model_dump(mode="json"), "raw_match_text": raw_text},
-        )
-        db.add(candidate)
-        candidates.append(candidate)
-    if not candidates:
-        release_provider_search(
-            db,
-            trial,
-            operation,
-            attempt,
-            error_code="no_usable_jobs",
-            failure_category="unusable_response",
-        )
-        return []
-    attempt.state = "consumed"
-    attempt.safe_outcome = "usable_search_response"
-    attempt.consumed_at = utc_now()
-    trial.provider_search_state = "consumed"
-    trial.status = "matching"
     operation.status = "matching"
     operation.error_code = None
+    operation.attempt_count += 1
+    operation.completed_at = None
     db.flush()
-    return candidates
+    return operation
 
 
-def retained_candidates(db: Session, operation: GuestMatchOperation) -> list[GuestMatchCandidate]:
-    return list(
-        db.scalars(
-            select(GuestMatchCandidate)
-            .where(GuestMatchCandidate.operation_id == operation.id)
-            .order_by(GuestMatchCandidate.provider_rank)
-        ).all()
-    )
-
-
-def match_retained_candidates(
+def run_cached_profile_match(
     request: Request,
     db: Session,
     trial: GuestTrial,
     operation: GuestMatchOperation,
-    profile: GuestResumeProfile,
-    matcher: ResumeJobMatcher,
-) -> GuestMatchResult | None:
-    resume_data = ResumeData.model_validate(profile.resume_data).model_dump()
-    identity = _guest_identity(trial)
-    candidates = retained_candidates(db, operation)
-    for candidate in candidates:
-        if candidate.match_data is not None:
-            continue
-        job_text = str(candidate.job_snapshot.get("raw_match_text") or "")
-        try:
-            match = run_provider_call(
-                request,
-                identity,
-                provider="openai",
-                feature="guest_resume_job_match",
-                operation=lambda: matcher.compare(
-                    ResumeJobMatchRequest(
-                        resume_text=json.dumps(resume_data, ensure_ascii=False),
-                        job_description_text=job_text,
-                        resume_data=resume_data,
-                        job_data=candidate.job_snapshot,
-                    )
-                ),
-            )
-        except HTTPException:
-            candidate.matcher_provenance = {"outcome": "failed", "failure_code": "provider_failure"}
-            db.flush()
-            db.commit()
-            continue
-        candidate.match_score = match.match_score
-        candidate.match_data = match.model_dump()
-        candidate.matcher_provenance = {
-            "outcome": "succeeded",
-            "model": match.provider_model_name,
-            "execution_reference": match.provider_execution_reference,
-        }
-        candidate.matched_at = utc_now()
-        db.flush()
-        db.commit()
+    guest_profile: GuestResumeProfile,
+    criterion: GuestSearchCriterion,
+    candidate_extractor: CandidateProfileExtractor,
+    matcher: QualificationMatcher,
+) -> GuestMatchResult:
+    owner = ArtifactOwner.guest(guest_trial_id=trial.id)
+    try:
+        candidate = _candidate_profile(
+            request,
+            db,
+            owner=owner,
+            guest_profile=guest_profile,
+            extractor=candidate_extractor,
+        )
+    except (HTTPException, ValueError) as exc:
+        _fail(operation, trial, "candidate_profile_unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Candidate profiling is temporarily unavailable. Retry shortly.",
+        ) from exc
 
-    candidates = retained_candidates(db, operation)
-    matched = [item for item in candidates if item.match_data is not None and item.match_score is not None]
-    if not matched:
-        operation.status = "failed"
-        operation.error_code = "matcher_unavailable"
-        db.flush()
-        return None
-    best = max(matched, key=lambda item: (int(item.match_score or 0), -item.provider_rank))
+    selected = select_cached_job_profile(db, candidate=candidate, criterion=criterion)
+    if selected is None:
+        _fail(operation, trial, "cached_job_catalog_empty")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No compatible cached Job Profile is available yet.",
+        )
+    job_profile, cache_job = selected
+    context = select_candidate_career_context(
+        db,
+        candidate_profile=candidate,
+        job_profile=job_profile,
+        selection_revision=1,
+    )
+    candidate_row = _retain_cached_candidate(db, trial, operation, job_profile, cache_job)
+    try:
+        qualification = _qualification(
+            db,
+            owner=owner,
+            candidate=candidate,
+            job_profile=job_profile,
+            context=context,
+            matcher=matcher,
+        )
+    except (HTTPException, ValueError) as exc:
+        candidate_row.matcher_provenance = {"outcome": "failed", "failure_code": "provider_failure"}
+        _fail(operation, trial, "matcher_unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Matching is temporarily unavailable. Retry against the same cached job.",
+        ) from exc
+
+    match_score, match_data = _render_guest_match(db, qualification, job_profile)
+    candidate_row.match_score = match_score
+    candidate_row.match_data = match_data
+    candidate_row.matcher_provenance = {
+        "outcome": "succeeded",
+        "pipeline": "matching_v2",
+        "model": qualification.model_id,
+        "qualification_assessment_id": qualification.public_id,
+        "catalog_policy_version": CATALOG_POLICY_VERSION,
+    }
+    candidate_row.matched_at = utc_now()
     existing = get_match_result(db, trial)
     if existing is not None:
         return existing
     result = GuestMatchResult(
         guest_trial_id=trial.id,
         operation_id=operation.id,
-        candidate_id=best.id,
-        profile_snapshot=resume_data,
-        job_snapshot=best.job_snapshot,
-        match_score=int(best.match_score or 0),
-        match_data=best.match_data or {},
-        source_url=best.job_snapshot.get("source_url"),
+        candidate_id=candidate_row.id,
+        candidate_profile_version_id=candidate.id,
+        qualification_assessment_id=qualification.id,
+        profile_snapshot={
+            "resume_data": guest_profile.resume_data,
+            "candidate_profile_id": candidate.public_id,
+            "candidate_profile": candidate.artifact,
+        },
+        job_snapshot=candidate_row.job_snapshot,
+        match_score=match_score,
+        match_data=match_data,
+        source_url=None,
     )
     db.add(result)
     operation.status = "result_ready"
@@ -345,3 +262,322 @@ def match_retained_candidates(
     db.flush()
     db.refresh(result)
     return result
+
+
+def select_cached_job_profile(
+    db: Session,
+    *,
+    candidate: CandidateProfileVersion,
+    criterion: GuestSearchCriterion,
+) -> tuple[JobProfileVersion, JobCache] | None:
+    rows = list(
+        db.execute(
+            select(JobProfileVersion, JobCache)
+            .join(JobCache, JobCache.id == JobProfileVersion.jobs_cache_id)
+            .where(
+                JobProfileVersion.deleted_at.is_(None),
+                JobCache.deleted_at.is_(None),
+                JobCache.raw_description_text != "",
+            )
+            .order_by(JobProfileVersion.created_at.desc(), JobProfileVersion.id.desc())
+        ).all()
+    )
+    latest_by_cache: dict[int, tuple[JobProfileVersion, JobCache]] = {}
+    for profile, cache in rows:
+        latest_by_cache.setdefault(cache.id, (profile, cache))
+    if not latest_by_cache:
+        return None
+    careers = list(
+        db.scalars(
+            select(CandidateCareerProfile).where(
+                CandidateCareerProfile.candidate_profile_version_id == candidate.id
+            )
+        ).all()
+    )
+    if not careers:
+        return None
+    ranked = sorted(
+        latest_by_cache.values(),
+        key=lambda item: _catalog_rank(item[0], item[1], careers, criterion),
+    )
+    best = ranked[0]
+    if _catalog_rank(best[0], best[1], careers, criterion)[0] >= 4:
+        return None
+    return best
+
+
+def _candidate_profile(
+    request: Request,
+    db: Session,
+    *,
+    owner: ArtifactOwner,
+    guest_profile: GuestResumeProfile,
+    extractor: CandidateProfileExtractor,
+) -> CandidateProfileVersion:
+    source_text, extraction_version = _guest_resume_source_text(db, guest_profile)
+    canonical_text = canonicalize_text(source_text)
+    spans = build_evidence_spans(canonical_text, source_prefix=f"guest_resume_{guest_profile.id}")
+    if not spans:
+        raise ValueError("Guest profile does not contain evidence spans.")
+    source = create_or_get_canonical_source(
+        db,
+        owner=owner,
+        source_type="resume",
+        canonical_text=canonical_text,
+        text_extraction_version=extraction_version,
+        canonicalization_version=CANONICALIZATION_VERSION,
+        guest_resume_profile_id=guest_profile.id,
+        spans=[_span_input(item) for item in spans],
+    )
+    sync_policy_registry(db)
+    cached = find_cached_candidate_profile(
+        db,
+        source=source,
+        model_id=request.app.state.runtime.openai_model,
+    )
+    if cached is not None:
+        return cached
+    extracted = extractor.extract(spans)
+    return create_or_get_candidate_profile(
+        db,
+        source=source,
+        artifact=extracted.artifact,
+        model_id=extracted.model_id,
+        provider_execution_reference=extracted.provider_execution_reference,
+    )
+
+
+def _qualification(db, *, owner, candidate, job_profile, context, matcher):
+    qualification_input = build_qualification_input(
+        db,
+        candidate_profile=candidate,
+        job_profile=job_profile,
+        career_context=context.career_profile,
+    )
+    result = matcher.assess(qualification_input)
+    requirements = list(
+        db.scalars(
+            select(JobRequirement).where(JobRequirement.job_profile_version_id == job_profile.id)
+        ).all()
+    )
+    arguments = {
+        "requirements": requirements,
+        "allowed_evidence_refs": qualification_input.allowed_evidence_refs,
+        "allowed_alternative_group_refs": qualification_input.allowed_alternative_group_refs,
+        "incomplete_evidence_input": bool(qualification_input.omitted_evidence_refs),
+    }
+    try:
+        artifact = validate_qualification_assessment(result.artifact, **arguments)
+    except ValueError as first_error:
+        repair = getattr(matcher, "repair", None)
+        if repair is None:
+            raise
+        result = repair(
+            qualification_input,
+            ({"code": "QUALIFICATION_SEMANTIC_VALIDATION_FAILED", "path": "$", "message": str(first_error)},),
+        )
+        artifact = validate_qualification_assessment(result.artifact, **arguments)
+    warnings = []
+    if qualification_input.omitted_evidence_refs:
+        warnings.append(
+            f"NEEDS_MORE_INFORMATION:OMITTED_CANDIDATE_EVIDENCE:{len(qualification_input.omitted_evidence_refs)}"
+        )
+    return create_or_get_qualification_assessment(
+        db,
+        owner=owner,
+        candidate_profile=candidate,
+        career_selection=context.selection,
+        selected_career_profile=context.career_profile,
+        selection_reason_code=context.reason_code,
+        job_profile=job_profile,
+        artifact=artifact,
+        input_quality={
+            "warnings": warnings,
+            "omitted_evidence_count": len(qualification_input.omitted_evidence_refs),
+            "complete": not qualification_input.omitted_evidence_refs,
+            "validation_retry_count": result.retry_count,
+        },
+        model_id=result.model_id,
+        provider_execution_reference=result.provider_execution_reference,
+    )
+
+
+def _render_guest_match(db: Session, qualification, job_profile: JobProfileVersion) -> tuple[int, dict]:
+    requirements = list(
+        db.scalars(
+            select(JobRequirement).where(JobRequirement.job_profile_version_id == job_profile.id)
+        ).all()
+    )
+    by_id = {item.requirement_id: item for item in requirements}
+    artifact = QualificationAssessmentResponse.model_validate(qualification.artifact)
+    items = [
+        QualificationScoreItem(
+            requirement_id=item.requirement_id,
+            importance=by_id[item.requirement_id].importance,
+            scoring_dimension=by_id[item.requirement_id].scoring_dimension,
+            status=item.status,
+        )
+        for item in artifact.requirement_assessments
+    ]
+    career = job_profile.artifact["career_context"]
+    score = score_match(
+        role_family=career["primary_role_family"],
+        track=career["track"],
+        target_level=career["target_level"],
+        level_confidence=career["confidence"],
+        qualification_items=items,
+    )
+    explanation = render_match_explanation(
+        qualification_items=artifact.requirement_assessments,
+        requirement_statements={item.requirement_id: item.statement for item in requirements},
+        preference_items=[],
+        gates=score.gates,
+        score=score,
+    )
+    numeric_score = score.overall_score
+    if numeric_score is None:
+        numeric_score = score.diagnostic_qualification_score
+    legacy_score = max(0, min(10, int(((numeric_score or 0) + 5) // 10)))
+    supported = list(explanation.strengths)
+    unsupported = list(explanation.gaps)
+    return legacy_score, {
+        "pipeline": "matching_v2",
+        "summary": explanation.summary,
+        "matched_skills": [item.label for item in supported],
+        "missing_skills": [item.label for item in unsupported],
+        "supported_requirements": [item.model_dump(mode="json") for item in supported],
+        "unsupported_requirements": [item.model_dump(mode="json") for item in unsupported],
+        "recommended_resume_updates": list(
+            dict.fromkeys(missing for item in artifact.requirement_assessments for missing in item.missing)
+        ),
+        "score": score.model_dump(mode="json"),
+        "explanation": explanation.model_dump(mode="json"),
+        "qualification_assessment_id": qualification.public_id,
+        "job_profile_id": job_profile.public_id,
+    }
+
+
+def _retain_cached_candidate(db, trial, operation, job_profile, cache_job):
+    candidate = db.scalar(
+        select(GuestMatchCandidate)
+        .where(GuestMatchCandidate.operation_id == operation.id)
+        .order_by(GuestMatchCandidate.provider_rank)
+        .limit(1)
+    )
+    if candidate is None:
+        candidate = GuestMatchCandidate(
+            guest_trial_id=trial.id,
+            operation_id=operation.id,
+            provider_rank=1,
+            job_snapshot={},
+        )
+        db.add(candidate)
+    location = (job_profile.artifact.get("location") or {}).get("display") or ""
+    candidate.job_profile_version_id = job_profile.id
+    candidate.job_snapshot = {
+        "title": job_profile.artifact.get("title") or cache_job.title,
+        "company": job_profile.artifact.get("company") or cache_job.company,
+        "location": location,
+        "raw_description_text": cache_job.raw_description_text,
+        "job_profile_id": job_profile.public_id,
+        "jobs_cache_id": cache_job.id,
+    }
+    candidate.match_score = None
+    candidate.match_data = None
+    candidate.matcher_provenance = None
+    candidate.matched_at = None
+    db.flush()
+    return candidate
+
+
+def _catalog_rank(profile, cache, careers, criterion):
+    context = profile.artifact.get("career_context") or {}
+    job_family = str(context.get("primary_role_family") or "unknown")
+    job_track = str(context.get("track") or "unknown")
+    policy = DEFAULT_REGISTRY.get("job_family_pre_match_policy", "job-family-pre-match.v1").content
+    compatible_tracks = set(policy["compatible_tracks"].get(job_track, ()))
+    adjacent = set(policy["adjacent_role_families"].get(job_family, ()))
+    transferable = set(policy["transferable_role_families"].get(job_family, ()))
+
+    def career_rank(career):
+        if career.role_family == job_family:
+            family_rank = 0
+        elif career.role_family in adjacent:
+            family_rank = 1
+        elif career.role_family in transferable:
+            family_rank = 2
+        elif job_family == "unknown" or career.role_family == "unknown":
+            family_rank = 3
+        else:
+            family_rank = 4
+        track_rank = 0 if career.track == job_track else 1 if career.track in compatible_tracks else 2
+        return family_rank, track_rank, _level_distance(career.level, str(context.get("target_level") or "unknown"))
+
+    career_fit = min(career_rank(career) for career in careers)
+    title_tokens = _tokens(str(profile.artifact.get("title") or cache.title))
+    target_tokens = _tokens(criterion.keyword)
+    location_rank = _location_rank(profile.artifact.get("location") or {}, criterion.location)
+    warning_count = len((profile.cleanup or {}).get("warnings") or [])
+    approved_rank = 0 if ROLE_TRACK_POLICIES.resolve_public(job_family, job_track) is not None else 1
+    return (*career_fit, approved_rank, len(target_tokens - title_tokens), location_rank, warning_count, -profile.id)
+
+
+def _location_rank(location: dict, target: str) -> int:
+    normalized = target.strip().lower()
+    display = str(location.get("display") or "").lower()
+    workplace = str(location.get("workplace_type") or "unknown")
+    if normalized in {"", "anywhere", "any"}:
+        return 0
+    if "remote" in normalized and workplace == "remote":
+        return 0
+    if normalized in display or (display and display in normalized):
+        return 0
+    if workplace == "unknown" or not display:
+        return 1
+    return 2
+
+
+def _level_distance(left: str, right: str) -> int:
+    try:
+        return abs(_LEVELS.index(left) - _LEVELS.index(right))
+    except ValueError:
+        return len(_LEVELS)
+
+
+def _tokens(value: str) -> set[str]:
+    return {item for item in _WORD_RE.findall(value.lower()) if len(item) > 1}
+
+
+def _guest_resume_source_text(db: Session, profile: GuestResumeProfile) -> tuple[str, str]:
+    if profile.source_guest_document_id is not None:
+        document = db.get(GuestDocument, profile.source_guest_document_id)
+        if document is not None and document.extracted_text.strip():
+            return document.extracted_text, "guest-document-extract.v1"
+    data = ResumeData.model_validate(profile.resume_data).model_dump(mode="json")
+    sections = []
+    for key, value in data.items():
+        if value in (None, "", [], {}):
+            continue
+        heading = key.replace("_", " ").title()
+        if isinstance(value, list):
+            body = "\n".join(f"- {item}" for item in value)
+        else:
+            body = json.dumps(value, ensure_ascii=False) if isinstance(value, dict) else str(value)
+        sections.append(f"{heading}\n{body}")
+    return "\n\n".join(sections), "guest-resume-data.v1"
+
+
+def _span_input(span: EvidenceSpan) -> SpanInput:
+    return SpanInput(
+        span_id=span.span_id,
+        section=span.section,
+        start_utf8_byte=span.start_utf8_byte,
+        end_utf8_byte=span.end_utf8_byte,
+        excerpt=span.excerpt,
+    )
+
+
+def _fail(operation: GuestMatchOperation, trial: GuestTrial, code: str) -> None:
+    operation.status = "failed"
+    operation.error_code = code
+    trial.status = "active"

@@ -39,8 +39,13 @@ def test_health_endpoint_is_in_openapi_contract() -> None:
     assert "/api/v1/matches" in schema["paths"]
     assert "/api/v1/matches/{match_id}" in schema["paths"]
     assert "/api/v1/matches/{match_id}/rerun" in schema["paths"]
+    assert "/api/v1/candidate-profiles/{candidate_profile_id}/matching-intents" in schema["paths"]
+    assert "/api/v1/matching-intents/{matching_intent_id}" in schema["paths"]
+    assert "/api/v1/job-family-pre-matches/{pre_match_id}" in schema["paths"]
     assert "/api/v1/matching-operations/{operation_id}" in schema["paths"]
     assert "/api/v1/matching-operations/{operation_id}/retry" in schema["paths"]
+    assert schema["paths"]["/api/v1/resume-job-matches"]["post"]["deprecated"] is True
+    assert schema["paths"]["/api/v1/operations/resume-job-match"]["post"]["deprecated"] is True
     assert "/api/v1/auth/mobile/sessions" in schema["paths"]
     assert "/api/v1/auth/mobile/sessions/refresh" in schema["paths"]
     assert "/api/v1/auth/mobile/sessions/{session_id}" in schema["paths"]

@@ -26,6 +26,7 @@ from app.modules.resume_job_match.schemas import (
     SavePendingMatchedJobResponse,
 )
 from app.modules.resume_job_match.service import OpenAIResumeJobMatcher, ResumeJobMatcher
+from app.modules.matching_v2.legacy_deprecation import add_legacy_match_deprecation_headers
 
 router = APIRouter(prefix="/resume-job-matches", tags=["resume-job-matches"])
 
@@ -221,7 +222,12 @@ def extract_job_url(
     )
 
 
-@router.post("", response_model=ResumeJobMatchResponse)
+@router.post(
+    "",
+    response_model=ResumeJobMatchResponse,
+    deprecated=True,
+    dependencies=[Depends(add_legacy_match_deprecation_headers)],
+)
 def create_resume_job_match(
     payload: ResumeJobMatchRequest,
     request: Request,
@@ -292,7 +298,12 @@ def create_resume_job_match(
     return result
 
 
-@router.post("/saved-jobs", response_model=BulkSavedJobMatchResponse)
+@router.post(
+    "/saved-jobs",
+    response_model=BulkSavedJobMatchResponse,
+    deprecated=True,
+    dependencies=[Depends(add_legacy_match_deprecation_headers)],
+)
 def create_bulk_saved_job_matches(
     payload: BulkSavedJobMatchRequest,
     matcher: ResumeJobMatcher = Depends(get_resume_job_matcher),

@@ -17,8 +17,17 @@ from app.modules.guest_trials.models import GuestMatchCandidate, GuestMatchResul
 from app.modules.guest_trials.service import purge_expired_guest_trial_batch, purge_expired_guest_trials
 from app.modules.guest_trials.rate_limit import GuestRateLimiter, GuestRateLimitPolicy
 from app.modules.profiles.schemas import ResumeData
-from app.modules.jobs.schemas import IndeedJobSearchResult
-from app.modules.resume_job_match.schemas import ResumeJobMatchResponse
+from app.modules.jobs.models import JobCache
+from app.modules.matching_v2.extraction import CandidateExtractionResult
+from app.modules.matching_v2.qualification import QualificationResult
+from app.modules.matching_v2.repositories import (
+    ArtifactOwner,
+    SpanInput,
+    create_or_get_canonical_source,
+    create_or_get_job_profile,
+)
+from app.modules.matching_v2.schemas import QualificationAssessmentResponse
+from tests.test_matching_v2_qualification import _candidate_artifact, _job_artifact
 import app.modules.guest_trials.router as guest_router
 
 
@@ -43,39 +52,47 @@ class RetryResumeParser(StubResumeParser):
         return super().parse(resume_text)
 
 
-class StubJobSearchProvider:
-    def __init__(self, results: list[IndeedJobSearchResult] | None = None, *, fail_first: bool = False) -> None:
-        self.results = results or []
-        self.fail_first = fail_first
+class StubCandidateProfileExtractor:
+    def __init__(self) -> None:
         self.calls = 0
 
-    def search(self, *, keyword: str, location: str, max_results: int) -> list[IndeedJobSearchResult]:
+    def extract(self, spans) -> CandidateExtractionResult:
         self.calls += 1
-        if self.fail_first and self.calls == 1:
-            raise HTTPException(status_code=504, detail="provider details")
-        assert keyword
-        assert location
-        return self.results[:max_results]
+        return CandidateExtractionResult(
+            artifact=_candidate_artifact(spans[0].span_id),
+            model_id="gpt-5.6-luna",
+            provider_execution_reference=f"candidate-{self.calls}",
+        )
 
 
-class StubResumeJobMatcher:
+class StubQualificationMatcher:
     def __init__(self, *, fail_calls: int = 0) -> None:
         self.fail_calls = fail_calls
         self.calls = 0
 
-    def compare(self, request) -> ResumeJobMatchResponse:
+    def assess(self, qualification_input) -> QualificationResult:
         self.calls += 1
         if self.calls <= self.fail_calls:
             raise HTTPException(status_code=502, detail="matcher details")
-        job_text = request.job_description_text or ""
-        score = 9 if "Senior" in job_text else 6
-        return ResumeJobMatchResponse(
-            match_score=score,
-            summary=f"Candidate evidence supports this {score}/10 match.",
-            matched_skills=["Python"],
-            missing_skills=["Kubernetes"] if score < 9 else [],
-            provider_model_name="stub-matcher",
-            provider_execution_reference=f"match-{self.calls}",
+        evidence_ref = next(iter(qualification_input.allowed_evidence_refs))
+        assessments = []
+        for requirement in qualification_input.job_requirements:
+            assessments.append({
+                "requirement_id": requirement["requirement_id"],
+                "status": "met",
+                "confidence": 0.9,
+                "evidence_refs": [evidence_ref],
+                "alternative_group_refs": [],
+                "alternative_policy_ref": None,
+                "reason": "Direct candidate evidence supports this requirement.",
+                "missing": [],
+            })
+        return QualificationResult(
+            artifact=QualificationAssessmentResponse.model_validate(
+                {"requirement_assessments": assessments}
+            ),
+            model_id="gpt-5.6-luna",
+            provider_execution_reference=f"qualification-{self.calls}",
         )
 
 
@@ -84,8 +101,8 @@ def create_test_client(
     *,
     parser=None,
     guest_rate_policy: GuestRateLimitPolicy | None = None,
-    search_provider=None,
-    matcher=None,
+    candidate_extractor=None,
+    qualification_matcher=None,
 ) -> tuple[TestClient, sessionmaker]:
     engine = create_engine(
         "sqlite://",
@@ -114,10 +131,10 @@ def create_test_client(
         app.dependency_overrides[guest_router.get_guest_resume_parser] = lambda: parser
     if guest_rate_policy is not None:
         app.state.guest_rate_limiter = GuestRateLimiter(guest_rate_policy)
-    if search_provider is not None:
-        app.dependency_overrides[guest_router.get_apify_indeed_client] = lambda: search_provider
-    if matcher is not None:
-        app.dependency_overrides[guest_router.get_guest_resume_job_matcher] = lambda: matcher
+    if candidate_extractor is not None:
+        app.dependency_overrides[guest_router.get_candidate_profile_extractor] = lambda: candidate_extractor
+    if qualification_matcher is not None:
+        app.dependency_overrides[guest_router.get_qualification_matcher] = lambda: qualification_matcher
     app.dependency_overrides[get_db_session] = override_db
     return TestClient(app), session_factory
 
@@ -150,6 +167,46 @@ def _ready_guest(client: TestClient) -> dict:
         json={"keyword": "Backend Engineer", "location": "Remote"},
     ).status_code == 200
     return trial
+
+
+def _cache_job_profile(session_factory, *, title: str = "Senior Software Engineer") -> None:
+    job_text = "Requirements\n- Production Python experience\n- TypeScript or a comparable language"
+    source_ref = "guest_catalog:requirements:0001"
+    with session_factory() as db:
+        cache = JobCache(
+            title=title,
+            company="Catalog Co",
+            source_url="https://jobs.example/catalog-role",
+            source_url_hash="guest-catalog-role",
+            raw_description_text=job_text,
+            job_data={},
+        )
+        db.add(cache)
+        db.flush()
+        source = create_or_get_canonical_source(
+            db,
+            owner=ArtifactOwner.shared(),
+            source_type="job",
+            canonical_text=job_text,
+            text_extraction_version="test.v1",
+            canonicalization_version="canonical-text.v1",
+            spans=[SpanInput(
+                span_id=source_ref,
+                section="requirements",
+                start_utf8_byte=0,
+                end_utf8_byte=len(job_text.encode("utf-8")),
+                excerpt=job_text,
+            )],
+        )
+        artifact = _job_artifact(source_ref).model_copy(update={"title": title, "company": "Catalog Co"})
+        create_or_get_job_profile(
+            db,
+            source=source,
+            artifact=artifact,
+            model_id="gpt-5.6-luna",
+            jobs_cache_id=cache.id,
+        )
+        db.commit()
 
 
 def test_guest_secret_is_returned_once_and_stored_only_as_hash() -> None:
@@ -472,145 +529,94 @@ def test_guest_purge_blocks_untrusted_storage_path_and_reports_missing_file(tmp_
         assert db.scalar(select(GuestTrial).where(GuestTrial.public_id == missing_trial["public_id"])) is None
 
 
-def test_guest_match_returns_only_best_candidate_and_consumes_search_once() -> None:
-    provider = StubJobSearchProvider(
-        [
-            IndeedJobSearchResult(
-                external_id="1",
-                title="Backend Engineer",
-                company="Example One",
-                location="Remote",
-                source_url="https://jobs.example/1",
-                raw_description_text="Build Python services.",
-            ),
-            IndeedJobSearchResult(
-                external_id="2",
-                title="Senior Backend Engineer",
-                company="Example Two",
-                location="Seattle, WA",
-                source_url="https://jobs.example/2",
-                raw_description_text="Senior engineer building Python services.",
-            ),
-        ]
+def test_guest_match_uses_cached_job_profile_without_provider_search() -> None:
+    extractor = StubCandidateProfileExtractor()
+    matcher = StubQualificationMatcher()
+    client, session_factory = create_test_client(
+        candidate_extractor=extractor,
+        qualification_matcher=matcher,
     )
-    matcher = StubResumeJobMatcher()
-    client, session_factory = create_test_client(search_provider=provider, matcher=matcher)
+    _cache_job_profile(session_factory)
     trial = _ready_guest(client)
-    headers = {**_headers(trial), "Idempotency-Key": "guest-search-1"}
+    headers = {**_headers(trial), "Idempotency-Key": "guest-catalog-1"}
 
     response = client.post("/api/v1/guest-trials/current/match", headers=headers)
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "result_ready"
-    assert body["provider_search_state"] == "consumed"
-    assert body["result"]["title"] == "Senior Backend Engineer"
-    assert body["result"]["match_score"] == 9
-    assert body["result"]["job_description"] == "Senior engineer building Python services."
-    assert body["result"]["result_context"] == "Best usable match from this guest search"
+    assert body["provider_search_state"] == "available"
+    assert body["result"]["title"] == "Senior Software Engineer"
+    assert body["result"]["match_score"] == 10
+    assert "Production Python experience" in body["result"]["job_description"]
+    assert body["result"]["source_url"] is None
+    assert body["result"]["result_context"] == "Best matching profile from the cached job catalog"
     assert "candidates" not in body
-    assert provider.calls == 1
-    assert matcher.calls == 2
+    assert extractor.calls == 1
+    assert matcher.calls == 1
 
     repeated = client.post("/api/v1/guest-trials/current/match", headers=headers)
     assert repeated.status_code == 200
     assert repeated.json()["result"] == body["result"]
-    assert provider.calls == 1
-    assert matcher.calls == 2
+    assert extractor.calls == 1
+    assert matcher.calls == 1
     with session_factory() as db:
-        assert len(list(db.scalars(select(GuestMatchCandidate)).all())) == 2
+        candidate = db.scalar(select(GuestMatchCandidate))
+        assert candidate is not None
+        assert candidate.job_profile_version_id is not None
         assert len(list(db.scalars(select(GuestMatchResult)).all())) == 1
-        attempt = db.scalar(select(GuestProviderAttempt))
-        assert attempt is not None
-        assert attempt.state == "consumed"
+        result = db.scalar(select(GuestMatchResult))
+        assert result is not None
+        assert result.candidate_profile_version_id is not None
+        assert result.qualification_assessment_id is not None
+        assert db.scalar(select(GuestProviderAttempt)) is None
 
 
-def test_failed_guest_search_releases_allowance_and_can_retry() -> None:
-    provider = StubJobSearchProvider(
-        [
-            IndeedJobSearchResult(
-                title="Backend Engineer",
-                company="Example",
-                source_url="https://jobs.example/retry",
-                raw_description_text="Build Python services.",
-            )
-        ],
-        fail_first=True,
+def test_guest_match_requires_cached_job_profile() -> None:
+    client, _session_factory = create_test_client(
+        candidate_extractor=StubCandidateProfileExtractor(),
+        qualification_matcher=StubQualificationMatcher(),
     )
-    client, session_factory = create_test_client(search_provider=provider, matcher=StubResumeJobMatcher())
     trial = _ready_guest(client)
-    headers = {**_headers(trial), "Idempotency-Key": "retryable-search"}
+    headers = {**_headers(trial), "Idempotency-Key": "empty-catalog"}
 
     failed = client.post("/api/v1/guest-trials/current/match", headers=headers)
     assert failed.status_code == 503
-    assert "provider details" not in failed.text
     failed_status = client.get("/api/v1/guest-trials/current/match", headers=_headers(trial)).json()
-    assert failed_status["provider_search_state"] == "released"
-    assert failed_status["retryable"] is True
-
-    retried = client.post("/api/v1/guest-trials/current/match", headers=headers)
-    assert retried.status_code == 200
-    assert retried.json()["provider_search_state"] == "consumed"
-    assert provider.calls == 2
-    with session_factory() as db:
-        attempts = list(db.scalars(select(GuestProviderAttempt)).all())
-        assert len(attempts) == 1
-        assert attempts[0].state == "consumed"
+    assert failed_status["provider_search_state"] == "available"
+    assert failed_status["error_code"] == "cached_job_catalog_empty"
+    assert failed_status["retryable"] is False
 
 
-def test_matcher_failure_reuses_consumed_candidates_without_new_search() -> None:
-    provider = StubJobSearchProvider(
-        [
-            IndeedJobSearchResult(
-                title="Backend Engineer",
-                company="Example",
-                source_url="https://jobs.example/matcher-retry",
-                raw_description_text="Build Python services.",
-            )
-        ]
+def test_matcher_failure_reuses_cached_profiles_without_search() -> None:
+    extractor = StubCandidateProfileExtractor()
+    matcher = StubQualificationMatcher(fail_calls=1)
+    client, session_factory = create_test_client(
+        candidate_extractor=extractor,
+        qualification_matcher=matcher,
     )
-    matcher = StubResumeJobMatcher(fail_calls=1)
-    client, _session_factory = create_test_client(search_provider=provider, matcher=matcher)
+    _cache_job_profile(session_factory)
     trial = _ready_guest(client)
     headers = {**_headers(trial), "Idempotency-Key": "matcher-retry"}
 
     failed = client.post("/api/v1/guest-trials/current/match", headers=headers)
     assert failed.status_code == 503
     status_after_failure = client.get("/api/v1/guest-trials/current/match", headers=_headers(trial)).json()
-    assert status_after_failure["provider_search_state"] == "consumed"
+    assert status_after_failure["provider_search_state"] == "available"
     assert status_after_failure["error_code"] == "matcher_unavailable"
 
     retried = client.post("/api/v1/guest-trials/current/match", headers=headers)
     assert retried.status_code == 200
-    assert retried.json()["result"]["match_score"] == 6
-    assert provider.calls == 1
+    assert retried.json()["result"]["match_score"] == 10
+    assert extractor.calls == 1
     assert matcher.calls == 2
 
 
-def test_unusable_guest_search_response_does_not_consume_trial() -> None:
-    provider = StubJobSearchProvider(
-        [IndeedJobSearchResult(title="Incomplete listing", company="Example", source_url=None)]
-    )
-    client, session_factory = create_test_client(search_provider=provider, matcher=StubResumeJobMatcher())
-    trial = _ready_guest(client)
-    response = client.post(
-        "/api/v1/guest-trials/current/match",
-        headers={**_headers(trial), "Idempotency-Key": "unusable-search"},
-    )
-
-    assert response.status_code == 503
-    status_body = client.get("/api/v1/guest-trials/current/match", headers=_headers(trial)).json()
-    assert status_body["provider_search_state"] == "released"
-    assert status_body["error_code"] == "no_usable_jobs"
-    with session_factory() as db:
-        attempt = db.scalar(select(GuestProviderAttempt))
-        assert attempt is not None
-        assert attempt.state == "released"
-        assert attempt.failure_category == "unusable_response"
-
-
 def test_guest_match_requires_candidate_evidence_and_criteria() -> None:
-    provider = StubJobSearchProvider()
-    client, _session_factory = create_test_client(search_provider=provider, matcher=StubResumeJobMatcher())
+    extractor = StubCandidateProfileExtractor()
+    client, _session_factory = create_test_client(
+        candidate_extractor=extractor,
+        qualification_matcher=StubQualificationMatcher(),
+    )
     trial = _create_trial(client)
     assert client.put(
         "/api/v1/guest-trials/current/profile",
@@ -622,4 +628,4 @@ def test_guest_match_requires_candidate_evidence_and_criteria() -> None:
         headers={**_headers(trial), "Idempotency-Key": "not-ready"},
     )
     assert response.status_code == 422
-    assert provider.calls == 0
+    assert extractor.calls == 0

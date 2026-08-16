@@ -73,8 +73,10 @@ class JobListImportRequest(BaseModel):
 
     @model_validator(mode="after")
     def require_resume_when_matching(self) -> JobListImportRequest:
-        if self.run_matching and not self.resume_profile_id:
-            raise ValueError("resume_profile_id is required when run_matching is true.")
+        if self.run_matching:
+            raise ValueError(
+                "run_matching is deprecated; import the job, create its Job Profile, then use the V2 match API."
+            )
         return self
 
 
@@ -215,8 +217,10 @@ class IndeedJobSearchImportRequest(BaseModel):
 
     @model_validator(mode="after")
     def require_resume_when_matching(self) -> IndeedJobSearchImportRequest:
-        if self.run_matching and not self.resume_profile_id:
-            raise ValueError("resume_profile_id is required when run_matching is true.")
+        if self.run_matching:
+            raise ValueError(
+                "run_matching is deprecated; import the job, create its Job Profile, then use the V2 match API."
+            )
         return self
 
 

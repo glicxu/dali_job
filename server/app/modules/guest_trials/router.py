@@ -5,8 +5,8 @@ from typing import cast
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.db.session import get_db_session
 from app.core.provider_ops import run_provider_call
+from app.db.session import get_db_session
 from app.modules.auth.dependencies import AuthenticatedIdentity
 from app.modules.documents.storage import (
     extract_redacted_text,
@@ -18,13 +18,10 @@ from app.modules.documents.storage import (
 from app.modules.guest_trials.dependencies import get_current_guest_trial
 from app.modules.guest_trials.models import GuestDocument, GuestResumeProfile, GuestSearchCriterion, GuestTrial
 from app.modules.guest_trials.matching import (
-    MAX_GUEST_CANDIDATES,
-    match_retained_candidates,
+    begin_cached_match,
     match_status,
-    release_provider_search,
     require_ready_inputs,
-    reserve_provider_search,
-    retain_and_consume_candidates,
+    run_cached_profile_match,
 )
 from app.modules.guest_trials.schemas import (
     GuestCriteriaResponse,
@@ -50,8 +47,9 @@ from app.modules.guest_trials.service import (
 from app.modules.guest_trials.storage import delete_guest_document_file, write_guest_document
 from app.modules.guest_trials.rate_limit import enforce_guest_creation_limit, enforce_guest_parse_limit
 from app.modules.profiles.resume_import import OpenAIResumeProfileParser, ResumeProfileParser
-from app.modules.job_search.apify_indeed import ApifyIndeedClient, get_apify_indeed_client
-from app.modules.resume_job_match.service import OpenAIResumeJobMatcher, ResumeJobMatcher
+from app.modules.matching_v2.extraction import CandidateProfileExtractor
+from app.modules.matching_v2.qualification import QualificationMatcher
+from app.modules.matching_v2.router import get_candidate_profile_extractor, get_qualification_matcher
 from app.modules.profiles.readiness import evaluate_profile_readiness
 from app.modules.profiles.schemas import ProfileReadinessResponse, ResumeData
 
@@ -71,21 +69,6 @@ class LazyGuestResumeParser:
 
 def get_guest_resume_parser(request: Request) -> ResumeProfileParser:
     return cast(ResumeProfileParser, LazyGuestResumeParser(request.app.state.runtime.openai_model))
-
-
-class LazyGuestResumeJobMatcher:
-    def __init__(self, model: str) -> None:
-        self.model = model
-        self._delegate: OpenAIResumeJobMatcher | None = None
-
-    def compare(self, match_request):
-        if self._delegate is None:
-            self._delegate = OpenAIResumeJobMatcher(model=self.model)
-        return self._delegate.compare(match_request)
-
-
-def get_guest_resume_job_matcher(request: Request) -> ResumeJobMatcher:
-    return cast(ResumeJobMatcher, LazyGuestResumeJobMatcher(request.app.state.runtime.openai_model))
 
 
 def _profile_response(profile: GuestResumeProfile) -> GuestProfileResponse:
@@ -309,8 +292,8 @@ def get_current_match(
     response_model=GuestMatchStatusResponse,
     summary="Run an immediate guest match",
     description=(
-        "Searches and matches synchronously in the trial request; the guest does not wait "
-        "for the weekly automation scheduler. Returns only the best usable match."
+        "Matches synchronously against the existing cached Job Profile catalog; no external "
+        "job query is started and no provider-search allowance is consumed."
     ),
 )
 def create_current_match(
@@ -318,8 +301,8 @@ def create_current_match(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     trial: GuestTrial = Depends(get_current_guest_trial),
     db: Session = Depends(get_db_session),
-    provider: ApifyIndeedClient = Depends(get_apify_indeed_client),
-    matcher: ResumeJobMatcher = Depends(get_guest_resume_job_matcher),
+    candidate_extractor: CandidateProfileExtractor = Depends(get_candidate_profile_extractor),
+    matcher: QualificationMatcher = Depends(get_qualification_matcher),
 ) -> GuestMatchStatusResponse:
     normalized_key = (idempotency_key or "").strip()
     if not normalized_key or len(normalized_key) > 64:
@@ -331,61 +314,21 @@ def create_current_match(
     if existing_status.result is not None:
         return existing_status
     profile, criterion = require_ready_inputs(db, trial)
-    operation, attempt, needs_search = reserve_provider_search(
-        db,
-        trial,
-        idempotency_key=normalized_key,
-    )
+    operation = begin_cached_match(db, trial)
     db.commit()
-
-    if needs_search:
-        assert attempt is not None
-        identity = AuthenticatedIdentity(
-            external_user_id=f"guest:{trial.public_id}",
-            email="guest@invalid.local",
-            display_name="Guest trial",
-            provider="guest",
+    try:
+        run_cached_profile_match(
+            request,
+            db,
+            trial,
+            operation,
+            profile,
+            criterion,
+            candidate_extractor,
+            matcher,
         )
-        try:
-            search_results = run_provider_call(
-                request,
-                identity,
-                provider="apify",
-                feature="guest_job_search",
-                operation=lambda: provider.search(
-                    keyword=criterion.keyword,
-                    location=criterion.location,
-                    max_results=MAX_GUEST_CANDIDATES,
-                ),
-                usage_units=len,
-            )
-        except HTTPException as exc:
-            release_provider_search(
-                db,
-                trial,
-                operation,
-                attempt,
-                error_code="search_provider_failure",
-                failure_category=f"http_{exc.status_code}",
-            )
-            db.commit()
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Job search is temporarily unavailable. Retry shortly.",
-            ) from exc
-        candidates = retain_and_consume_candidates(db, trial, operation, attempt, search_results)
+    except HTTPException:
         db.commit()
-        if not candidates:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="No usable jobs were returned. Adjust the role or location and retry.",
-            )
-
-    result = match_retained_candidates(request, db, trial, operation, profile, matcher)
+        raise
     db.commit()
-    if result is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Matching is temporarily unavailable. Retry without starting another search.",
-        )
     return match_status(db, trial)

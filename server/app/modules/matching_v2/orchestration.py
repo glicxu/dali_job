@@ -13,6 +13,7 @@ from app.modules.matching_v2.repositories import ArtifactOwner
 STAGE_DEFINITIONS = (
     ("candidate_profile", 3),
     ("job_profile", 3),
+    ("job_family_pre_match", 1),
     ("qualification", 2),
     ("preference", 1),
     ("eligibility", 1),
@@ -40,6 +41,8 @@ def create_or_get_operation(
     request_hash: str,
     request_payload: dict,
     mode: str,
+    operation_type: str = "match",
+    stage_definitions: tuple[tuple[str, int], ...] = STAGE_DEFINITIONS,
 ) -> tuple[MatchingOperation, bool]:
     workspace_id, user_id = _authenticated(owner)
     existing = db.scalar(
@@ -56,6 +59,7 @@ def create_or_get_operation(
 
     operation = MatchingOperation(
         public_id=f"mop_{uuid.uuid4().hex}",
+        operation_type=operation_type,
         workspace_id=workspace_id,
         user_id=user_id,
         idempotency_key=idempotency_key,
@@ -67,7 +71,7 @@ def create_or_get_operation(
     )
     db.add(operation)
     db.flush()
-    for ordinal, (stage_name, max_attempts) in enumerate(STAGE_DEFINITIONS, start=1):
+    for ordinal, (stage_name, max_attempts) in enumerate(stage_definitions, start=1):
         db.add(
             MatchingOperationStage(
                 matching_operation_id=operation.id,
@@ -242,7 +246,7 @@ def complete_operation(
     db: Session,
     operation: MatchingOperation,
     *,
-    match_result_id: int,
+    match_result_id: int | None = None,
 ) -> None:
     now = utc_now()
     operation.match_result_id = match_result_id

@@ -60,6 +60,9 @@ This plan covers implementation and limited rollout. General availability still 
 5. Treat software engineering on the individual-contributor track as the only approved public scoring policy in V1.
 6. Use feature flags for shadow execution, internal-super access, guest access, scheduled matching, and legacy read compatibility.
 7. Land migrations as additive changes first; defer legacy-column removal to a separately approved cleanup.
+8. Treat external search as ingestion only: provider result → active cached job → immutable Job Profile →
+   matching. No guest, automation, manual, evaluation, or rerun caller may send raw provider job text
+   directly to either the legacy or V2 matcher at cutover.
 
 ## 3. Current-System Integration Points
 
@@ -68,7 +71,7 @@ This plan covers implementation and limited rollout. General availability still 
 | `server/app/modules/resume_job_match/` | Single-call 0–10 matching | Retain as `legacy`; introduce a new `matching_v2` module and a compatibility adapter. |
 | `server/app/modules/profiles/` | Resume profiles and readiness | Create or resolve Candidate Profile versions after readiness succeeds. |
 | `server/app/modules/jobs/` | Parsed and cached jobs | Attach immutable Job Profile versions to cached job content hashes. |
-| `server/app/modules/guest_trials/` | Immediate account-free trial | Evaluate the first usable unique provider result through V2 when the guest flag is enabled. |
+| `server/app/modules/guest_trials/` | Immediate account-free trial | Rank and evaluate only existing active cached Job Profiles through V2; never start an external job query. |
 | `server/app/modules/automation/` | Weekly search, worker, quota, persistence | Replace direct legacy matcher calls with the versioned V2 orchestrator behind a flag. |
 | `server/app/modules/notifications/` | Inbox and daily digest | Render V2 recommendation, evidence, and needs-information results without score fabrication. |
 | `mobile/lib/src/matching/` | Mobile matching API models | Add nullable V2 scores, coverage, recommendation, questions, and policy metadata. |
@@ -314,25 +317,30 @@ Implementation checkpoint:
   silently invokes either extractor.
 - The deterministic pre-step immediately before detailed matching is named **Job Family Pre-Match**. It
   consumes the Candidate Profile, revisioned Matching Intent, and Job Profile general family/track/level;
-  it selects the candidate career context and persists compatibility dimensions and reason codes.
+  it selects the candidate career context and persists compatibility dimensions and reason codes. This
+  slice is now implemented by migration `20260816_0050`, `job-family-pre-match.v1`, owner-scoped intent
+  APIs, immutable pre-match artifacts, and the dedicated orchestration stage.
 - Added owner-scoped `matching_operations` and `matching_operation_stages` persistence with correlation
   IDs, request hashes, leases, heartbeats, per-stage attempts, stable errors, input/output artifact IDs,
   cache markers, provider-usage fields, policy versions, and timestamps.
+- Generalized the operation contract in migration `20260816_0051` so Candidate Profile and Job Profile
+  cache misses return `202` and run as leased, pollable, retryable extraction operations. Completed cache
+  hits retain their direct `200` profile responses, and operation payloads contain source/artifact IDs
+  rather than resume text or job-description text.
 - Added match creation/retrieval, operation polling, explicit retry, and rerun API contracts.
 - Matching retries resume from the first incomplete stage. Completed Candidate Profile and Job Profile
-  dependencies are reused, and a failed Qualification Assessment retry does not rerun either extraction.
+  dependencies and completed Job Family Pre-Match are reused, and a failed Qualification Assessment retry
+  does not rerun either extraction or deterministic preselection.
 - Identical owner/idempotency/input tuples return the original operation. Reusing a key with different
   artifact or revision inputs returns `409 IDEMPOTENCY_KEY_REUSED`.
 - Routine operation responses and logs contain artifact IDs and stable diagnostics, not resume text, job
   text, prompts, contact data, or eligibility facts.
+- Legacy raw-text single and bulk matching routes are marked deprecated in OpenAPI and emit standard
+  `Deprecation`, `Sunset`, `Warning`, and successor `Link` headers. External list/Indeed import requests
+  reject `run_matching=true`; ingestion must complete before Job Profile extraction and V2 matching.
 
 Remaining Phase 6 work:
 
-- Add revisioned Matching Intent and immutable Job Family Pre-Match schemas, persistence, deterministic
-  policy, APIs, and orchestration stage. Include the intent revision and pre-match policy/artifact identity
-  in qualification cache keys and full-request idempotency.
-- Move independent Candidate Profile and Job Profile extraction onto the same durable asynchronous
-  operation/lease contract while retaining their direct cache-hit responses.
 - Enforce the 45-second immediate-response boundary and return a still-running operation as `202`
   without waiting for a long provider call.
 - Add durable worker pickup for pending and expired-lease operations instead of relying only on the
@@ -363,23 +371,30 @@ Dependencies: Phases 1–5.
 
 ### Phase 7: Guest Trial Vertical Slice
 
-**Outcome:** A guest receives one immediate evidence-based result from the first usable unique job.
+**Outcome:** A guest receives one immediate evidence-based result selected from the existing quality-controlled cached Job Profile catalog.
 
 Work:
 
-- Replace the current best-of-retained-candidates selection with the approved first-usable-result behavior when the V2 guest flag is enabled.
-- Reuse Candidate Profile extraction completed during profile readiness.
-- Run no more than one Job Profile extraction and one Qualification Assessment for the returned job.
-- Preserve current provider-search reservation and no-charge-on-provider-failure behavior.
-- Return inline when complete; otherwise return the operation and poll immediately.
-- Render null-score needs-information results without presenting them as failures.
+- Remove external job search, provider-search reservation, and the legacy raw-text matcher from the guest match path.
+- Create or reuse the guest-owned Candidate Profile from the confirmed resume evidence.
+- Select only active cached jobs that already have immutable Job Profiles; never extract a new Job Profile in the trial request.
+- Rank the cached catalog deterministically by candidate job family, track, level, target-role title overlap,
+  location compatibility, approved scoring-policy availability, and extraction-quality warnings.
+- Run one Qualification Assessment for the highest-ranked compatible cached Job Profile.
+- Persist the Candidate Profile, Job Profile, and Qualification Assessment references with the guest result.
+- Keep `provider_search_state` as a temporary response-compatibility field, fixed at `available`; cached matching does not consume weekly search quota or trial allowance.
+- Return inline when complete; otherwise preserve the existing operation polling contract.
+- Render the server-cached job description in-app and do not expose an outbound source URL in the guest result.
 - Preserve guest-to-account claim mapping for source, profile, criteria, result, and immutable artifact references.
 
 Acceptance criteria:
 
-- The guest path does not wait for weekly automation.
-- It returns the first usable unique provider result regardless of score.
-- Provider failure does not consume the trial allowance.
+- The guest path does not wait for weekly automation and starts no external job query.
+- Every trial candidate references an active cached job and immutable Job Profile before qualification.
+- A trial creates no provider-search attempt and consumes no Free/Starter/Plus weekly search quota.
+- Catalog selection is deterministic for the same Candidate Profile, criteria, catalog state, and policy versions.
+- The returned result references the guest Candidate Profile and Qualification Assessment used to produce it.
+- A qualification retry reuses the same cached Candidate Profile and Job Profile.
 - The guest path meets the 45-second inline boundary and 90-second hard operation deadline.
 - Guest deletion and expiration remove all private matching artifacts.
 
@@ -392,6 +407,8 @@ Dependencies: Phase 6 and the existing guest-trial foundation.
 Work:
 
 - Adapt `automation/executor.py` to call the V2 orchestrator behind `matching_v2_automation_enabled`.
+- Remove `run_matching` behavior from external import/search handlers. Those handlers end after cache
+  ingestion and enqueue Job Profile extraction; matching is a separate consumer of completed profiles.
 - Preserve Free/Starter/Plus weekly provider-search limits of 1/3/5 and unlimited internal-super access subject to operational limits.
 - Skip previously seen jobs and unchanged Candidate Profile/Job Profile pairs before qualification calls.
 - Persist provisional results in the private inbox under “Needs more information.”
@@ -401,6 +418,8 @@ Work:
 Acceptance criteria:
 
 - Failed or unusable provider searches consume no quota.
+- Every automated match references an active cached job and a persisted Job Profile; no raw-description
+  payload is accepted by the matching operation.
 - A usable provider response consumes one search unit even when downstream work must retry.
 - Each successful search contributes at most one new digest item.
 - Duplicate suppression occurs before a repeated qualification call or notification.

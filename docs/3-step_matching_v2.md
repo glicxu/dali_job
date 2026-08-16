@@ -19,13 +19,22 @@ User preferences and user-confirmed eligibility facts follow separate determinis
 
 The model never owns a numerical score or final recommendation.
 
+External job providers are ingestion sources only. Every fetched job must first be persisted as an active
+cached job, then converted into an immutable Job Profile. Qualification, preference, eligibility, scoring,
+ranking, notification, and rerun workflows accept only that cached Job Profile identity; they never match
+a Candidate Profile or raw resume directly against provider output, a URL response, or raw job text.
+The legacy raw-text matching endpoints are deprecated during migration and must not receive new callers.
+External import APIs reject combined `run_matching` requests. Guest and scheduled legacy callers are
+removed as part of their V2 vertical-slice cutovers before any public V2 return path is enabled.
+
 Every model call uses strict JSON Schema structured output. The schema sent to the model is a purpose-built response schema, not the complete persisted artifact schema. Application-owned identifiers, hashes, versions, timestamps, execution metadata, and user-confirmation state are attached only after model output passes structural and semantic validation.
 
 ```mermaid
 flowchart LR
     R[Resume] --> CE[Candidate extractor]
     CE --> CP[Candidate Profile]
-    J[Raw job] --> JE[Job cleaner and extractor]
+    X[External job source] --> JC[Active cached job]
+    JC --> JE[Job cleaner and extractor]
     JE --> JP[Job Profile]
     CP --> QM[Qualification matcher]
     JP --> QM
@@ -1520,6 +1529,10 @@ Primary-selection request:
 
 Success returns the composed Candidate Profile view and revision 5. A stale revision returns `409 CAREER_SELECTION_REVISION_CONFLICT`. The selected career profile must belong to the Candidate Profile or the API returns `422 UNKNOWN_CAREER_PROFILE`.
 
+Candidate Profile creation returns `200` with the immutable profile for a completed cache hit. A cache
+miss returns `202` with a leased extraction operation; callers poll the shared matching-operation resource
+and retrieve the profile ID from the completed stage.
+
 A correction identifies a field path, replacement value, expected Candidate Profile version, and supporting existing span IDs. It creates a new immutable Candidate Profile version with `correction_source: user`; it never mutates an extraction artifact. Corrections without support in the current source direct the user to upload or enter a revised resume. Regeneration creates a new version under the current extraction policy and preserves the previous version for match-history reproduction.
 
 ### 25.2 Matching Intent
@@ -1551,7 +1564,8 @@ POST /api/v1/jobs/{job_id}/job-profile
 GET  /api/v1/job-profiles/{job_profile_id}
 ```
 
-Creation returns `200` for a cache hit or completed inline extraction and `202` with an operation resource when processing continues asynchronously.
+Creation returns `200` for a completed cache hit. A cache miss returns `202` with a leased, pollable,
+retryable extraction operation.
 
 ### 25.5 Match creation and retrieval
 

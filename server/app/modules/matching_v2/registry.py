@@ -457,6 +457,48 @@ DEFAULT_REGISTRY.register(
 
 DEFAULT_REGISTRY.register(
     RegistryEntry(
+        artifact_type="job_family_pre_match_policy",
+        version="job-family-pre-match.v1",
+        content={
+            "compatible_tracks": {
+                "individual_contributor": ["architect", "research"],
+                "architect": ["individual_contributor"],
+                "engineering_management": ["technical_program", "program"],
+                "research": ["individual_contributor"],
+                "technical_program": ["engineering_management", "program"],
+                "technical_education": ["individual_contributor"],
+                "product": ["program", "technical_program"],
+                "program": ["product", "technical_program", "engineering_management"],
+            },
+            "adjacent_role_families": {
+                "software_engineering": ["machine_learning_engineering", "embedded_systems", "financial_technology"],
+                "data_science": ["machine_learning_engineering", "financial_technology"],
+                "machine_learning_engineering": ["data_science", "software_engineering"],
+                "hardware_engineering": ["embedded_systems"],
+                "embedded_systems": ["hardware_engineering", "software_engineering"],
+                "financial_technology": ["software_engineering", "data_science"],
+                "product_management": ["technical_program_management"],
+                "technical_program_management": ["product_management"],
+            },
+            "transferable_role_families": {
+                "software_engineering": ["data_science", "hardware_engineering"],
+                "data_science": ["software_engineering"],
+                "hardware_engineering": ["software_engineering"],
+                "product_management": ["software_engineering"],
+                "technical_program_management": ["software_engineering"],
+                "technical_education": ["software_engineering"],
+            },
+            "level_order": ["student_or_intern", "entry", "junior", "mid", "senior", "staff", "principal"],
+            "selection_order": [
+                "explicit_selected_profile", "intent_family", "intent_track", "job_track",
+                "intent_level_distance", "evidence_coverage", "confidence", "durable_id",
+            ],
+        },
+    )
+)
+
+DEFAULT_REGISTRY.register(
+    RegistryEntry(
         artifact_type="qualification_policy",
         version="qualification-policy.v1",
         content={

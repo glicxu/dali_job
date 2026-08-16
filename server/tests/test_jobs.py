@@ -758,7 +758,7 @@ def test_analyze_saved_job_generates_missing_job_data(monkeypatch) -> None:
     assert client.get("/api/v1/jobs").json()[0]["job_data"]["summary"] == "Build backend services."
 
 
-def test_bulk_job_list_import_matching_uses_selected_resume_profile(monkeypatch) -> None:
+def test_bulk_job_list_import_rejects_deprecated_direct_matching(monkeypatch) -> None:
     client = create_test_client()
     client.app.dependency_overrides[jobs_router.get_resume_job_matcher] = lambda: FakeBulkImportMatcher()
     monkeypatch.setattr(
@@ -800,10 +800,5 @@ def test_bulk_job_list_import_matching_uses_selected_resume_profile(monkeypatch)
         },
     )
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["failed"] == []
-    assert payload["imported"][0]["match_score"] == 8
-    jobs = client.get("/api/v1/jobs").json()
-    assert jobs[0]["matched_resume_profile_id"] == profile_response.json()["id"]
-    assert jobs[0]["match_data"]["summary"] == "Strong backend match."
+    assert response.status_code == 422
+    assert "run_matching is deprecated" in response.text

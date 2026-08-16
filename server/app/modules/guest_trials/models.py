@@ -185,6 +185,12 @@ class GuestMatchCandidate(Base):
     operation_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("guest_match_operations.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    job_profile_version_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("matching_job_profile_versions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     provider_rank: Mapped[int] = mapped_column(Integer, nullable=False)
     job_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
     match_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -210,6 +216,18 @@ class GuestMatchResult(Base):
     )
     candidate_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("guest_match_candidates.id", ondelete="CASCADE"), nullable=False
+    )
+    candidate_profile_version_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("matching_candidate_profile_versions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    qualification_assessment_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("matching_qualification_assessments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     profile_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
     job_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)

@@ -306,12 +306,8 @@ def test_indeed_search_import_can_match_selected_resume_profile() -> None:
         },
     )
 
-    assert import_response.status_code == 200
-    payload = import_response.json()
-    assert payload["failed"] == []
-    assert payload["imported"][0]["match_score"] == 8
-    jobs = client.get("/api/v1/jobs").json()
-    assert jobs[0]["match_data"]["summary"] == "Strong backend match."
+    assert import_response.status_code == 422
+    assert "run_matching is deprecated" in import_response.text
 
 
 def test_quick_find_caches_matches_then_saves_only_selected_job() -> None:

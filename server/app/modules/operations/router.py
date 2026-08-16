@@ -45,6 +45,7 @@ from app.modules.operations.schemas import (
     ResumeParseRetryRequest,
 )
 from app.modules.operations.service import execute_operation, session_factory_for
+from app.modules.matching_v2.legacy_deprecation import add_legacy_match_deprecation_headers
 from app.modules.resume_job_match.schemas import BulkSavedJobMatchRequest, ResumeJobMatchRequest
 from app.modules.scout.prompts import PROMPT_VERSION as ASK_SCOUT_PROMPT_VERSION
 from app.modules.scout.schemas import AskScoutRequest
@@ -300,7 +301,13 @@ def enqueue_job_analyze(
     )
 
 
-@router.post("/resume-job-match", response_model=ManagedOperationResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/resume-job-match",
+    response_model=ManagedOperationResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    deprecated=True,
+    dependencies=[Depends(add_legacy_match_deprecation_headers)],
+)
 def enqueue_resume_job_match(
     payload: ResumeJobMatchRequest,
     request: Request,
@@ -324,7 +331,13 @@ def enqueue_resume_job_match(
     )
 
 
-@router.post("/bulk-resume-job-match", response_model=ManagedOperationResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/bulk-resume-job-match",
+    response_model=ManagedOperationResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    deprecated=True,
+    dependencies=[Depends(add_legacy_match_deprecation_headers)],
+)
 def enqueue_bulk_resume_job_match(
     payload: BulkSavedJobMatchRequest,
     request: Request,

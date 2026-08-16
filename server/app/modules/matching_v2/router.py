@@ -4,7 +4,7 @@ import hashlib
 import re
 from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
@@ -22,6 +22,9 @@ from app.modules.matching_v2.api_schemas import (
     JobProfileSourceResponse,
     JobProfileView,
     JobRequirementView,
+    JobFamilyPreMatchView,
+    MatchingIntentView,
+    MatchingIntentWrite,
     EligibilityRevisionUpdate,
     EligibilityRevisionView,
     MatchResultCreateRequest,
@@ -31,6 +34,7 @@ from app.modules.matching_v2.api_schemas import (
     QualificationAssessmentCreateRequest,
     QualificationAssessmentView,
     QualificationCareerContextView,
+    MatchingOperationView,
 )
 from app.modules.matching_v2.canonical import CANONICALIZATION_VERSION, build_evidence_spans, canonicalize_text
 from app.modules.matching_v2.extraction import (
@@ -48,10 +52,15 @@ from app.modules.matching_v2.models import (
     CanonicalSource,
     JobProfileVersion,
     JobRequirement,
+    JobFamilyPreMatch,
+    MatchingIntent,
     QualificationAssessment,
     EligibilityAssessment,
     PreferenceAssessment,
+    MatchingOperation,
 )
+from app.modules.matching_v2.extraction_operations import execute_extraction_operation
+from app.modules.matching_v2.orchestration import create_or_get_operation
 from app.modules.matching_v2.phase5 import (
     create_eligibility_revision,
     create_or_get_match_result,
@@ -61,6 +70,8 @@ from app.modules.matching_v2.phase5 import (
     latest_eligibility_revision,
     latest_preference_revision,
 )
+from app.modules.matching_v2.pre_match import create_matching_intent, get_job_family_pre_match, get_matching_intent
+from app.modules.matching_v2.registry import DEFAULT_REGISTRY, content_sha256
 from app.modules.matching_v2.repositories import (
     ArtifactOwner,
     ArtifactOwnershipError,
@@ -88,8 +99,63 @@ from app.modules.matching_v2.qualification import (
 )
 from app.modules.jobs import repository as job_repository
 from app.modules.profiles import repository as profile_repository
+from app.modules.operations.service import session_factory_for
 
 router = APIRouter(tags=["candidate-profiles"])
+
+
+def _create_extraction_operation(
+    db: Session,
+    *,
+    owner: ArtifactOwner,
+    operation_type: str,
+    payload: dict,
+) -> MatchingOperation:
+    policy_hashes = {
+        f"{entry.artifact_type}:{entry.version}": entry.content_hash
+        for entry in DEFAULT_REGISTRY.entries()
+    }
+    request_hash = content_sha256({"operation_type": operation_type, "payload": payload, "policies": policy_hashes})
+    operation, _ = create_or_get_operation(
+        db,
+        owner=owner,
+        idempotency_key=f"{operation_type}:{request_hash.removeprefix('sha256:')}",
+        request_hash=request_hash,
+        request_payload=payload,
+        mode="asynchronous",
+        operation_type=operation_type,
+        stage_definitions=((operation_type, 2),),
+    )
+    return operation
+
+
+def _execute_extraction_background(
+    session_factory,
+    operation_id: int,
+    candidate_extractor: CandidateProfileExtractor | None,
+    job_extractor: JobProfileExtractor | None,
+) -> None:
+    with session_factory() as db:
+        operation = db.get(MatchingOperation, operation_id)
+        if operation is None or operation.status != "pending":
+            return
+        execute_extraction_operation(
+            db,
+            operation,
+            candidate_extractor=candidate_extractor,
+            job_extractor=job_extractor,
+        )
+
+
+def _extraction_operation_view(db: Session, operation: MatchingOperation) -> MatchingOperationView:
+    # Local import avoids a router import cycle while keeping one operation response contract.
+    from app.modules.matching_v2.orchestration_router import _operation_view
+
+    return _operation_view(
+        db,
+        operation,
+        ArtifactOwner.authenticated(workspace_id=operation.workspace_id, user_id=operation.user_id),
+    )
 
 
 def get_candidate_profile_extractor(
@@ -148,15 +214,17 @@ def get_qualification_matcher(
 
 @router.post(
     "/resumes/{resume_profile_id}/candidate-profile",
-    response_model=CandidateProfileView,
+    response_model=CandidateProfileView | MatchingOperationView,
 )
 def create_candidate_profile(
     resume_profile_id: int,
     request: Request,
+    response: Response,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db_session),
     identity: AuthenticatedIdentity = Depends(get_current_identity),
     extractor: CandidateProfileExtractor = Depends(get_candidate_profile_extractor),
-) -> CandidateProfileView:
+) -> CandidateProfileView | MatchingOperationView:
     user, workspace = _require_v2_access(request, db, identity)
     resume_profile = profile_repository.get_resume_profile_for_identity(db, identity, resume_profile_id)
     if resume_profile is None:
@@ -197,15 +265,38 @@ def create_candidate_profile(
         model_id=request.app.state.runtime.openai_model,
     )
     if profile is None:
-        result = extractor.extract(spans)
-        profile = create_or_get_candidate_profile(
+        if request.url.path.startswith("/api/v1/internal/evaluation/"):
+            result = extractor.extract(spans)
+            profile = create_or_get_candidate_profile(
+                db,
+                source=source,
+                artifact=result.artifact,
+                model_id=result.model_id,
+                provider_execution_reference=result.provider_execution_reference,
+                resume_profile_id=resume_profile.id,
+            )
+            return _candidate_profile_view(db, profile, source)
+        operation = _create_extraction_operation(
             db,
-            source=source,
-            artifact=result.artifact,
-            model_id=result.model_id,
-            provider_execution_reference=result.provider_execution_reference,
-            resume_profile_id=resume_profile.id,
+            owner=ArtifactOwner.authenticated(workspace_id=workspace.id, user_id=user.id),
+            operation_type="candidate_profile_extraction",
+            payload={
+                "canonical_source_id": source.id,
+                "resume_profile_id": resume_profile.id,
+                "model_id": request.app.state.runtime.openai_model,
+            },
         )
+        db.commit()
+        if operation.status == "pending":
+            background_tasks.add_task(
+                _execute_extraction_background,
+                session_factory_for(db),
+                operation.id,
+                extractor,
+                None,
+            )
+        response.status_code = status.HTTP_202_ACCEPTED
+        return _extraction_operation_view(db, operation)
     return _candidate_profile_view(db, profile, source)
 
 
@@ -278,15 +369,112 @@ def update_primary_career_profile(
     return _candidate_profile_view(db, profile, source)
 
 
-@router.post("/jobs/{job_id}/job-profile", response_model=JobProfileView)
-def create_job_profile(
-    job_id: int,
+@router.post(
+    "/candidate-profiles/{candidate_profile_id}/matching-intents",
+    response_model=MatchingIntentView,
+)
+def post_matching_intent(
+    candidate_profile_id: str,
+    payload: MatchingIntentWrite,
     request: Request,
     db: Session = Depends(get_db_session),
     identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> MatchingIntentView:
+    user, workspace = _require_v2_access(request, db, identity)
+    owner = ArtifactOwner.authenticated(workspace_id=workspace.id, user_id=user.id)
+    candidate = get_candidate_profile_for_owner(db, public_id=candidate_profile_id, owner=owner)
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="Candidate Profile not found.")
+    try:
+        intent = create_matching_intent(db, owner=owner, candidate_profile=candidate, **payload.model_dump())
+    except (ValueError, RevisionConflict) as exc:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_MATCHING_INTENT", "message": str(exc)}) from exc
+    return _matching_intent_view(db, intent)
+
+
+@router.get("/matching-intents/{matching_intent_id}", response_model=MatchingIntentView)
+def read_matching_intent(
+    matching_intent_id: str,
+    request: Request,
+    revision: int | None = None,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> MatchingIntentView:
+    user, workspace = _require_v2_access(request, db, identity)
+    intent = get_matching_intent(
+        db,
+        owner=ArtifactOwner.authenticated(workspace_id=workspace.id, user_id=user.id),
+        public_id=matching_intent_id,
+        revision=revision,
+    )
+    if intent is None:
+        raise HTTPException(status_code=404, detail="Matching Intent not found.")
+    return _matching_intent_view(db, intent)
+
+
+@router.put("/matching-intents/{matching_intent_id}", response_model=MatchingIntentView)
+def put_matching_intent(
+    matching_intent_id: str,
+    payload: MatchingIntentWrite,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> MatchingIntentView:
+    user, workspace = _require_v2_access(request, db, identity)
+    owner = ArtifactOwner.authenticated(workspace_id=workspace.id, user_id=user.id)
+    current = get_matching_intent(db, owner=owner, public_id=matching_intent_id)
+    if current is None:
+        raise HTTPException(status_code=404, detail="Matching Intent not found.")
+    candidate_row = db.get(CandidateProfileVersion, current.candidate_profile_version_id)
+    candidate = (
+        get_candidate_profile_for_owner(db, public_id=candidate_row.public_id, owner=owner)
+        if candidate_row is not None else None
+    )
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="Candidate Profile not found.")
+    try:
+        intent = create_matching_intent(
+            db, owner=owner, candidate_profile=candidate, public_id=matching_intent_id, **payload.model_dump()
+        )
+    except RevisionConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "MATCHING_INTENT_REVISION_CONFLICT", "message": str(exc)},
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_MATCHING_INTENT", "message": str(exc)}) from exc
+    return _matching_intent_view(db, intent)
+
+
+@router.get("/job-family-pre-matches/{pre_match_id}", response_model=JobFamilyPreMatchView)
+def read_job_family_pre_match(
+    pre_match_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> JobFamilyPreMatchView:
+    user, workspace = _require_v2_access(request, db, identity)
+    row = get_job_family_pre_match(
+        db,
+        owner=ArtifactOwner.authenticated(workspace_id=workspace.id, user_id=user.id),
+        public_id=pre_match_id,
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Job Family Pre-Match not found.")
+    return _job_family_pre_match_view(db, row)
+
+
+@router.post("/jobs/{job_id}/job-profile", response_model=JobProfileView | MatchingOperationView)
+def create_job_profile(
+    job_id: int,
+    request: Request,
+    response: Response,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
     extractor: JobProfileExtractor = Depends(get_job_profile_extractor),
-) -> JobProfileView:
-    _require_v2_access(request, db, identity)
+) -> JobProfileView | MatchingOperationView:
+    user, workspace = _require_v2_access(request, db, identity)
     saved_job = job_repository.get_user_job_for_identity(db, identity, job_id)
     if saved_job is None:
         raise HTTPException(status_code=404, detail="Saved job not found.")
@@ -319,23 +507,46 @@ def create_job_profile(
     sync_policy_registry(db)
     profile = find_cached_job_profile(db, source=source, model_id=request.app.state.runtime.openai_model)
     if profile is None:
-        cleanup = cleanup_job_spans(spans)
-        result = extractor.extract(list(cleanup.kept_spans))
-        artifact = validate_job_extraction(
-            result.artifact,
-            {span.span_id for span in cleanup.kept_spans},
-            duplicate_spans_removed=cleanup.duplicate_spans_removed,
-            boilerplate_spans_ignored=cleanup.boilerplate_spans_ignored,
-            omitted_span_count=len(result.omitted_span_ids),
-        )
-        profile = create_or_get_job_profile(
+        if request.url.path.startswith("/api/v1/internal/evaluation/"):
+            cleanup = cleanup_job_spans(spans)
+            result = extractor.extract(list(cleanup.kept_spans))
+            artifact = validate_job_extraction(
+                result.artifact,
+                {span.span_id for span in cleanup.kept_spans},
+                duplicate_spans_removed=cleanup.duplicate_spans_removed,
+                boilerplate_spans_ignored=cleanup.boilerplate_spans_ignored,
+                omitted_span_count=len(result.omitted_span_ids),
+            )
+            profile = create_or_get_job_profile(
+                db,
+                source=source,
+                artifact=artifact,
+                model_id=result.model_id,
+                jobs_cache_id=cached_job.id,
+                provider_execution_reference=result.provider_execution_reference,
+            )
+            return _job_profile_view(db, profile, source)
+        operation = _create_extraction_operation(
             db,
-            source=source,
-            artifact=artifact,
-            model_id=result.model_id,
-            jobs_cache_id=cached_job.id,
-            provider_execution_reference=result.provider_execution_reference,
+            owner=ArtifactOwner.authenticated(workspace_id=workspace.id, user_id=user.id),
+            operation_type="job_profile_extraction",
+            payload={
+                "canonical_source_id": source.id,
+                "jobs_cache_id": cached_job.id,
+                "model_id": request.app.state.runtime.openai_model,
+            },
         )
+        db.commit()
+        if operation.status == "pending":
+            background_tasks.add_task(
+                _execute_extraction_background,
+                session_factory_for(db),
+                operation.id,
+                None,
+                extractor,
+            )
+        response.status_code = status.HTTP_202_ACCEPTED
+        return _extraction_operation_view(db, operation)
     return _job_profile_view(db, profile, source)
 
 
@@ -375,22 +586,48 @@ def create_qualification_assessment(
     if job_profile is None:
         raise HTTPException(status_code=404, detail="Job Profile not found.")
     sync_policy_registry(db)
-    try:
-        context = select_candidate_career_context(
-            db,
-            candidate_profile=candidate,
-            job_profile=job_profile,
-            selection_revision=payload.candidate_career_selection_revision,
+    pre_match = None
+    if payload.job_family_pre_match_id is not None:
+        pre_match = get_job_family_pre_match(db, owner=owner, public_id=payload.job_family_pre_match_id)
+        if pre_match is None:
+            raise HTTPException(status_code=404, detail="Job Family Pre-Match not found.")
+        if (
+            pre_match.candidate_profile_version_id != candidate.id
+            or pre_match.job_profile_version_id != job_profile.id
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "PRE_MATCH_INPUT_MISMATCH"},
+            )
+        career_selection = None
+        selected_career = (
+            db.get(CandidateCareerProfile, pre_match.selected_candidate_career_profile_id)
+            if pre_match.selected_candidate_career_profile_id is not None else None
         )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=422,
-            detail={"code": "UNKNOWN_CAREER_SELECTION_REVISION", "message": str(exc)},
-        ) from exc
+        selection_revision = None
+        selection_reason_code = pre_match.reason_codes[0] if pre_match.reason_codes else "JOB_FAMILY_PRE_MATCH"
+    else:
+        try:
+            context = select_candidate_career_context(
+                db,
+                candidate_profile=candidate,
+                job_profile=job_profile,
+                selection_revision=payload.candidate_career_selection_revision,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "UNKNOWN_CAREER_SELECTION_REVISION", "message": str(exc)},
+            ) from exc
+        career_selection = context.selection
+        selected_career = context.career_profile
+        selection_revision = context.selection.revision
+        selection_reason_code = context.reason_code
     existing = find_cached_qualification_assessment(
         db,
         candidate_profile=candidate,
-        selection_revision=context.selection.revision,
+        selection_revision=selection_revision,
+        job_family_pre_match=pre_match,
         job_profile=job_profile,
         model_id=request.app.state.runtime.openai_model,
     )
@@ -401,7 +638,7 @@ def create_qualification_assessment(
             db,
             candidate_profile=candidate,
             job_profile=job_profile,
-            career_context=context.career_profile,
+            career_context=selected_career,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -444,9 +681,10 @@ def create_qualification_assessment(
         db,
         owner=owner,
         candidate_profile=candidate,
-        career_selection=context.selection,
-        selected_career_profile=context.career_profile,
-        selection_reason_code=context.reason_code,
+        career_selection=career_selection,
+        job_family_pre_match=pre_match,
+        selected_career_profile=selected_career,
+        selection_reason_code=selection_reason_code,
         job_profile=job_profile,
         artifact=artifact,
         input_quality={
@@ -716,6 +954,10 @@ def _qualification_assessment_view(
     )
     if candidate is None or job_profile is None:
         raise HTTPException(status_code=409, detail="Qualification Assessment inputs are unavailable.")
+    pre_match = (
+        db.get(JobFamilyPreMatch, assessment.job_family_pre_match_id)
+        if assessment.job_family_pre_match_id is not None else None
+    )
     return QualificationAssessmentView(
         schema_version=assessment.schema_version,
         qualification_assessment_id=assessment.public_id,
@@ -723,6 +965,7 @@ def _qualification_assessment_view(
         job_profile_id=job_profile.public_id,
         career_context=QualificationCareerContextView(
             selection_revision=assessment.candidate_career_selection_revision,
+            job_family_pre_match_id=pre_match.public_id if pre_match is not None else None,
             selected_career_profile_id=(selected.career_profile_id if selected is not None else None),
             selection_policy_version=assessment.selection_policy_version,
             selection_reason_code=assessment.selection_reason_code,
@@ -739,6 +982,56 @@ def _qualification_assessment_view(
             "provider_execution_reference": assessment.provider_execution_reference,
         },
         created_at=assessment.created_at,
+    )
+
+
+def _matching_intent_view(db: Session, intent: MatchingIntent) -> MatchingIntentView:
+    candidate = db.get(CandidateProfileVersion, intent.candidate_profile_version_id)
+    selected = (
+        db.get(CandidateCareerProfile, intent.selected_candidate_career_profile_id)
+        if intent.selected_candidate_career_profile_id is not None else None
+    )
+    if candidate is None:
+        raise HTTPException(status_code=409, detail="Matching Intent candidate is unavailable.")
+    return MatchingIntentView(
+        matching_intent_id=intent.public_id,
+        candidate_profile_id=candidate.public_id,
+        revision=intent.revision,
+        target_role_text=intent.target_role_text,
+        job_family=intent.job_family,
+        track=intent.track,
+        target_level=intent.target_level,
+        selected_candidate_career_profile_id=selected.career_profile_id if selected else None,
+        source=intent.source,
+        created_at=intent.created_at,
+    )
+
+
+def _job_family_pre_match_view(db: Session, row: JobFamilyPreMatch) -> JobFamilyPreMatchView:
+    candidate = db.get(CandidateProfileVersion, row.candidate_profile_version_id)
+    intent = db.get(MatchingIntent, row.matching_intent_id)
+    job = db.get(JobProfileVersion, row.job_profile_version_id)
+    selected = (
+        db.get(CandidateCareerProfile, row.selected_candidate_career_profile_id)
+        if row.selected_candidate_career_profile_id is not None else None
+    )
+    if candidate is None or intent is None or job is None:
+        raise HTTPException(status_code=409, detail="Job Family Pre-Match inputs are unavailable.")
+    return JobFamilyPreMatchView(
+        job_family_pre_match_id=row.public_id,
+        matching_intent_id=intent.public_id,
+        matching_intent_revision=row.matching_intent_revision,
+        candidate_profile_id=candidate.public_id,
+        job_profile_id=job.public_id,
+        selected_candidate_career_profile_id=selected.career_profile_id if selected else None,
+        selection_source=row.selection_source,
+        family_compatibility=row.family_compatibility,
+        track_compatibility=row.track_compatibility,
+        level_compatibility=row.level_compatibility,
+        proceed_to_detailed_match=row.proceed_to_detailed_match,
+        reason_codes=list(row.reason_codes),
+        policy_version=row.policy_version,
+        created_at=row.created_at,
     )
 
 

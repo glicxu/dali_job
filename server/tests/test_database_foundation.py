@@ -49,6 +49,8 @@ def test_foundation_tables_are_registered_in_metadata() -> None:
         "matching_candidate_profile_versions",
         "matching_candidate_career_profiles",
         "matching_candidate_career_selections",
+        "matching_intents",
+        "matching_job_family_pre_matches",
         "matching_policy_registry",
     }.issubset(Base.metadata.tables.keys())
     assert "skills" not in Base.metadata.tables
@@ -310,7 +312,7 @@ def test_alembic_has_initial_schema_revision() -> None:
     config.set_main_option("script_location", str(server_dir / "app" / "db" / "migrations"))
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == EXPECTED_ALEMBIC_HEAD == "20260816_0049"
+    assert script.get_current_head() == EXPECTED_ALEMBIC_HEAD == "20260816_0052"
 
 
 def test_phase3_migration_does_not_recreate_existing_document_version_constraint() -> None:

@@ -20,14 +20,18 @@ from app.modules.matching_v2.api_schemas import (
     QualificationAssessmentCreateRequest,
 )
 from app.modules.matching_v2.models import (
-    CandidateCareerSelection,
     EligibilityAssessment,
     EligibilityRevision,
     MatchResult,
     MatchingOperation,
+    JobFamilyPreMatch,
     PreferenceAssessment,
     PreferenceRevision,
     QualificationAssessment,
+)
+from app.modules.matching_v2.pre_match import (
+    create_or_get_job_family_pre_match,
+    get_matching_intent,
 )
 from app.modules.matching_v2.orchestration import (
     IdempotencyKeyReused,
@@ -58,8 +62,11 @@ from app.modules.matching_v2.router import (
     _require_v2_access,
     create_qualification_assessment,
     get_qualification_matcher,
+    get_candidate_profile_extractor,
+    get_job_profile_extractor,
 )
 from app.modules.matching_v2.qualification import QualificationMatcher
+from app.modules.matching_v2.extraction import CandidateProfileExtractor, JobProfileExtractor
 from app.modules.operations.service import session_factory_for
 
 
@@ -140,6 +147,8 @@ def retry_matching_operation(
     db: Session = Depends(get_db_session),
     identity: AuthenticatedIdentity = Depends(get_current_identity),
     matcher: QualificationMatcher = Depends(get_qualification_matcher),
+    candidate_extractor: CandidateProfileExtractor = Depends(get_candidate_profile_extractor),
+    job_extractor: JobProfileExtractor = Depends(get_job_profile_extractor),
 ) -> MatchingOperationView:
     user, workspace = _require_v2_access(request, db, identity)
     owner = ArtifactOwner.authenticated(workspace_id=workspace.id, user_id=user.id)
@@ -164,9 +173,19 @@ def retry_matching_operation(
             session_factory_for(db),
             request,
             operation.id,
+            candidate_extractor,
+            job_extractor,
         )
     else:
-        _execute_operation(db, request, identity, operation, matcher)
+        _execute_operation(
+            db,
+            request,
+            identity,
+            operation,
+            matcher,
+            candidate_extractor=candidate_extractor,
+            job_extractor=job_extractor,
+        )
     db.refresh(operation)
     if operation.status != "completed":
         response.status_code = status.HTTP_202_ACCEPTED
@@ -212,15 +231,13 @@ def rerun_match(
         raise HTTPException(status_code=409, detail="Original matching operation is unavailable.")
     original = dict(prior.request_payload)
     candidate_id = payload.candidate_profile_id or original["candidate_profile_id"]
-    selection_revision = (
-        payload.candidate_career_selection_revision
-        if payload.candidate_career_selection_revision is not None
-        else original["candidate_career_selection_revision"]
-    )
+    matching_intent_id = payload.matching_intent_id or original["matching_intent_id"]
+    matching_intent_revision = payload.matching_intent_revision or original["matching_intent_revision"]
     return create_match(
         MatchCreateRequest(
             candidate_profile_id=candidate_id,
-            candidate_career_selection_revision=selection_revision,
+            matching_intent_id=matching_intent_id,
+            matching_intent_revision=matching_intent_revision,
             job_profile_id=original["job_profile_id"],
             preference_revision=payload.preference_revision,
             eligibility_revision=payload.eligibility_revision,
@@ -236,7 +253,13 @@ def rerun_match(
     )
 
 
-def _execute_background(session_factory, request: Request, operation_id: int) -> None:
+def _execute_background(
+    session_factory,
+    request: Request,
+    operation_id: int,
+    candidate_extractor: CandidateProfileExtractor | None = None,
+    job_extractor: JobProfileExtractor | None = None,
+) -> None:
     with session_factory() as db:
         operation = db.get(MatchingOperation, operation_id)
         if operation is None or operation.status != "pending":
@@ -253,7 +276,15 @@ def _execute_background(session_factory, request: Request, operation_id: int) ->
             role=user.role,
         )
         matcher = get_qualification_matcher(request, identity)
-        _execute_operation(db, request, identity, operation, matcher)
+        _execute_operation(
+            db,
+            request,
+            identity,
+            operation,
+            matcher,
+            candidate_extractor=candidate_extractor,
+            job_extractor=job_extractor,
+        )
 
 
 def _execute_operation(
@@ -262,7 +293,25 @@ def _execute_operation(
     identity: AuthenticatedIdentity,
     operation: MatchingOperation,
     matcher: QualificationMatcher,
+    *,
+    candidate_extractor: CandidateProfileExtractor | None = None,
+    job_extractor: JobProfileExtractor | None = None,
 ) -> None:
+    if operation.operation_type in {"candidate_profile_extraction", "job_profile_extraction"}:
+        from app.modules.matching_v2.extraction_operations import execute_extraction_operation
+        execute_extraction_operation(
+            db,
+            operation,
+            candidate_extractor=(
+                candidate_extractor or get_candidate_profile_extractor(request, identity)
+                if operation.operation_type == "candidate_profile_extraction" else None
+            ),
+            job_extractor=(
+                job_extractor or get_job_profile_extractor(request, identity)
+                if operation.operation_type == "job_profile_extraction" else None
+            ),
+        )
+        return
     lease_owner = f"{socket.gethostname()}:{uuid.uuid4().hex[:12]}"
     try:
         claim_operation(db, operation, lease_owner=lease_owner)
@@ -300,6 +349,8 @@ def _execute_operation(
                 if job is None:
                     raise ArtifactOwnershipError("Job Profile not found.")
                 complete_stage(db, operation, stage, output_artifact_id=job.public_id, cache_hit=True)
+            elif stage.stage == "job_family_pre_match":
+                _run_job_family_pre_match_stage(db, operation, stage, payload, owner)
             elif stage.stage == "qualification":
                 _run_qualification_stage(db, request, identity, operation, stage, payload, matcher)
             else:
@@ -341,14 +392,17 @@ def _run_qualification_stage(
     payload: dict,
     matcher: QualificationMatcher,
 ) -> None:
+    pre_match_stage = next(item for item in list_stages(db, operation.id) if item.stage == "job_family_pre_match")
+    if pre_match_stage.output_artifact_id is None:
+        raise RuntimeError("Job Family Pre-Match dependency is incomplete.")
     begin_stage(
         db,
         operation,
         stage,
         input_artifact_ids={
             "candidate_profile_id": payload["candidate_profile_id"],
-            "candidate_career_selection_revision": payload["candidate_career_selection_revision"],
             "job_profile_id": payload["job_profile_id"],
+            "job_family_pre_match_id": pre_match_stage.output_artifact_id,
         },
     )
     before = (
@@ -359,8 +413,8 @@ def _run_qualification_stage(
     view = create_qualification_assessment(
         QualificationAssessmentCreateRequest(
             candidate_profile_id=payload["candidate_profile_id"],
-            candidate_career_selection_revision=payload["candidate_career_selection_revision"],
             job_profile_id=payload["job_profile_id"],
+            job_family_pre_match_id=pre_match_stage.output_artifact_id,
         ),
         request,
         db,
@@ -446,20 +500,66 @@ def _run_deterministic_stage(
         complete_operation(db, operation, match_result_id=result.id)
 
 
+def _run_job_family_pre_match_stage(
+    db: Session,
+    operation: MatchingOperation,
+    stage,
+    payload: dict,
+    owner: ArtifactOwner,
+) -> None:
+    begin_stage(
+        db,
+        operation,
+        stage,
+        input_artifact_ids={
+            "candidate_profile_id": payload["candidate_profile_id"],
+            "matching_intent_id": payload["matching_intent_id"],
+            "matching_intent_revision": payload["matching_intent_revision"],
+            "job_profile_id": payload["job_profile_id"],
+        },
+    )
+    candidate = get_candidate_profile_for_owner(db, public_id=payload["candidate_profile_id"], owner=owner)
+    job = get_job_profile_by_public_id(db, public_id=payload["job_profile_id"])
+    intent = get_matching_intent(
+        db,
+        owner=owner,
+        public_id=payload["matching_intent_id"],
+        revision=payload["matching_intent_revision"],
+    )
+    if candidate is None or job is None or intent is None:
+        raise ArtifactOwnershipError("Job Family Pre-Match input is unavailable.")
+    before = db.scalar(select(JobFamilyPreMatch).where(
+        JobFamilyPreMatch.candidate_profile_version_id == candidate.id,
+        JobFamilyPreMatch.matching_intent_id == intent.id,
+        JobFamilyPreMatch.job_profile_version_id == job.id,
+    ))
+    pre_match = create_or_get_job_family_pre_match(
+        db, owner=owner, candidate_profile=candidate, intent=intent, job_profile=job
+    )
+    complete_stage(
+        db,
+        operation,
+        stage,
+        output_artifact_id=pre_match.public_id,
+        cache_hit=before is not None,
+        policy_versions={"job_family_pre_match": pre_match.policy_version},
+    )
+
+
 def _validate_inputs(db: Session, *, owner: ArtifactOwner, payload: dict) -> None:
     candidate = get_candidate_profile_for_owner(db, public_id=payload["candidate_profile_id"], owner=owner)
     if candidate is None:
         raise HTTPException(status_code=404, detail="Candidate Profile not found.")
-    selection = db.scalar(
-        select(CandidateCareerSelection).where(
-            CandidateCareerSelection.candidate_profile_version_id == candidate.id,
-            CandidateCareerSelection.revision == payload["candidate_career_selection_revision"],
-        )
+    intent = get_matching_intent(
+        db,
+        owner=owner,
+        public_id=payload["matching_intent_id"],
+        revision=payload["matching_intent_revision"],
     )
-    if selection is None:
+    if intent is None or intent.candidate_profile_version_id != candidate.id:
         raise HTTPException(
             status_code=422,
-            detail={"code": "UNKNOWN_CAREER_SELECTION_REVISION"},
+            detail={"code": "UNKNOWN_MATCHING_INTENT_REVISION"},
         )
     if get_job_profile_by_public_id(db, public_id=payload["job_profile_id"]) is None:
         raise HTTPException(status_code=404, detail="Job Profile not found.")
@@ -516,6 +616,7 @@ def _operation_view(
     match_view = _match_result_view(db, result) if result is not None else None
     return MatchingOperationView(
         operation_id=operation.public_id,
+        operation_type=operation.operation_type,
         status=operation.status,
         current_stage=operation.current_stage,
         correlation_id=operation.correlation_id,

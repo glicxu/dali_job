@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { BriefcaseBusiness, Check, Eye, MapPin, Search, X } from "lucide-react";
 import {
   createJobSearchCriterion,
@@ -11,8 +11,6 @@ import {
   JobSearchCriterion,
   JobListImportResponse,
   listJobSearchCriteria,
-  listResumeProfiles,
-  ResumeProfile,
   searchIndeedJobs,
 } from "../lib/api";
 import {
@@ -61,9 +59,6 @@ function AuthenticatedIndeedJobSearchManager() {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [activeResult, setActiveResult] = useState<IndeedJobSearchResult | null>(null);
-  const [resumeProfiles, setResumeProfiles] = useState<ResumeProfile[]>([]);
-  const [runMatching, setRunMatching] = useState(false);
-  const [resumeProfileId, setResumeProfileId] = useState("");
   const [tutorialActive, setTutorialActive] = useState(false);
   const [importResult, setImportResult] = useState<JobListImportResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -76,34 +71,20 @@ function AuthenticatedIndeedJobSearchManager() {
   const pageStartIndex = (currentPage - 1) * RESULTS_PER_PAGE;
   const visibleResults = results.slice(pageStartIndex, pageStartIndex + RESULTS_PER_PAGE);
   const selectedResults = results.filter((item) => selectedKeys.has(resultKey(item)));
-  const canImport = selectedResults.length > 0 && (!runMatching || Boolean(resumeProfileId));
+  const canImport = selectedResults.length > 0;
   const selectedCriterion = searchCriteria.find((criterion) => criterion.id === selectedCriterionId) ?? null;
-
-  const sortedResumeProfiles = useMemo(
-    () =>
-      [...resumeProfiles].sort((left, right) => {
-        if (left.is_default !== right.is_default) return left.is_default ? -1 : 1;
-        return left.title.localeCompare(right.title);
-      }),
-    [resumeProfiles],
-  );
 
   useEffect(() => {
     const active = isTutorialActive();
     setTutorialActive(active);
-    if (active) {
-      setRunMatching(false);
-      setResumeProfileId("");
-    }
   }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const queryKeyword = params.get("keyword")?.trim().slice(0, 200) || "";
     const queryLocation = params.get("location")?.trim().slice(0, 200) || "";
-    Promise.all([listResumeProfiles(), listJobSearchCriteria()])
-      .then(([profilePayload, criteriaPayload]) => {
-        setResumeProfiles(profilePayload.resume_profiles);
+    listJobSearchCriteria()
+      .then((criteriaPayload) => {
         setSearchCriteria(criteriaPayload);
         if (queryKeyword || queryLocation) {
           setKeyword(queryKeyword);
@@ -122,7 +103,6 @@ function AuthenticatedIndeedJobSearchManager() {
         }
       })
       .catch(() => {
-        setResumeProfiles([]);
         setSearchCriteria([]);
         setSearchEditorOpen(true);
       });
@@ -253,10 +233,7 @@ function AuthenticatedIndeedJobSearchManager() {
     setImportResult(null);
     setIsImporting(true);
     try {
-      const payload = await importIndeedSearchResults(selectedResults, {
-        resumeProfileId: !tutorialActive && resumeProfileId ? Number(resumeProfileId) : undefined,
-        runMatching: !tutorialActive && runMatching,
-      });
+      const payload = await importIndeedSearchResults(selectedResults);
       setImportResult(payload);
       setStatus(`Imported ${payload.imported.length} job${payload.imported.length === 1 ? "" : "s"}.`);
     } catch (err) {
@@ -428,29 +405,6 @@ function AuthenticatedIndeedJobSearchManager() {
                   ))}
                 </div>
               </nav>
-            ) : null}
-
-            {!tutorialActive ? (
-              <div className="bulk-import-options">
-                <label className="checkbox-row">
-                  <input type="checkbox" checked={runMatching} onChange={(event) => setRunMatching(event.target.checked)} />
-                  Run matching after import
-                </label>
-                {runMatching ? (
-                  <label>
-                    Resume profile
-                    <select value={resumeProfileId} onChange={(event) => setResumeProfileId(event.target.value)} required>
-                      <option value="">Select resume profile</option>
-                      {sortedResumeProfiles.map((profile) => (
-                        <option value={profile.id} key={profile.id}>
-                          {profile.is_default ? "Default - " : ""}
-                          {profile.title}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
-              </div>
             ) : null}
 
             <Button type="button" icon={BriefcaseBusiness} loading={isImporting} disabled={!canImport || isImporting} onClick={() => void importSelected()}>

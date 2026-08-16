@@ -224,6 +224,38 @@ class CandidateCareerSelection(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
+class MatchingIntent(Base):
+    __tablename__ = "matching_intents"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "user_id", "public_id", "revision", name="uq_matching_intents_revision"),
+        CheckConstraint(
+            "source IN ('user_preferred', 'user_confirmed', 'resume_derived')",
+            name="ck_matching_intents_source",
+        ),
+        Index("ix_matching_intents_public", "public_id"),
+        Index("ix_matching_intents_owner", "workspace_id", "user_id"),
+        Index("ix_matching_intents_candidate", "candidate_profile_version_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    public_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    workspace_id: Mapped[int] = mapped_column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    candidate_profile_version_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("matching_candidate_profile_versions.id", ondelete="CASCADE"), nullable=False
+    )
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_role_text: Mapped[str] = mapped_column(String(300), nullable=False)
+    job_family: Mapped[str] = mapped_column(String(100), nullable=False)
+    track: Mapped[str] = mapped_column(String(100), nullable=False)
+    target_level: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    selected_candidate_career_profile_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("matching_candidate_career_profiles.id", ondelete="RESTRICT"), nullable=True
+    )
+    source: Mapped[str] = mapped_column(String(30), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class JobProfileVersion(Base):
     __tablename__ = "matching_job_profile_versions"
     __table_args__ = (
@@ -286,6 +318,43 @@ class JobRequirement(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
+class JobFamilyPreMatch(Base):
+    __tablename__ = "matching_job_family_pre_matches"
+    __table_args__ = (
+        Index("ix_matching_job_family_pre_matches_public", "public_id", unique=True),
+        Index("ix_matching_job_family_pre_matches_owner", "workspace_id", "user_id"),
+        Index("ix_matching_job_family_pre_matches_cache", "cache_key", unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    public_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    workspace_id: Mapped[int] = mapped_column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    candidate_profile_version_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("matching_candidate_profile_versions.id", ondelete="CASCADE"), nullable=False
+    )
+    matching_intent_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("matching_intents.id", ondelete="CASCADE"), nullable=False
+    )
+    matching_intent_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    job_profile_version_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("matching_job_profile_versions.id", ondelete="CASCADE"), nullable=False
+    )
+    selected_candidate_career_profile_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("matching_candidate_career_profiles.id", ondelete="SET NULL"), nullable=True
+    )
+    selection_source: Mapped[str] = mapped_column(String(30), nullable=False)
+    family_compatibility: Mapped[str] = mapped_column(String(30), nullable=False)
+    track_compatibility: Mapped[str] = mapped_column(String(30), nullable=False)
+    level_compatibility: Mapped[str] = mapped_column(String(30), nullable=False)
+    proceed_to_detailed_match: Mapped[bool] = mapped_column(nullable=False)
+    reason_codes: Mapped[list] = mapped_column(JSON, nullable=False)
+    policy_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
+    cache_key: Mapped[str] = mapped_column(String(71), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class QualificationAssessment(Base):
     __tablename__ = "matching_qualification_assessments"
     __table_args__ = (
@@ -302,6 +371,7 @@ class QualificationAssessment(Base):
         Index("ix_matching_qualifications_workspace", "workspace_id"),
         Index("ix_matching_qualifications_user", "user_id"),
         Index("ix_matching_qualifications_guest", "guest_trial_id"),
+        Index("ix_matching_qualifications_pre_match", "job_family_pre_match_id"),
         Index("ix_matching_qualifications_cache", "cache_key", unique=True),
     )
 
@@ -318,10 +388,13 @@ class QualificationAssessment(Base):
     candidate_profile_version_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("matching_candidate_profile_versions.id", ondelete="CASCADE"), nullable=False
     )
-    candidate_career_selection_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("matching_candidate_career_selections.id", ondelete="CASCADE"), nullable=False
+    candidate_career_selection_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("matching_candidate_career_selections.id", ondelete="CASCADE"), nullable=True
     )
-    candidate_career_selection_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    candidate_career_selection_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    job_family_pre_match_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("matching_job_family_pre_matches.id", ondelete="CASCADE"), nullable=True
+    )
     selected_candidate_career_profile_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("matching_candidate_career_profiles.id", ondelete="SET NULL"), nullable=True
     )
@@ -513,11 +586,13 @@ class MatchingOperation(Base):
         Index("ix_matching_operations_public", "public_id", unique=True),
         Index("ix_matching_operations_owner", "workspace_id", "user_id"),
         Index("ix_matching_operations_status", "status"),
+        Index("ix_matching_operations_type", "operation_type"),
         Index("ix_matching_operations_lease", "lease_expires_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     public_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    operation_type: Mapped[str] = mapped_column(String(40), nullable=False, default="match")
     workspace_id: Mapped[int] = mapped_column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)

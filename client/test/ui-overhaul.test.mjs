@@ -186,8 +186,8 @@ test("first-run tutorial requires ordered steps and only completion unlocks the 
   assert.match(overhaul, /\.tutorial-step-overview li > div > span/);
   assert.doesNotMatch(overhaul, /\.tutorial-step-overview span\s*\{/);
   assert.match(jobSearch, /isTutorialActive/);
-  assert.match(jobSearch, /runMatching: !tutorialActive && runMatching/);
-  assert.match(jobSearch, /\{!tutorialActive \? \([\s\S]*Run matching after import/);
+  assert.match(jobSearch, /importIndeedSearchResults\(selectedResults\)/);
+  assert.doesNotMatch(jobSearch, /Run matching after import/);
 });
 
 test("dashboard and jobs use the shared feedback and hierarchy components", () => {

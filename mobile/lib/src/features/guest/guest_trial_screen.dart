@@ -479,7 +479,7 @@ class _GuestTrialScreenState extends State<GuestTrialScreen> {
   Future<void> _pickResume() async {
     final file = await FilePicker.pickFile(
       type: FileType.custom,
-      allowedExtensions: const ['pdf', 'txt'],
+      allowedExtensions: const ['pdf', 'docx', 'txt'],
     );
     if (file == null) return;
     final bytes = await file.readAsBytes();

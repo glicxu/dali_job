@@ -371,7 +371,7 @@ function AuthenticatedProfileEditor() {
       <ToastRegion message={status} onDismiss={() => setStatus(null)} />
 
       <section className="profile-card profile-import-card">
-        <SectionHeader title="Upload Resume" description="Recommended: upload a PDF to generate a reviewable structured profile. Analysis does not save the JSON automatically." />
+        <SectionHeader title="Upload Resume" description="Upload a PDF or DOCX to generate a reviewable structured profile. Analysis does not save the JSON automatically." />
         <ResumePrivacyNotice />
         <form className="inline-form resume-upload-form" onSubmit={importResume}>
           <div className="resume-file-picker">
@@ -380,7 +380,7 @@ function AuthenticatedProfileEditor() {
               id="resume-file-upload"
               name="resume"
               type="file"
-              accept="application/pdf"
+              accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,.docx"
               required
               onChange={(event) => setSelectedResumeFileName(event.target.files?.[0]?.name ?? "")}
             />
@@ -408,7 +408,7 @@ function AuthenticatedProfileEditor() {
       <section className="manual-resume-option">
         <SectionHeader
           title="Prefer manual entry?"
-          description="Create a resume profile manually if you cannot upload a PDF or prefer to enter each section yourself."
+          description="Create a resume profile manually if you cannot upload a PDF or DOCX, or prefer to enter each section yourself."
         />
         <Button type="button" variant="secondary" icon={FilePlus2} onClick={createBlankResumeProfile}>Create Resume Profile</Button>
       </section>
@@ -575,7 +575,7 @@ function ProfileEditorPreview() {
         <div className="profile-card-header">
           <div>
             <h2>Upload Resume</h2>
-            <p className="metadata">Recommended: upload a PDF after login to generate a structured resume profile.</p>
+            <p className="metadata">Recommended: upload a PDF or DOCX after login to generate a structured resume profile.</p>
           </div>
         </div>
         <ResumePrivacyNotice />
@@ -594,7 +594,7 @@ function ProfileEditorPreview() {
       <section className="manual-resume-option">
         <div>
           <h2>Prefer manual entry?</h2>
-          <p className="metadata">Create a resume profile manually if you cannot upload a PDF or prefer to enter each section yourself.</p>
+          <p className="metadata">Create a resume profile manually if you cannot upload a PDF or DOCX, or prefer to enter each section yourself.</p>
         </div>
         <button type="button" className="secondary-button" disabled>
           Create Resume Profile

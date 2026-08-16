@@ -6,12 +6,20 @@ from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile, status
 
-from app.modules.profiles.resume_import import MAX_RESUME_BYTES, extract_pdf_text, redact_resume_personal_info
+from app.modules.profiles.resume_import import (
+    DOCX_CONTENT_TYPE,
+    MAX_RESUME_BYTES,
+    extract_docx_text,
+    extract_pdf_text,
+    redact_resume_personal_info,
+    validate_docx_signature,
+)
 from app.modules.profiles.resume_import import validate_pdf_signature
 
 SUPPORTED_CONTENT_TYPES = {
     "application/pdf",
     "application/x-pdf",
+    DOCX_CONTENT_TYPE,
     "text/plain",
 }
 
@@ -50,18 +58,31 @@ def validate_upload_content(content: bytes, content_type: str) -> None:
     if content_type == "text/plain":
         _validate_plain_text(content)
         return
+    if content_type == DOCX_CONTENT_TYPE:
+        validate_docx_signature(content)
+        return
+    if content_type == "application/msword":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Legacy DOC files are not supported. Save the document as DOCX or PDF and upload it again.",
+        )
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Only PDF and plain text document uploads are supported right now.",
+        detail="Only PDF, DOCX, and plain text document uploads are supported right now.",
     )
 
 
 async def read_supported_upload(file: UploadFile) -> bytes:
     content_type = normalized_content_type(file.content_type)
     if content_type not in SUPPORTED_CONTENT_TYPES:
+        if content_type == "application/msword":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Legacy DOC files are not supported. Save the document as DOCX or PDF and upload it again.",
+            )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only PDF and plain text document uploads are supported right now.",
+            detail="Only PDF, DOCX, and plain text document uploads are supported right now.",
         )
     content = await file.read(MAX_RESUME_BYTES + 1)
     if len(content) > MAX_RESUME_BYTES:
@@ -82,6 +103,8 @@ def extract_redacted_text(content: bytes, content_type: str) -> str | None:
     if content_type == "text/plain":
         text = content.decode("utf-8")
         return redact_resume_personal_info(text)
+    if content_type == DOCX_CONTENT_TYPE:
+        return extract_docx_text(content)
     return None
 
 
@@ -89,7 +112,7 @@ def write_document_file(storage_root: str, content: bytes, original_file_name: s
     root = Path(storage_root).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
     suffix = Path(safe_file_name(original_file_name)).suffix.lower()
-    if suffix not in {".pdf", ".txt"}:
+    if suffix not in {".pdf", ".docx", ".txt"}:
         suffix = ""
     target = root / f"{uuid4()}{suffix}"
     target.write_bytes(content)

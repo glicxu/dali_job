@@ -7,6 +7,15 @@ class CreatedGuestTrial {
   final String publicId;
 }
 
+String _resumeContentType(String fileName) {
+  final normalized = fileName.toLowerCase();
+  if (normalized.endsWith('.pdf')) return 'application/pdf';
+  if (normalized.endsWith('.docx')) {
+    return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  }
+  return 'text/plain';
+}
+
 class GuestRepository {
   const GuestRepository(this.api);
   final ApiClient api;
@@ -42,9 +51,7 @@ class GuestRepository {
     fieldName: 'file',
     fileName: fileName,
     bytes: bytes,
-    contentType: fileName.toLowerCase().endsWith('.pdf')
-        ? 'application/pdf'
-        : 'text/plain',
+    contentType: _resumeContentType(fileName),
     authorization: _authorization(credential),
   );
 

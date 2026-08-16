@@ -20,7 +20,7 @@ def write_guest_document(
     trial_root.relative_to(guest_root)
     trial_root.mkdir(parents=True, exist_ok=True)
     suffix = Path(safe_file_name(original_file_name)).suffix.lower()
-    if suffix not in {".pdf", ".txt"}:
+    if suffix not in {".pdf", ".docx", ".txt"}:
         suffix = ""
     target = trial_root / f"{uuid4()}{suffix}"
     target.write_bytes(content)

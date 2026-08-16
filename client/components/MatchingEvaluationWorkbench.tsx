@@ -285,9 +285,9 @@ export function MatchingEvaluationWorkbench() {
         <Button type="submit" icon={SearchCheck} loading={working === "capture"}>Fetch and freeze</Button>
       </form>
       <section className="profile-card">
-        <SectionHeader title="2. Choose a resume" description="Use an existing profile or load a PDF fixture into your profile library." />
+        <SectionHeader title="2. Choose a resume" description="Use an existing profile or load a PDF or DOCX fixture into your profile library." />
         <label>Resume profile<select value={resumeId} onChange={(event) => setResumeId(Number(event.target.value))}><option value={0}>Select a resume</option>{resumes.map((resume) => <option key={resume.id} value={resume.id}>{resume.title}</option>)}</select></label>
-        <label className="evaluation-file-button"><FileUp size={18} aria-hidden="true" /><span>{working === "resume" ? "Loading resume…" : "Load resume PDF"}</span><input type="file" accept="application/pdf,.pdf" disabled={Boolean(working)} onChange={(event) => void loadResume(event.target.files?.[0])} /></label>
+        <label className="evaluation-file-button"><FileUp size={18} aria-hidden="true" /><span>{working === "resume" ? "Loading resume…" : "Load resume file"}</span><input type="file" accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,.docx" disabled={Boolean(working)} onChange={(event) => void loadResume(event.target.files?.[0])} /></label>
         <details><summary>Or paste a de-identified fixture</summary><div className="evaluation-paste-fixture"><label>Fixture label<input value={fixtureLabel} onChange={(event) => setFixtureLabel(event.target.value)} placeholder="Synthetic senior backend candidate" /></label><label>Resume text<textarea rows={6} value={pastedResume} onChange={(event) => setPastedResume(event.target.value)} placeholder="Paste the complete de-identified resume. More detail produces a better evaluation fixture." /></label><Button type="button" size="compact" loading={working === "resume-paste"} disabled={!pastedResume.trim()} onClick={() => void loadPastedResume()}>Load pasted fixture</Button></div></details>
       </section>
       <section className="profile-card">

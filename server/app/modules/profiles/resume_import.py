@@ -3,9 +3,11 @@ from __future__ import annotations
 import io
 import json
 import re
+import zipfile
 from typing import Protocol
 
 from fastapi import HTTPException, UploadFile, status
+from lxml import etree
 from openai import OpenAI
 from pydantic import BaseModel, ValidationError
 from pypdf import PdfReader
@@ -18,6 +20,13 @@ MAX_RESUME_TEXT_CHARS = 24_000
 MAX_PDF_PAGES = 50
 MAX_PDF_EXTRACTED_CHARS = 200_000
 PDF_SIGNATURE = b"%PDF-"
+DOCX_SIGNATURES = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+MAX_DOCX_ENTRIES = 1_000
+MAX_DOCX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024
+MAX_DOCX_XML_BYTES = 10 * 1024 * 1024
+MAX_DOCX_EXTRACTED_CHARS = 200_000
+WORDPROCESSINGML_NAMESPACE = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 
 class ResumeImportResponse(BaseModel):
@@ -193,6 +202,11 @@ def validate_pdf_signature(content: bytes) -> None:
         raise HTTPException(status_code=400, detail="Uploaded PDF content does not have a valid PDF signature.")
 
 
+def validate_docx_signature(content: bytes) -> None:
+    if not content.startswith(DOCX_SIGNATURES):
+        raise HTTPException(status_code=400, detail="Uploaded DOCX content is not a valid Word package.")
+
+
 def extract_pdf_text(content: bytes) -> str:
     validate_pdf_signature(content)
     try:
@@ -223,13 +237,70 @@ def extract_pdf_text(content: bytes) -> str:
     return text
 
 
+def extract_docx_text(content: bytes) -> str:
+    validate_docx_signature(content)
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as package:
+            entries = package.infolist()
+            names = {entry.filename for entry in entries}
+            if len(entries) > MAX_DOCX_ENTRIES:
+                raise HTTPException(status_code=400, detail="DOCX package contains too many entries.")
+            if sum(entry.file_size for entry in entries) > MAX_DOCX_UNCOMPRESSED_BYTES:
+                raise HTTPException(status_code=400, detail="DOCX expanded content exceeds the processing limit.")
+            if "[Content_Types].xml" not in names or "word/document.xml" not in names:
+                raise HTTPException(status_code=400, detail="Uploaded DOCX content is missing required Word parts.")
+
+            header_parts = sorted(name for name in names if re.fullmatch(r"word/header\d+\.xml", name))
+            footer_parts = sorted(name for name in names if re.fullmatch(r"word/footer\d+\.xml", name))
+            optional_parts = [name for name in ("word/footnotes.xml", "word/endnotes.xml") if name in names]
+            parts = [*header_parts, "word/document.xml", *optional_parts, *footer_parts]
+            paragraphs: list[str] = []
+            extracted_chars = 0
+            parser = etree.XMLParser(resolve_entities=False, no_network=True, recover=False, huge_tree=False)
+            word = f"{{{WORDPROCESSINGML_NAMESPACE}}}"
+
+            for part_name in parts:
+                info = package.getinfo(part_name)
+                if info.file_size > MAX_DOCX_XML_BYTES:
+                    raise HTTPException(status_code=400, detail="A DOCX XML part exceeds the processing limit.")
+                root = etree.fromstring(package.read(part_name), parser=parser)
+                if root.getroottree().docinfo.doctype:
+                    raise HTTPException(status_code=400, detail="DOCX XML document types are not supported.")
+                for paragraph in root.iter(f"{word}p"):
+                    chunks: list[str] = []
+                    for element in paragraph.iter():
+                        if element.tag == f"{word}t" and element.text:
+                            chunks.append(element.text)
+                        elif element.tag == f"{word}tab":
+                            chunks.append("\t")
+                        elif element.tag in {f"{word}br", f"{word}cr"}:
+                            chunks.append("\n")
+                    line = "".join(chunks).strip()
+                    if line:
+                        extracted_chars += len(line)
+                        if extracted_chars > MAX_DOCX_EXTRACTED_CHARS:
+                            raise HTTPException(status_code=400, detail="DOCX extracted text exceeds the processing limit.")
+                        paragraphs.append(line)
+    except HTTPException:
+        raise
+    except (zipfile.BadZipFile, KeyError, etree.XMLSyntaxError, OSError) as exc:
+        raise HTTPException(status_code=400, detail="Could not safely read the uploaded DOCX document.") from exc
+
+    text = redact_resume_personal_info("\n".join(paragraphs))
+    if not text:
+        raise HTTPException(status_code=400, detail="No readable text was found in the DOCX document.")
+    return text
+
+
 async def extract_resume_text(file: UploadFile) -> str:
-    if file.content_type not in {"application/pdf", "application/x-pdf"}:
-        raise HTTPException(status_code=400, detail="Only PDF resume uploads are supported right now.")
+    if file.content_type not in {"application/pdf", "application/x-pdf", DOCX_CONTENT_TYPE}:
+        raise HTTPException(status_code=400, detail="Only PDF and DOCX resume uploads are supported right now.")
 
     content = await file.read(MAX_RESUME_BYTES + 1)
     if len(content) > MAX_RESUME_BYTES:
-        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="Resume PDF is larger than 8 MB.")
+        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="Resume document is larger than 8 MB.")
+    if file.content_type == DOCX_CONTENT_TYPE:
+        return extract_docx_text(content)
     return extract_pdf_text(content)
 
 

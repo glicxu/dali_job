@@ -164,7 +164,7 @@ class _AutomationScreenState extends State<AutomationScreen> {
   Future<void> _uploadResume({bool linkedIn = false}) async {
     final file = await FilePicker.pickFile(
       type: FileType.custom,
-      allowedExtensions: linkedIn ? const ['pdf'] : const ['pdf', 'txt'],
+      allowedExtensions: linkedIn ? const ['pdf'] : const ['pdf', 'docx', 'txt'],
     );
     if (file == null) return;
     final bytes = await file.readAsBytes();

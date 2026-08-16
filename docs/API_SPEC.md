@@ -1035,11 +1035,11 @@ Document uploads use owner-protected API requests and local server storage. Down
 
 ### `POST /documents`
 
-Uploads a PDF or plain text document, stores the original file, creates a document and first document version, and saves redacted extracted text when extraction is supported.
+Uploads a PDF, DOCX, or plain text document, stores the original file, creates a document and first document version, and saves redacted extracted text when extraction is supported.
 
 Multipart fields:
 
-- `file`: required PDF or text file.
+- `file`: required PDF, DOCX, or text file. Legacy binary DOC files must first be saved as DOCX or PDF.
 - `title`: optional document title.
 - `document_type`: optional, defaults to `resume`.
 
@@ -1057,7 +1057,7 @@ Returns redacted extracted text for the latest version when available. This is i
 
 ### `POST /documents/{documentId}/versions`
 
-Uploads a replacement PDF or text file as the next immutable version. Existing versions and application attachments are unchanged.
+Uploads a replacement PDF, DOCX, or text file as the next immutable version. Existing versions and application attachments are unchanged.
 
 ### `POST /documents/upload-url`
 

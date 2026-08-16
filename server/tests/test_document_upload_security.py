@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import zipfile
 
 import pytest
 from fastapi import HTTPException, UploadFile
@@ -24,6 +25,17 @@ def _upload(content: bytes, content_type: str, filename: str = "resume.pdf") -> 
         filename=filename,
         headers=Headers({"content-type": content_type}),
     )
+
+
+def _docx(document_xml: str) -> bytes:
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as package:
+        package.writestr(
+            "[Content_Types].xml",
+            '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>',
+        )
+        package.writestr("word/document.xml", document_xml)
+    return output.getvalue()
 
 
 @pytest.mark.parametrize(
@@ -54,6 +66,50 @@ def test_upload_read_is_bounded_before_validation() -> None:
         asyncio.run(read_supported_upload(_upload(oversized, "text/plain", "resume.txt")))
 
     assert caught.value.status_code == 413
+
+
+def test_docx_resume_text_is_extracted_and_redacted() -> None:
+    content = _docx(
+        """<?xml version="1.0" encoding="UTF-8"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p><w:r><w:t>Jane Candidate</w:t></w:r></w:p>
+            <w:p><w:r><w:t>jane@example.com</w:t></w:r></w:p>
+            <w:p><w:r><w:t>Senior Software Engineer</w:t></w:r></w:p>
+            <w:p><w:r><w:t>Python</w:t><w:tab/><w:t>Distributed systems</w:t></w:r></w:p>
+          </w:body>
+        </w:document>"""
+    )
+
+    uploaded = asyncio.run(
+        read_supported_upload(
+            _upload(content, resume_import.DOCX_CONTENT_TYPE, "resume.docx")
+        )
+    )
+    text = resume_import.extract_docx_text(uploaded)
+
+    assert "Jane Candidate" not in text
+    assert "jane@example.com" not in text
+    assert "Senior Software Engineer" in text
+    assert "Python Distributed systems" in text
+
+
+def test_malformed_docx_is_rejected() -> None:
+    malformed = b"PK\x03\x04not-a-word-package"
+
+    with pytest.raises(HTTPException) as caught:
+        resume_import.extract_docx_text(malformed)
+
+    assert caught.value.status_code == 400
+    assert "safely read" in str(caught.value.detail)
+
+
+def test_legacy_doc_has_actionable_error() -> None:
+    with pytest.raises(HTTPException) as caught:
+        asyncio.run(read_supported_upload(_upload(b"legacy", "application/msword", "resume.doc")))
+
+    assert caught.value.status_code == 400
+    assert "Save the document as DOCX or PDF" in str(caught.value.detail)
 
 
 @pytest.mark.parametrize(

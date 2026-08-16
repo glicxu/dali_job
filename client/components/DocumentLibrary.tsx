@@ -149,10 +149,10 @@ function AuthenticatedDocumentLibrary() {
       <ToastRegion message={status} onDismiss={() => setStatus(null)} />
 
       <section className="profile-card document-upload-card">
-        <SectionHeader title="Upload document" description="Add a PDF or text document. Extracted text is redacted before storage and each replacement creates a preserved version." />
+        <SectionHeader title="Upload document" description="Add a PDF, DOCX, or text document. Extracted text is redacted before storage and each replacement creates a preserved version." />
         <form className="document-upload-form" onSubmit={submitUpload}>
           <input name="title" placeholder="Document title" />
-          <input name="document" type="file" accept="application/pdf,text/plain" required />
+          <input name="document" type="file" accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,.pdf,.docx,.txt" required />
           <Button type="submit" icon={Upload} loading={isUploading}>Upload</Button>
         </form>
       </section>
@@ -185,7 +185,7 @@ function AuthenticatedDocumentLibrary() {
                   <UploadCloud size={16} aria-hidden="true" /> New Version
                   <input
                     type="file"
-                    accept="application/pdf,text/plain"
+                    accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,.pdf,.docx,.txt"
                     disabled={isUploading}
                     onChange={(event) => {
                       void replaceDocumentVersion(document, event.target.files?.[0]);

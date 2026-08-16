@@ -271,12 +271,12 @@ function AuthenticatedQuickFindHome() {
 
       {!defaultResume ? (
         <section className="profile-card quick-find-resume-setup">
-          <SectionHeader title="Start with your resume" description="Upload a PDF so DaliJob can identify suitable roles and compare each recommendation." />
+          <SectionHeader title="Start with your resume" description="Upload a PDF or DOCX so DaliJob can identify suitable roles and compare each recommendation." />
           <AlertBanner tone="info">
             Personal contact information is removed before AI analysis. The generated profile is not saved until you choose Use This Resume.
           </AlertBanner>
           <form className="inline-form resume-upload-form" onSubmit={importResume}>
-            <input name="resume" type="file" accept="application/pdf" required />
+            <input name="resume" type="file" accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,.docx" required />
             <Button type="submit" icon={Upload} loading={isImportingResume}>Analyze Resume</Button>
           </form>
           {resumeImport ? (

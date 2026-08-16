@@ -73,7 +73,7 @@ class GuestBestMatchResponse(BaseModel):
     company: str
     location: str = ""
     source_url: str | None = None
-    match_score: int = Field(..., ge=0, le=10)
+    match_score: int | None = Field(default=None, ge=0, le=10)
     score_scale: str = "0-10"
     summary: str
     job_description: str = ""
@@ -92,3 +92,15 @@ class GuestMatchStatusResponse(BaseModel):
     retryable: bool = False
     error_code: str | None = None
     result: GuestBestMatchResponse | None = None
+
+
+class GuestClaimRequest(BaseModel):
+    guest_credential: str = Field(min_length=20, max_length=512)
+
+
+class GuestClaimResponse(BaseModel):
+    status: str
+    resume_profile_id: int
+    search_criterion_id: int
+    candidate_profile_id: str
+    qualification_assessment_id: str

@@ -85,6 +85,11 @@ class GuestRepository {
     extraHeaders: {'Idempotency-Key': idempotencyKey},
   );
 
+  Future<Map<String, dynamic>> matchStatus(String credential) => api.get(
+    'guest-trials/current/match',
+    authorization: _authorization(credential),
+  );
+
   Future<void> deleteTrial(String credential) => api.delete(
     'guest-trials/current',
     authorization: _authorization(credential),

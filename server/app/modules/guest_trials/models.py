@@ -43,6 +43,18 @@ class GuestTrial(Base):
         index=True,
     )
     claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    claimed_resume_profile_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("resume_profiles.id", ondelete="SET NULL"), nullable=True
+    )
+    claimed_search_criterion_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("job_search_criteria.id", ondelete="SET NULL"), nullable=True
+    )
+    claimed_candidate_profile_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("matching_candidate_profile_versions.id", ondelete="SET NULL"), nullable=True
+    )
+    claimed_qualification_assessment_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("matching_qualification_assessments.id", ondelete="SET NULL"), nullable=True
+    )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
@@ -139,6 +151,13 @@ class GuestMatchOperation(Base):
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending", index=True)
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    correlation_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    lease_owner: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
@@ -231,7 +250,7 @@ class GuestMatchResult(Base):
     )
     profile_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
     job_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
-    match_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    match_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     match_data: Mapped[dict] = mapped_column(JSON, nullable=False)
     source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)

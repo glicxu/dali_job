@@ -325,6 +325,45 @@ def get_candidate_profile(
     return _candidate_profile_view(db, profile, source)
 
 
+@router.post(
+    "/candidate-profiles/{candidate_profile_id}/regenerate",
+    response_model=CandidateProfileView | MatchingOperationView,
+    description=(
+        "Rebuild from the Candidate Profile's current resume. A corrected resume creates a new "
+        "immutable source/profile version; unchanged versioned inputs return the cached profile."
+    ),
+)
+def regenerate_candidate_profile(
+    candidate_profile_id: str,
+    request: Request,
+    response: Response,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+    extractor: CandidateProfileExtractor = Depends(get_candidate_profile_extractor),
+) -> CandidateProfileView | MatchingOperationView:
+    user, workspace = _require_v2_access(request, db, identity)
+    owner = ArtifactOwner.authenticated(workspace_id=workspace.id, user_id=user.id)
+    profile = get_candidate_profile_for_owner(db, public_id=candidate_profile_id, owner=owner)
+    if profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate Profile not found.")
+    source = db.get(CanonicalSource, profile.canonical_source_id)
+    if source is None or source.resume_profile_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Candidate Profile does not have a reusable resume source.",
+        )
+    return create_candidate_profile(
+        resume_profile_id=source.resume_profile_id,
+        request=request,
+        response=response,
+        background_tasks=background_tasks,
+        db=db,
+        identity=identity,
+        extractor=extractor,
+    )
+
+
 @router.put(
     "/candidate-profiles/{candidate_profile_id}/primary-career-profile",
     response_model=CandidateProfileView,

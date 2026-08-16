@@ -125,8 +125,24 @@ class GuestController extends ChangeNotifier {
   Future<void> startMatch() => _run(() async {
     final key =
         '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}';
-    final match = await repository.startMatch(credential!, key);
+    var match = await repository.startMatch(credential!, key);
     snapshot = snapshot?.withMatch(match);
+    notifyListeners();
+
+    const activeStates = {'pending', 'searching', 'matching'};
+    final deadline = DateTime.now().add(const Duration(seconds: 95));
+    while (activeStates.contains(match['status']) &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(seconds: 1));
+      match = await repository.matchStatus(credential!);
+      snapshot = snapshot?.withMatch(match);
+      notifyListeners();
+    }
+    if (activeStates.contains(match['status'])) {
+      throw StateError(
+        'Matching is still running. You can leave this screen and check again shortly.',
+      );
+    }
   });
 
   Future<void> refresh() async {

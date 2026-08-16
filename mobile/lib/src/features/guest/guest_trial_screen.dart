@@ -298,8 +298,8 @@ class _GuestTrialScreenState extends State<GuestTrialScreen> {
         const SizedBox(height: 8),
         Text(
           retryable
-              ? 'Failed searches do not use your trial. If the search succeeded but matching paused, DaliJob reuses the retained jobs.'
-              : 'Your trial runs immediately—there is no weekly wait. DaliJob searches using your criteria, compares your confirmed profile, and shows only the highest-scoring usable result.',
+              ? 'A provider step failed, so no result was consumed. Retry uses the same saved profile and curated job catalog.'
+              : 'Your trial runs immediately—there is no weekly wait. DaliJob compares your confirmed profile with quality-controlled job profiles already in its catalog and shows the best usable result.',
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 20),
@@ -334,7 +334,12 @@ class _GuestTrialScreenState extends State<GuestTrialScreen> {
                 children: [
                   CircleAvatar(
                     radius: 25,
-                    child: Text('${result['match_score']}/10'),
+                    child: Text(
+                      result['match_score'] == null
+                          ? 'More\ninfo'
+                          : '${result['match_score']}/10',
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(

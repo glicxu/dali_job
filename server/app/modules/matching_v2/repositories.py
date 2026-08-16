@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.matching_v2.models import (
@@ -40,6 +41,20 @@ class RevisionConflict(ValueError):
 
 class ArtifactOwnershipError(ValueError):
     pass
+
+
+def _insert_unique_or_get(db: Session, instance, model, cache_key: str):
+    """Insert a cache-keyed parent safely when concurrent workers race."""
+    try:
+        with db.begin_nested():
+            db.add(instance)
+            db.flush()
+        return instance, True
+    except IntegrityError:
+        existing = db.scalar(select(model).where(model.cache_key == cache_key))
+        if existing is None:
+            raise
+        return existing, False
 
 
 @dataclass(frozen=True)
@@ -158,8 +173,9 @@ def create_or_get_canonical_source(
         language=language,
         cache_key=cache_key,
     )
-    db.add(source)
-    db.flush()
+    source, created = _insert_unique_or_get(db, source, CanonicalSource, cache_key)
+    if not created:
+        return source
     for ordinal, span in enumerate(spans):
         db.add(
             SourceSpan(
@@ -231,8 +247,9 @@ def create_or_get_candidate_profile(
         recommended_primary_career_profile_ref=artifact.recommended_primary_career_profile_ref,
         cache_key=cache_key,
     )
-    db.add(profile)
-    db.flush()
+    profile, created = _insert_unique_or_get(db, profile, CandidateProfileVersion, cache_key)
+    if not created:
+        return profile
 
     rows_by_local_ref: dict[str, CandidateCareerProfile] = {}
     for extracted in artifact.career_profiles:
@@ -354,8 +371,9 @@ def create_or_get_job_profile(
         cleanup=artifact.cleanup.model_dump(mode="json"),
         cache_key=cache_key,
     )
-    db.add(profile)
-    db.flush()
+    profile, created = _insert_unique_or_get(db, profile, JobProfileVersion, cache_key)
+    if not created:
+        return profile
     for item in artifact.requirements:
         db.add(JobRequirement(
             job_profile_version_id=profile.id,
@@ -561,8 +579,11 @@ def create_or_get_qualification_assessment(
         input_quality=input_quality,
         cache_key=cache_key,
     )
-    db.add(assessment)
-    db.flush()
+    assessment, created = _insert_unique_or_get(
+        db, assessment, QualificationAssessment, cache_key
+    )
+    if not created:
+        return assessment
     for item in artifact.requirement_assessments:
         requirement = by_public_id[item.requirement_id]
         db.add(RequirementAssessment(

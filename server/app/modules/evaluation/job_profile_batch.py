@@ -85,6 +85,8 @@ def extract_and_persist_job_profile(
     sync_policy_registry(db)
     profile = find_cached_job_profile(db, source=source, model_id=model_id)
     if profile is not None:
+        profile.trial_eligible = True
+        profile.quality_tier = "curated_evaluation"
         return {
             "status": "cached",
             "job_profile_id": profile.public_id,
@@ -109,6 +111,8 @@ def extract_and_persist_job_profile(
         jobs_cache_id=prepared.cached_job.id,
         provider_execution_reference=result.provider_execution_reference,
     )
+    profile.trial_eligible = True
+    profile.quality_tier = "curated_evaluation"
     return {
         "status": "created",
         "job_profile_id": profile.public_id,

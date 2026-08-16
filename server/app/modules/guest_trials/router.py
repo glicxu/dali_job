@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from typing import cast
+import socket
+import uuid
 
-from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, Response, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Header, HTTPException, Request, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.provider_ops import run_provider_call
 from app.db.session import get_db_session
-from app.modules.auth.dependencies import AuthenticatedIdentity
+from app.modules.auth.dependencies import AuthenticatedIdentity, get_current_identity
 from app.modules.documents.storage import (
     extract_redacted_text,
     normalized_content_type,
@@ -19,6 +21,7 @@ from app.modules.guest_trials.dependencies import get_current_guest_trial
 from app.modules.guest_trials.models import GuestDocument, GuestResumeProfile, GuestSearchCriterion, GuestTrial
 from app.modules.guest_trials.matching import (
     begin_cached_match,
+    claim_cached_match,
     match_status,
     require_ready_inputs,
     run_cached_profile_match,
@@ -32,6 +35,8 @@ from app.modules.guest_trials.schemas import (
     GuestResumeImportResponse,
     GuestTrialCreateResponse,
     GuestTrialCurrentResponse,
+    GuestClaimRequest,
+    GuestClaimResponse,
 )
 from app.modules.guest_trials.service import (
     create_guest_trial,
@@ -43,6 +48,7 @@ from app.modules.guest_trials.service import (
     put_guest_document,
     put_guest_profile,
     record_guest_document_parse,
+    claim_guest_trial,
 )
 from app.modules.guest_trials.storage import delete_guest_document_file, write_guest_document
 from app.modules.guest_trials.rate_limit import enforce_guest_creation_limit, enforce_guest_parse_limit
@@ -52,6 +58,7 @@ from app.modules.matching_v2.qualification import QualificationMatcher
 from app.modules.matching_v2.router import get_candidate_profile_extractor, get_qualification_matcher
 from app.modules.profiles.readiness import evaluate_profile_readiness
 from app.modules.profiles.schemas import ProfileReadinessResponse, ResumeData
+from app.modules.operations.service import session_factory_for
 
 router = APIRouter(prefix="/guest-trials", tags=["guest-trials"])
 
@@ -166,6 +173,33 @@ def create_trial(request: Request, db: Session = Depends(get_db_session)) -> Gue
         guest_credential=created.credential,
         status=created.trial.status,
         expires_at=created.trial.expires_at,
+    )
+
+
+@router.post("/claim", response_model=GuestClaimResponse)
+def claim_trial_for_current_account(
+    payload: GuestClaimRequest,
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+    db: Session = Depends(get_db_session),
+) -> GuestClaimResponse:
+    try:
+        claimed = claim_guest_trial(db, credential=payload.guest_credential, identity=identity)
+    except ValueError as exc:
+        code = str(exc)
+        status_code = {
+            "INVALID_GUEST_CREDENTIAL": status.HTTP_401_UNAUTHORIZED,
+            "GUEST_TRIAL_ALREADY_CLAIMED": status.HTTP_409_CONFLICT,
+            "GUEST_RESULT_NOT_READY": status.HTTP_409_CONFLICT,
+            "GUEST_ARTIFACTS_UNAVAILABLE": status.HTTP_409_CONFLICT,
+            "GUEST_CLAIM_MAPPING_UNAVAILABLE": status.HTTP_409_CONFLICT,
+        }.get(code, status.HTTP_409_CONFLICT)
+        raise HTTPException(status_code=status_code, detail={"code": code}) from exc
+    return GuestClaimResponse(
+        status="claimed",
+        resume_profile_id=claimed.resume_profile_id,
+        search_criterion_id=claimed.search_criterion_id,
+        candidate_profile_id=claimed.candidate_profile_id,
+        qualification_assessment_id=claimed.qualification_assessment_id,
     )
 
 
@@ -290,14 +324,17 @@ def get_current_match(
 @router.post(
     "/current/match",
     response_model=GuestMatchStatusResponse,
+    status_code=status.HTTP_202_ACCEPTED,
     summary="Run an immediate guest match",
     description=(
-        "Matches synchronously against the existing cached Job Profile catalog; no external "
-        "job query is started and no provider-search allowance is consumed."
+        "Starts an immediate match against the existing cached Job Profile catalog and returns "
+        "a pollable operation; no external job query or provider-search allowance is used."
     ),
 )
 def create_current_match(
     request: Request,
+    response: Response,
+    background_tasks: BackgroundTasks,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     trial: GuestTrial = Depends(get_current_guest_trial),
     db: Session = Depends(get_db_session),
@@ -312,23 +349,56 @@ def create_current_match(
         )
     existing_status = match_status(db, trial)
     if existing_status.result is not None:
+        response.status_code = status.HTTP_200_OK
         return existing_status
     profile, criterion = require_ready_inputs(db, trial)
-    operation = begin_cached_match(db, trial)
+    operation = begin_cached_match(db, trial, idempotency_key=normalized_key)
     db.commit()
-    try:
-        run_cached_profile_match(
-            request,
-            db,
-            trial,
-            operation,
-            profile,
-            criterion,
-            candidate_extractor,
-            matcher,
-        )
-    except HTTPException:
-        db.commit()
-        raise
-    db.commit()
+    background_tasks.add_task(
+        _execute_guest_match_background,
+        session_factory_for(db),
+        operation.id,
+        request.app.state.runtime.openai_model,
+        candidate_extractor,
+        matcher,
+    )
+    response.status_code = status.HTTP_202_ACCEPTED
     return match_status(db, trial)
+
+
+def _execute_guest_match_background(
+    session_factory,
+    operation_id: int,
+    model_id: str,
+    candidate_extractor: CandidateProfileExtractor,
+    matcher: QualificationMatcher,
+) -> None:
+    worker_id = f"{socket.gethostname()}:{uuid.uuid4().hex[:12]}"
+    with session_factory() as db:
+        from app.modules.guest_trials.models import GuestMatchOperation
+
+        operation = db.get(GuestMatchOperation, operation_id)
+        if operation is None or not claim_cached_match(db, operation, worker_id=worker_id):
+            db.commit()
+            return
+        trial = db.get(GuestTrial, operation.guest_trial_id)
+        if trial is None:
+            db.commit()
+            return
+        profile, criterion = require_ready_inputs(db, trial)
+        db.commit()
+        try:
+            run_cached_profile_match(
+                model_id,
+                db,
+                trial,
+                operation,
+                profile,
+                criterion,
+                candidate_extractor,
+                matcher,
+            )
+        except HTTPException:
+            db.commit()
+            return
+        db.commit()

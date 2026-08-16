@@ -38,12 +38,15 @@ void main() {
       );
 
       final result = await repository.startMatch('public.secret', 'stable-key');
+      final status = await repository.matchStatus('public.secret');
 
       expect(result['status'], 'result_ready');
-      expect(requests.single.headers['Authorization'], 'Guest public.secret');
-      expect(requests.single.headers['Idempotency-Key'], 'stable-key');
+      expect(status['status'], 'result_ready');
+      expect(requests.first.headers['Authorization'], 'Guest public.secret');
+      expect(requests.first.headers['Idempotency-Key'], 'stable-key');
+      expect(requests.last.method, 'GET');
       expect(
-        requests.single.headers['Authorization'],
+        requests.first.headers['Authorization'],
         isNot(startsWith('Bearer')),
       );
     },

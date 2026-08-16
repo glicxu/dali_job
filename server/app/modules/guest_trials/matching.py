@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime, timedelta, timezone
 
-from fastapi import HTTPException, Request, status
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -26,6 +27,7 @@ from app.modules.matching_v2.canonical import (
     canonicalize_text,
 )
 from app.modules.matching_v2.explanations import render_match_explanation
+from app.modules.matching_v2.eligibility import evaluate_eligibility
 from app.modules.matching_v2.extraction import CandidateProfileExtractor
 from app.modules.matching_v2.models import (
     CandidateCareerProfile,
@@ -46,10 +48,11 @@ from app.modules.matching_v2.repositories import (
     create_or_get_candidate_profile,
     create_or_get_canonical_source,
     create_or_get_qualification_assessment,
+    find_cached_qualification_assessment,
     find_cached_candidate_profile,
     sync_policy_registry,
 )
-from app.modules.matching_v2.schemas import QualificationAssessmentResponse
+from app.modules.matching_v2.schemas import JobApplicationConstraintsResponse, QualificationAssessmentResponse
 from app.modules.matching_v2.scoring import QualificationScoreItem, score_match
 from app.modules.profiles.readiness import evaluate_profile_readiness
 from app.modules.profiles.schemas import ResumeData
@@ -144,7 +147,7 @@ def require_ready_inputs(
     return profile, criterion
 
 
-def begin_cached_match(db: Session, trial: GuestTrial) -> GuestMatchOperation:
+def begin_cached_match(db: Session, trial: GuestTrial, *, idempotency_key: str) -> GuestMatchOperation:
     locked_trial = db.scalar(select(GuestTrial).where(GuestTrial.id == trial.id).with_for_update())
     if locked_trial is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guest trial not found.")
@@ -153,21 +156,60 @@ def begin_cached_match(db: Session, trial: GuestTrial) -> GuestMatchOperation:
         operation = GuestMatchOperation(guest_trial_id=locked_trial.id, status="pending", attempt_count=0)
         db.add(operation)
         db.flush()
-    if operation.status in {"searching", "matching"}:
+    elif operation.status in {"pending", "searching", "matching"}:
+        if operation.idempotency_key == idempotency_key:
+            return operation
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Guest match is already in progress.")
     # Retained for backwards API compatibility only. This flow performs no provider search.
     locked_trial.provider_search_state = "available"
+    now = utc_now()
     locked_trial.status = "matching"
-    operation.status = "matching"
+    operation.status = "pending"
     operation.error_code = None
-    operation.attempt_count += 1
+    operation.idempotency_key = idempotency_key
+    operation.correlation_id = operation.correlation_id or f"guest_match_{uuid.uuid4().hex}"
+    operation.deadline_at = now + timedelta(seconds=90)
+    operation.next_retry_at = None
+    operation.lease_owner = None
+    operation.lease_expires_at = None
     operation.completed_at = None
     db.flush()
     return operation
 
 
+def claim_cached_match(
+    db: Session,
+    operation: GuestMatchOperation,
+    *,
+    worker_id: str,
+) -> bool:
+    now = utc_now()
+    if operation.deadline_at is not None and _as_utc(operation.deadline_at) <= now:
+        _fail(operation, db.get(GuestTrial, operation.guest_trial_id), "operation_deadline_exceeded")
+        operation.completed_at = now
+        return False
+    if operation.status == "matching" and operation.lease_expires_at is not None:
+        if _as_utc(operation.lease_expires_at) > now and operation.lease_owner != worker_id:
+            return False
+    if operation.status == "failed":
+        if operation.attempt_count >= 3:
+            return False
+        if operation.next_retry_at is not None and _as_utc(operation.next_retry_at) > now:
+            return False
+    if operation.status not in {"pending", "matching", "failed"}:
+        return False
+    operation.status = "matching"
+    operation.lease_owner = worker_id
+    operation.lease_expires_at = now + timedelta(seconds=120)
+    operation.heartbeat_at = now
+    operation.attempt_count += 1
+    operation.error_code = None
+    db.flush()
+    return True
+
+
 def run_cached_profile_match(
-    request: Request,
+    model_id: str,
     db: Session,
     trial: GuestTrial,
     operation: GuestMatchOperation,
@@ -179,11 +221,11 @@ def run_cached_profile_match(
     owner = ArtifactOwner.guest(guest_trial_id=trial.id)
     try:
         candidate = _candidate_profile(
-            request,
             db,
             owner=owner,
             guest_profile=guest_profile,
             extractor=candidate_extractor,
+            model_id=model_id,
         )
     except (HTTPException, ValueError) as exc:
         _fail(operation, trial, "candidate_profile_unavailable")
@@ -200,6 +242,9 @@ def run_cached_profile_match(
             detail="No compatible cached Job Profile is available yet.",
         )
     job_profile, cache_job = selected
+    operation.heartbeat_at = utc_now()
+    operation.lease_expires_at = utc_now() + timedelta(seconds=120)
+    db.flush()
     context = select_candidate_career_context(
         db,
         candidate_profile=candidate,
@@ -225,6 +270,12 @@ def run_cached_profile_match(
         ) from exc
 
     match_score, match_data = _render_guest_match(db, qualification, job_profile)
+    if operation.deadline_at is not None and _as_utc(operation.deadline_at) <= utc_now():
+        _fail(operation, trial, "operation_deadline_exceeded")
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Matching exceeded the operation deadline.",
+        )
     candidate_row.match_score = match_score
     candidate_row.match_data = match_data
     candidate_row.matcher_provenance = {
@@ -258,6 +309,8 @@ def run_cached_profile_match(
     operation.status = "result_ready"
     operation.error_code = None
     operation.completed_at = utc_now()
+    operation.lease_owner = None
+    operation.lease_expires_at = None
     trial.status = "result_ready"
     db.flush()
     db.refresh(result)
@@ -276,6 +329,7 @@ def select_cached_job_profile(
             .join(JobCache, JobCache.id == JobProfileVersion.jobs_cache_id)
             .where(
                 JobProfileVersion.deleted_at.is_(None),
+                JobProfileVersion.trial_eligible.is_(True),
                 JobCache.deleted_at.is_(None),
                 JobCache.raw_description_text != "",
             )
@@ -307,12 +361,12 @@ def select_cached_job_profile(
 
 
 def _candidate_profile(
-    request: Request,
     db: Session,
     *,
     owner: ArtifactOwner,
     guest_profile: GuestResumeProfile,
     extractor: CandidateProfileExtractor,
+    model_id: str,
 ) -> CandidateProfileVersion:
     source_text, extraction_version = _guest_resume_source_text(db, guest_profile)
     canonical_text = canonicalize_text(source_text)
@@ -333,7 +387,7 @@ def _candidate_profile(
     cached = find_cached_candidate_profile(
         db,
         source=source,
-        model_id=request.app.state.runtime.openai_model,
+        model_id=model_id,
     )
     if cached is not None:
         return cached
@@ -348,6 +402,15 @@ def _candidate_profile(
 
 
 def _qualification(db, *, owner, candidate, job_profile, context, matcher):
+    cached = find_cached_qualification_assessment(
+        db,
+        candidate_profile=candidate,
+        selection_revision=context.selection.revision,
+        job_profile=job_profile,
+        model_id=getattr(matcher, "model", None) or getattr(matcher, "_model", None) or candidate.model_id,
+    )
+    if cached is not None:
+        return cached
     qualification_input = build_qualification_input(
         db,
         candidate_profile=candidate,
@@ -402,7 +465,7 @@ def _qualification(db, *, owner, candidate, job_profile, context, matcher):
     )
 
 
-def _render_guest_match(db: Session, qualification, job_profile: JobProfileVersion) -> tuple[int, dict]:
+def _render_guest_match(db: Session, qualification, job_profile: JobProfileVersion) -> tuple[int | None, dict]:
     requirements = list(
         db.scalars(
             select(JobRequirement).where(JobRequirement.job_profile_version_id == job_profile.id)
@@ -420,12 +483,18 @@ def _render_guest_match(db: Session, qualification, job_profile: JobProfileVersi
         for item in artifact.requirement_assessments
     ]
     career = job_profile.artifact["career_context"]
+    eligibility = evaluate_eligibility(
+        JobApplicationConstraintsResponse.model_validate(job_profile.artifact["application_constraints"]),
+        None,
+        job_country=(job_profile.artifact.get("location") or {}).get("country"),
+    )
     score = score_match(
         role_family=career["primary_role_family"],
         track=career["track"],
         target_level=career["target_level"],
         level_confidence=career["confidence"],
         qualification_items=items,
+        gates=eligibility.items,
     )
     explanation = render_match_explanation(
         qualification_items=artifact.requirement_assessments,
@@ -434,10 +503,11 @@ def _render_guest_match(db: Session, qualification, job_profile: JobProfileVersi
         gates=score.gates,
         score=score,
     )
-    numeric_score = score.overall_score
-    if numeric_score is None:
-        numeric_score = score.diagnostic_qualification_score
-    legacy_score = max(0, min(10, int(((numeric_score or 0) + 5) // 10)))
+    legacy_score = (
+        max(0, min(10, int((score.overall_score + 5) // 10)))
+        if score.overall_score is not None
+        else None
+    )
     supported = list(explanation.strengths)
     unsupported = list(explanation.gaps)
     return legacy_score, {
@@ -519,7 +589,15 @@ def _catalog_rank(profile, cache, careers, criterion):
     location_rank = _location_rank(profile.artifact.get("location") or {}, criterion.location)
     warning_count = len((profile.cleanup or {}).get("warnings") or [])
     approved_rank = 0 if ROLE_TRACK_POLICIES.resolve_public(job_family, job_track) is not None else 1
-    return (*career_fit, approved_rank, len(target_tokens - title_tokens), location_rank, warning_count, -profile.id)
+    return (
+        *career_fit,
+        approved_rank,
+        len(target_tokens - title_tokens),
+        location_rank,
+        warning_count,
+        profile.trial_priority,
+        -profile.id,
+    )
 
 
 def _location_rank(location: dict, target: str) -> int:
@@ -578,6 +656,16 @@ def _span_input(span: EvidenceSpan) -> SpanInput:
 
 
 def _fail(operation: GuestMatchOperation, trial: GuestTrial, code: str) -> None:
+    now = utc_now()
     operation.status = "failed"
     operation.error_code = code
-    trial.status = "active"
+    operation.lease_owner = None
+    operation.lease_expires_at = None
+    operation.heartbeat_at = now
+    operation.next_retry_at = now + timedelta(seconds=min(60, 2 ** max(operation.attempt_count, 1)))
+    if trial is not None:
+        trial.status = "active"
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)

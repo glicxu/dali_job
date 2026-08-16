@@ -196,6 +196,36 @@ def test_candidate_profile_api_creates_caches_reads_and_revises_selection() -> N
     assert fetched.status_code == 200
     assert fetched.json()["candidate_profile_id"] == candidate_profile_id
 
+    unchanged = client.post(
+        f"/api/v1/candidate-profiles/{candidate_profile_id}/regenerate"
+    )
+    assert unchanged.status_code == 200
+    assert unchanged.json()["candidate_profile_id"] == candidate_profile_id
+
+    corrected_resume = client.patch(
+        f"/api/v1/resume-profiles/{resume_id}",
+        json={
+            "resume_data": {
+                "headline": "Software Engineer",
+                "summary": "Builds Python services and reliable distributed systems.",
+                "experience": ["Delivered a production API and led its reliability improvements."],
+                "skills": ["Python", "Distributed Systems"],
+                "target_roles": ["Software Engineer"],
+            }
+        },
+    )
+    assert corrected_resume.status_code == 200
+    regenerated = client.post(
+        f"/api/v1/candidate-profiles/{candidate_profile_id}/regenerate"
+    )
+    assert regenerated.status_code == 202
+    regenerated_view = client.post(
+        f"/api/v1/candidate-profiles/{candidate_profile_id}/regenerate"
+    )
+    assert regenerated_view.status_code == 200
+    assert regenerated_view.json()["candidate_profile_id"] != candidate_profile_id
+    assert extractor.calls == 2
+
     selected = client.put(
         f"/api/v1/candidate-profiles/{candidate_profile_id}/primary-career-profile",
         json={

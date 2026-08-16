@@ -383,7 +383,7 @@ Work:
 - Run one Qualification Assessment for the highest-ranked compatible cached Job Profile.
 - Persist the Candidate Profile, Job Profile, and Qualification Assessment references with the guest result.
 - Keep `provider_search_state` as a temporary response-compatibility field, fixed at `available`; cached matching does not consume weekly search quota or trial allowance.
-- Return inline when complete; otherwise preserve the existing operation polling contract.
+- Return a pollable operation immediately and let clients retrieve the result when complete.
 - Render the server-cached job description in-app and do not expose an outbound source URL in the guest result.
 - Preserve guest-to-account claim mapping for source, profile, criteria, result, and immutable artifact references.
 
@@ -399,6 +399,55 @@ Acceptance criteria:
 - Guest deletion and expiration remove all private matching artifacts.
 
 Dependencies: Phase 6 and the existing guest-trial foundation.
+
+### Phase 7.5: Guest Reliability And Contract Hardening
+
+**Status:** Complete in the implementation as of 2026-08-16. Deployment remains a separate release step.
+
+**Outcome:** The Phase 7 trial is safe to expose before scheduled matching work begins: it uses an
+explicitly curated catalog, preserves uncertainty, survives process interruption, and can become an
+account without losing provenance.
+
+Work:
+
+- Make public guest scores nullable. Never manufacture a diagnostic score when eligibility facts or
+  other required scoring inputs are unknown; render the supported `needs_more_information` state.
+- Run the same deterministic eligibility gate used by authenticated V2 matching before guest scoring.
+- Add explicit `trial_eligible`, priority, and quality-tier metadata to Job Profile versions. Trial
+  selection must never treat every active cached profile as product-approved catalog content.
+- Cache Candidate Profiles and Qualification Assessments by immutable input and policy identity, and
+  make concurrent get-or-create races return the winning artifact.
+- Add Candidate Profile regeneration from the current resume: unchanged versioned inputs are a cache
+  hit, while a user-corrected resume creates a new immutable source and Candidate Profile version.
+- Return guest matching as a `202` pollable operation. Persist correlation IDs, a 90-second hard
+  deadline, attempts, leases, heartbeats, and bounded retry timing.
+- Run a durable recovery worker that claims pending operations and expired leases. The phone polls the
+  operation until a terminal result, safe retry state, or client wait boundary.
+- Add an authenticated, idempotent guest-claim operation that clones the guest resume source, Candidate
+  Profile, criteria, and Qualification Assessment into account ownership while retaining the shared Job
+  Profile reference.
+- Purge all guest-owned V2 sources, spans, profiles, career selections, and qualification artifacts on
+  deletion or expiration. Extend authenticated account deletion to private V2 history without deleting
+  shared Job Profiles.
+- Generate the OpenAPI contract only after these lifecycle and nullable-score schemas are stable.
+
+Acceptance criteria:
+
+- A guest result is selected only from a Job Profile explicitly marked trial-eligible.
+- Unknown eligibility or incomplete scoring inputs produce a null public score, never zero or a
+  diagnostic fallback.
+- Repeating an active request with the same idempotency key returns the same operation; a different key
+  cannot start a competing operation for the trial.
+- A worker can reclaim an expired lease and complete from persisted immutable artifacts without an
+  external job search.
+- A successful claim is repeatable by the same account and creates no second set of account-owned
+  artifacts; another account cannot claim it.
+- Guest purge removes private V2 artifacts and retains shared Job Profiles; account deletion has the
+  equivalent authenticated-owner behavior.
+- Server schemas, checked-in OpenAPI, Dart models, polling behavior, and UI uncertainty presentation
+  agree.
+
+Dependencies: Phase 7. This is a release-hardening gate before Phase 8, not a new matching stage.
 
 ### Phase 8: Scheduled Matching, Inbox, And Digest
 

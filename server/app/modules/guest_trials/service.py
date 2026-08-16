@@ -9,6 +9,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.modules.auth.service import token_hash
+from app.modules.auth.dependencies import AuthenticatedIdentity
 from app.modules.guest_trials.models import (
     GuestDocument,
     GuestMatchCandidate,
@@ -21,6 +22,8 @@ from app.modules.guest_trials.models import (
 )
 from app.modules.guest_trials.schemas import GuestCriteriaUpdateRequest, GuestProfileUpdateRequest
 from app.modules.profiles.readiness import READINESS_VERSION, evaluate_profile_readiness
+from app.modules.profiles.repository import create_resume_profile, ensure_account_for_identity
+from app.modules.profiles.schemas import ResumeData, ResumeProfileCreateRequest
 
 ACTIVE_GUEST_LIFETIME = timedelta(hours=24)
 
@@ -43,6 +46,14 @@ class GuestPurgeResult:
     files_missing: int
     failed_trials: int
     dry_run: bool
+
+
+@dataclass(frozen=True)
+class ClaimedGuestTrial:
+    resume_profile_id: int
+    search_criterion_id: int
+    candidate_profile_id: str
+    qualification_assessment_id: str
 
 
 def utc_now() -> datetime:
@@ -193,6 +204,200 @@ def put_guest_criteria(
     return criterion
 
 
+def claim_guest_trial(
+    db: Session,
+    *,
+    credential: str,
+    identity: AuthenticatedIdentity,
+) -> ClaimedGuestTrial:
+    from app.modules.job_search.models import JobSearchCriterion
+    from app.modules.matching_v2.models import (
+        CandidateProfileVersion,
+        CanonicalSource,
+        JobProfileVersion,
+        QualificationAssessment,
+        SourceSpan,
+    )
+    from app.modules.matching_v2.qualification import select_candidate_career_context
+    from app.modules.matching_v2.repositories import (
+        ArtifactOwner,
+        SpanInput,
+        create_or_get_candidate_profile,
+        create_or_get_canonical_source,
+        create_or_get_qualification_assessment,
+        sync_policy_registry,
+    )
+    from app.modules.matching_v2.schemas import CandidateExtractionResponse, QualificationAssessmentResponse
+
+    public_id, separator, secret = credential.strip().partition(".")
+    if not separator or not public_id or not secret:
+        raise ValueError("INVALID_GUEST_CREDENTIAL")
+    trial = db.scalar(select(GuestTrial).where(GuestTrial.public_id == public_id).with_for_update())
+    if trial is None or trial.deleted_at is not None:
+        raise ValueError("INVALID_GUEST_CREDENTIAL")
+    if not hmac.compare_digest(trial.secret_hash, token_hash(secret)):
+        raise ValueError("INVALID_GUEST_CREDENTIAL")
+    if trial.status != "claimed" and (
+        trial.status == "expired" or _as_utc(trial.expires_at) <= utc_now()
+    ):
+        trial.status = "expired"
+        raise ValueError("INVALID_GUEST_CREDENTIAL")
+
+    user, workspace = ensure_account_for_identity(db, identity)
+    if trial.status == "claimed":
+        if trial.claimed_user_id != user.id:
+            raise ValueError("GUEST_TRIAL_ALREADY_CLAIMED")
+        return _claimed_mapping(db, trial)
+    if trial.status != "result_ready":
+        raise ValueError("GUEST_RESULT_NOT_READY")
+
+    guest_profile = get_guest_profile(db, trial)
+    criterion = get_guest_criteria(db, trial)
+    result = get_guest_match_result(db, trial)
+    if guest_profile is None or criterion is None or result is None:
+        raise ValueError("GUEST_RESULT_NOT_READY")
+    original_candidate = db.get(CandidateProfileVersion, result.candidate_profile_version_id)
+    original_qualification = db.get(QualificationAssessment, result.qualification_assessment_id)
+    if original_candidate is None or original_qualification is None:
+        raise ValueError("GUEST_ARTIFACTS_UNAVAILABLE")
+    original_source = db.get(CanonicalSource, original_candidate.canonical_source_id)
+    job_profile = db.get(JobProfileVersion, original_qualification.job_profile_version_id)
+    if original_source is None or job_profile is None:
+        raise ValueError("GUEST_ARTIFACTS_UNAVAILABLE")
+
+    resume = create_resume_profile(
+        db,
+        ResumeProfileCreateRequest(
+            title="Saved trial profile",
+            resume_data=ResumeData.model_validate(guest_profile.resume_data),
+        ),
+        identity,
+    )
+    saved_criterion = JobSearchCriterion(
+        workspace_id=workspace.id,
+        user_id=user.id,
+        resume_profile_id=resume.id,
+        keyword=criterion.keyword,
+        location=criterion.location,
+        source="guest_claim",
+        last_used_at=utc_now(),
+    )
+    db.add(saved_criterion)
+    db.flush()
+
+    spans = list(
+        db.scalars(
+            select(SourceSpan)
+            .where(SourceSpan.canonical_source_id == original_source.id)
+            .order_by(SourceSpan.ordinal)
+        ).all()
+    )
+    owner = ArtifactOwner.authenticated(workspace_id=workspace.id, user_id=user.id)
+    claimed_source = create_or_get_canonical_source(
+        db,
+        owner=owner,
+        source_type="resume",
+        canonical_text=original_source.canonical_text,
+        text_extraction_version=original_source.text_extraction_version,
+        canonicalization_version=original_source.canonicalization_version,
+        ocr_version=original_source.ocr_version,
+        language=original_source.language,
+        resume_profile_id=resume.id,
+        spans=[
+            SpanInput(
+                span_id=item.span_id,
+                section=item.section,
+                start_utf8_byte=item.start_utf8_byte,
+                end_utf8_byte=item.end_utf8_byte,
+                excerpt=item.excerpt,
+            )
+            for item in spans
+        ],
+    )
+    sync_policy_registry(db)
+    claimed_candidate = create_or_get_candidate_profile(
+        db,
+        source=claimed_source,
+        artifact=CandidateExtractionResponse.model_validate(original_candidate.artifact),
+        model_id=original_candidate.model_id,
+        provider_execution_reference=original_candidate.provider_execution_reference,
+        resume_profile_id=resume.id,
+        schema_version=original_candidate.schema_version,
+        prompt_version=original_candidate.prompt_version,
+        taxonomy_version=original_candidate.taxonomy_version,
+        semantic_validator_version=original_candidate.semantic_validator_version,
+    )
+    context = select_candidate_career_context(
+        db,
+        candidate_profile=claimed_candidate,
+        job_profile=job_profile,
+        selection_revision=1,
+    )
+    claimed_qualification = create_or_get_qualification_assessment(
+        db,
+        owner=owner,
+        candidate_profile=claimed_candidate,
+        career_selection=context.selection,
+        selected_career_profile=context.career_profile,
+        selection_reason_code=context.reason_code,
+        job_profile=job_profile,
+        artifact=QualificationAssessmentResponse.model_validate(original_qualification.artifact),
+        input_quality=original_qualification.input_quality,
+        model_id=original_qualification.model_id,
+        provider_execution_reference=original_qualification.provider_execution_reference,
+        schema_version=original_qualification.schema_version,
+        prompt_version=original_qualification.prompt_version,
+        selection_policy_version=original_qualification.selection_policy_version,
+        matching_policy_version=original_qualification.matching_policy_version,
+        input_policy_version=original_qualification.input_policy_version,
+        semantic_validator_version=original_qualification.semantic_validator_version,
+    )
+
+    trial.status = "claimed"
+    trial.claimed_user_id = user.id
+    trial.claimed_at = utc_now()
+    trial.claim_pending_until = None
+    trial.claimed_resume_profile_id = resume.id
+    trial.claimed_search_criterion_id = saved_criterion.id
+    trial.claimed_candidate_profile_id = claimed_candidate.id
+    trial.claimed_qualification_assessment_id = claimed_qualification.id
+    db.flush()
+    return ClaimedGuestTrial(
+        resume_profile_id=resume.id,
+        search_criterion_id=saved_criterion.id,
+        candidate_profile_id=claimed_candidate.public_id,
+        qualification_assessment_id=claimed_qualification.public_id,
+    )
+
+
+def get_guest_match_result(db: Session, trial: GuestTrial):
+    from app.modules.guest_trials.models import GuestMatchResult
+
+    return db.scalar(
+        select(GuestMatchResult).where(GuestMatchResult.guest_trial_id == trial.id).limit(1)
+    )
+
+
+def _claimed_mapping(db: Session, trial: GuestTrial) -> ClaimedGuestTrial:
+    from app.modules.matching_v2.models import CandidateProfileVersion, QualificationAssessment
+
+    candidate = db.get(CandidateProfileVersion, trial.claimed_candidate_profile_id)
+    qualification = db.get(QualificationAssessment, trial.claimed_qualification_assessment_id)
+    if (
+        trial.claimed_resume_profile_id is None
+        or trial.claimed_search_criterion_id is None
+        or candidate is None
+        or qualification is None
+    ):
+        raise ValueError("GUEST_CLAIM_MAPPING_UNAVAILABLE")
+    return ClaimedGuestTrial(
+        resume_profile_id=trial.claimed_resume_profile_id,
+        search_criterion_id=trial.claimed_search_criterion_id,
+        candidate_profile_id=candidate.public_id,
+        qualification_assessment_id=qualification.public_id,
+    )
+
+
 def delete_guest_trial(db: Session, trial: GuestTrial, *, storage_root: str | None = None) -> bool:
     from app.modules.guest_trials.storage import delete_guest_document_file
 
@@ -209,6 +414,7 @@ def delete_guest_trial(db: Session, trial: GuestTrial, *, storage_root: str | No
     db.execute(delete(GuestMatchCandidate).where(GuestMatchCandidate.guest_trial_id == trial.id))
     db.execute(delete(GuestProviderAttempt).where(GuestProviderAttempt.guest_trial_id == trial.id))
     db.execute(delete(GuestMatchOperation).where(GuestMatchOperation.guest_trial_id == trial.id))
+    _delete_guest_v2_artifacts(db, trial.id)
     db.delete(trial)
     db.flush()
     return True
@@ -291,6 +497,7 @@ def purge_expired_guest_trial_batch(
         db.execute(delete(GuestMatchCandidate).where(GuestMatchCandidate.guest_trial_id == trial_id))
         db.execute(delete(GuestProviderAttempt).where(GuestProviderAttempt.guest_trial_id == trial_id))
         db.execute(delete(GuestMatchOperation).where(GuestMatchOperation.guest_trial_id == trial_id))
+        _delete_guest_v2_artifacts(db, trial_id)
         db.execute(delete(GuestTrial).where(GuestTrial.id == trial_id))
         purged += 1
 
@@ -302,3 +509,46 @@ def purge_expired_guest_trial_batch(
         failed_trials=failed_trials,
         dry_run=False,
     )
+
+
+def _delete_guest_v2_artifacts(db: Session, trial_id: int) -> None:
+    from app.modules.matching_v2.models import (
+        CandidateCareerProfile,
+        CandidateCareerSelection,
+        CandidateProfileVersion,
+        CanonicalSource,
+        QualificationAssessment,
+        RequirementAssessment,
+        SourceSpan,
+    )
+
+    qualification_ids = select(QualificationAssessment.id).where(
+        QualificationAssessment.guest_trial_id == trial_id
+    )
+    db.execute(
+        delete(RequirementAssessment).where(
+            RequirementAssessment.qualification_assessment_id.in_(qualification_ids)
+        )
+    )
+    db.execute(
+        delete(QualificationAssessment).where(QualificationAssessment.guest_trial_id == trial_id)
+    )
+    source_ids = select(CanonicalSource.id).where(CanonicalSource.guest_trial_id == trial_id)
+    candidate_ids = select(CandidateProfileVersion.id).where(
+        CandidateProfileVersion.canonical_source_id.in_(source_ids)
+    )
+    db.execute(
+        delete(CandidateCareerSelection).where(
+            CandidateCareerSelection.candidate_profile_version_id.in_(candidate_ids)
+        )
+    )
+    db.execute(
+        delete(CandidateCareerProfile).where(
+            CandidateCareerProfile.candidate_profile_version_id.in_(candidate_ids)
+        )
+    )
+    db.execute(
+        delete(CandidateProfileVersion).where(CandidateProfileVersion.id.in_(candidate_ids))
+    )
+    db.execute(delete(SourceSpan).where(SourceSpan.canonical_source_id.in_(source_ids)))
+    db.execute(delete(CanonicalSource).where(CanonicalSource.guest_trial_id == trial_id))

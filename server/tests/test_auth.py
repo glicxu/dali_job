@@ -38,6 +38,7 @@ from app.modules.jobs.models import JobCache, JobResumeMatch, UserEditedJob, Use
 from app.modules.jobs.router import get_job_description_parser
 from app.modules.jobs.schemas import JobDescriptionData
 from app.modules.materials.models import GeneratedApplicationMaterial, GeneratedApplicationMaterialVersion
+from app.modules.matching_v2.models import CanonicalSource
 from app.modules.operations.models import ManagedOperation
 from app.modules.profiles.models import ResumeProfile
 from app.modules.resume_job_match import router as match_router
@@ -625,6 +626,32 @@ def test_account_soft_delete_revokes_every_session(tmp_path: Path) -> None:
             event_data={},
         )
         db.add_all([interview_note, prep_guide, material_version, audit_event])
+        private_v2_source = CanonicalSource(
+            public_id="src_private_account_deletion",
+            owner_kind="authenticated",
+            workspace_id=workspace.id,
+            user_id=user.id,
+            source_type="resume",
+            resume_profile_id=profile.id,
+            source_hash="private-source-hash",
+            canonical_text="Private resume evidence",
+            text_extraction_version="test.v1",
+            canonicalization_version="test.v1",
+            language="en",
+            cache_key="private-account-deletion-cache-key",
+        )
+        shared_v2_source = CanonicalSource(
+            public_id="src_shared_account_deletion",
+            owner_kind="shared",
+            source_type="job",
+            source_hash="shared-source-hash",
+            canonical_text="Shared job evidence",
+            text_extraction_version="test.v1",
+            canonicalization_version="test.v1",
+            language="en",
+            cache_key="shared-account-deletion-cache-key",
+        )
+        db.add_all([private_v2_source, shared_v2_source])
         db.commit()
 
         owned_records = [
@@ -658,6 +685,8 @@ def test_account_soft_delete_revokes_every_session(tmp_path: Path) -> None:
         owned_record_ids = [(type(record), record.id) for record in owned_records]
         cache_id = cache.id
         audit_event_id = audit_event.id
+        private_v2_source_id = private_v2_source.id
+        shared_v2_source_id = shared_v2_source.id
         download_ticket_id = download_ticket.id
         application_document_id = application_document.id
         application_task_id = application_task.id
@@ -698,6 +727,8 @@ def test_account_soft_delete_revokes_every_session(tmp_path: Path) -> None:
         assert db.get(SearchRun, search_run_id).status == "cancelled"
         assert db.get(JobCache, cache_id).deleted_at is None
         assert db.get(AuditEvent, audit_event_id) is not None
+        assert db.get(CanonicalSource, private_v2_source_id) is None
+        assert db.get(CanonicalSource, shared_v2_source_id) is not None
         assert all(session.revoked_at is not None for session in db.scalars(select(AuthSession)).all())
         assert all(token.consumed_at is not None for token in db.scalars(select(AuthActionToken)).all())
     assert client.get("/api/v1/me").status_code == 401

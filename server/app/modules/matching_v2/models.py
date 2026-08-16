@@ -285,6 +285,9 @@ class JobProfileVersion(Base):
     artifact: Mapped[dict] = mapped_column(JSON, nullable=False)
     cleanup: Mapped[dict] = mapped_column(JSON, nullable=False)
     cache_key: Mapped[str] = mapped_column(String(71), nullable=False)
+    trial_eligible: Mapped[bool] = mapped_column(nullable=False, default=False, index=True)
+    trial_priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    quality_tier: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

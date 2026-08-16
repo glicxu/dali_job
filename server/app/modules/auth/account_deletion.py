@@ -3,7 +3,7 @@ from __future__ import annotations
 import secrets
 from datetime import datetime, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User, Workspace
@@ -31,6 +31,19 @@ from app.modules.interviews.models import Interview, InterviewNote, InterviewPre
 from app.modules.job_search.models import JobSearchCriterion
 from app.modules.jobs.models import JobResumeMatch, UserEditedJob, UserSavedJob
 from app.modules.materials.models import GeneratedApplicationMaterial, GeneratedApplicationMaterialVersion
+from app.modules.matching_v2.models import (
+    CandidateProfileVersion,
+    CanonicalSource,
+    EligibilityAssessment,
+    EligibilityRevision,
+    JobFamilyPreMatch,
+    MatchingIntent,
+    MatchingOperation,
+    MatchResult,
+    PreferenceAssessment,
+    PreferenceRevision,
+    QualificationAssessment,
+)
 from app.modules.operations.models import ManagedOperation
 from app.modules.profiles.models import ResumeProfile
 from app.modules.reports.models import UserReport
@@ -159,6 +172,34 @@ def soft_delete_account(db: Session, user: User, *, deleted_at: datetime | None 
     )
     _mark_deleted(db, ManagedOperation, ManagedOperation.user_id == user_id, now)
     _mark_deleted(db, UserReport, UserReport.user_id == user_id, now)
+
+    # V2 private artifacts are immutable during normal use, but account deletion is
+    # an explicit privacy boundary. Delete owner-scoped history in dependency order;
+    # shared Job Profiles and their canonical job sources are intentionally retained.
+    db.execute(delete(MatchResult).where(MatchResult.user_id == user_id))
+    db.execute(delete(MatchingOperation).where(MatchingOperation.user_id == user_id))
+    db.execute(delete(PreferenceAssessment).where(PreferenceAssessment.user_id == user_id))
+    db.execute(delete(EligibilityAssessment).where(EligibilityAssessment.user_id == user_id))
+    db.execute(delete(QualificationAssessment).where(QualificationAssessment.user_id == user_id))
+    db.execute(delete(JobFamilyPreMatch).where(JobFamilyPreMatch.user_id == user_id))
+    db.execute(delete(MatchingIntent).where(MatchingIntent.user_id == user_id))
+    db.execute(delete(PreferenceRevision).where(PreferenceRevision.user_id == user_id))
+    db.execute(delete(EligibilityRevision).where(EligibilityRevision.user_id == user_id))
+    candidate_source_ids = select(CanonicalSource.id).where(
+        CanonicalSource.owner_kind == "authenticated",
+        CanonicalSource.user_id == user_id,
+    )
+    db.execute(
+        delete(CandidateProfileVersion).where(
+            CandidateProfileVersion.canonical_source_id.in_(candidate_source_ids)
+        )
+    )
+    db.execute(
+        delete(CanonicalSource).where(
+            CanonicalSource.owner_kind == "authenticated",
+            CanonicalSource.user_id == user_id,
+        )
+    )
 
     db.execute(
         update(AuthActionToken)

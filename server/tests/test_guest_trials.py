@@ -13,8 +13,15 @@ from app.db.base import Base
 from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.guest_trials.models import GuestDocument, GuestResumeProfile, GuestSearchCriterion, GuestTrial
-from app.modules.guest_trials.models import GuestMatchCandidate, GuestMatchResult, GuestProviderAttempt
+from app.modules.guest_trials.models import (
+    GuestMatchCandidate,
+    GuestMatchOperation,
+    GuestMatchResult,
+    GuestProviderAttempt,
+)
+from app.modules.guest_trials.matching import begin_cached_match
 from app.modules.guest_trials.service import purge_expired_guest_trial_batch, purge_expired_guest_trials
+from app.modules.guest_trials.worker import run_available
 from app.modules.guest_trials.rate_limit import GuestRateLimiter, GuestRateLimitPolicy
 from app.modules.profiles.schemas import ResumeData
 from app.modules.jobs.models import JobCache
@@ -27,6 +34,12 @@ from app.modules.matching_v2.repositories import (
     create_or_get_job_profile,
 )
 from app.modules.matching_v2.schemas import QualificationAssessmentResponse
+from app.modules.matching_v2.models import (
+    CandidateProfileVersion,
+    CanonicalSource,
+    JobProfileVersion,
+    QualificationAssessment,
+)
 from tests.test_matching_v2_qualification import _candidate_artifact, _job_artifact
 import app.modules.guest_trials.router as guest_router
 
@@ -199,13 +212,15 @@ def _cache_job_profile(session_factory, *, title: str = "Senior Software Enginee
             )],
         )
         artifact = _job_artifact(source_ref).model_copy(update={"title": title, "company": "Catalog Co"})
-        create_or_get_job_profile(
+        profile = create_or_get_job_profile(
             db,
             source=source,
             artifact=artifact,
             model_id="gpt-5.6-luna",
             jobs_cache_id=cache.id,
         )
+        profile.trial_eligible = True
+        profile.quality_tier = "curated_evaluation"
         db.commit()
 
 
@@ -541,8 +556,8 @@ def test_guest_match_uses_cached_job_profile_without_provider_search() -> None:
     headers = {**_headers(trial), "Idempotency-Key": "guest-catalog-1"}
 
     response = client.post("/api/v1/guest-trials/current/match", headers=headers)
-    assert response.status_code == 200
-    body = response.json()
+    assert response.status_code == 202
+    body = client.get("/api/v1/guest-trials/current/match", headers=_headers(trial)).json()
     assert body["status"] == "result_ready"
     assert body["provider_search_state"] == "available"
     assert body["result"]["title"] == "Senior Software Engineer"
@@ -580,7 +595,7 @@ def test_guest_match_requires_cached_job_profile() -> None:
     headers = {**_headers(trial), "Idempotency-Key": "empty-catalog"}
 
     failed = client.post("/api/v1/guest-trials/current/match", headers=headers)
-    assert failed.status_code == 503
+    assert failed.status_code == 202
     failed_status = client.get("/api/v1/guest-trials/current/match", headers=_headers(trial)).json()
     assert failed_status["provider_search_state"] == "available"
     assert failed_status["error_code"] == "cached_job_catalog_empty"
@@ -599,16 +614,127 @@ def test_matcher_failure_reuses_cached_profiles_without_search() -> None:
     headers = {**_headers(trial), "Idempotency-Key": "matcher-retry"}
 
     failed = client.post("/api/v1/guest-trials/current/match", headers=headers)
-    assert failed.status_code == 503
+    assert failed.status_code == 202
     status_after_failure = client.get("/api/v1/guest-trials/current/match", headers=_headers(trial)).json()
     assert status_after_failure["provider_search_state"] == "available"
     assert status_after_failure["error_code"] == "matcher_unavailable"
 
     retried = client.post("/api/v1/guest-trials/current/match", headers=headers)
-    assert retried.status_code == 200
-    assert retried.json()["result"]["match_score"] == 10
+    assert retried.status_code == 202
+    retried_status = client.get("/api/v1/guest-trials/current/match", headers=_headers(trial)).json()
+    assert retried_status["result"]["match_score"] == 10
     assert extractor.calls == 1
     assert matcher.calls == 2
+
+
+def test_guest_result_can_be_claimed_idempotently_into_account_owned_artifacts() -> None:
+    client, session_factory = create_test_client(
+        candidate_extractor=StubCandidateProfileExtractor(),
+        qualification_matcher=StubQualificationMatcher(),
+    )
+    _cache_job_profile(session_factory)
+    trial = _ready_guest(client)
+    matched = client.post(
+        "/api/v1/guest-trials/current/match",
+        headers={**_headers(trial), "Idempotency-Key": "claimable-result"},
+    )
+    assert matched.status_code == 202
+
+    first = client.post(
+        "/api/v1/guest-trials/claim",
+        json={"guest_credential": trial["guest_credential"]},
+    )
+    repeated = client.post(
+        "/api/v1/guest-trials/claim",
+        json={"guest_credential": trial["guest_credential"]},
+    )
+
+    assert first.status_code == 200, first.text
+    assert repeated.status_code == 200
+    assert repeated.json() == first.json()
+    with session_factory() as db:
+        stored_trial = db.scalar(select(GuestTrial).where(GuestTrial.public_id == trial["public_id"]))
+        claimed_candidate = db.scalar(
+            select(CandidateProfileVersion).where(
+                CandidateProfileVersion.public_id == first.json()["candidate_profile_id"]
+            )
+        )
+        claimed_source = db.get(CanonicalSource, claimed_candidate.canonical_source_id)
+        claimed_qualification = db.scalar(
+            select(QualificationAssessment).where(
+                QualificationAssessment.public_id == first.json()["qualification_assessment_id"]
+            )
+        )
+        assert stored_trial.status == "claimed"
+        assert claimed_source.owner_kind == "authenticated"
+        assert claimed_qualification.owner_kind == "authenticated"
+
+
+def test_guest_purge_removes_private_v2_artifacts_but_retains_shared_job_profile() -> None:
+    client, session_factory = create_test_client(
+        candidate_extractor=StubCandidateProfileExtractor(),
+        qualification_matcher=StubQualificationMatcher(),
+    )
+    _cache_job_profile(session_factory)
+    trial = _ready_guest(client)
+    assert client.post(
+        "/api/v1/guest-trials/current/match",
+        headers={**_headers(trial), "Idempotency-Key": "purge-v2-result"},
+    ).status_code == 202
+
+    with session_factory() as db:
+        stored_trial = db.scalar(select(GuestTrial).where(GuestTrial.public_id == trial["public_id"]))
+        assert db.scalar(
+            select(CanonicalSource).where(CanonicalSource.guest_trial_id == stored_trial.id)
+        ) is not None
+        assert db.scalar(
+            select(QualificationAssessment).where(QualificationAssessment.guest_trial_id == stored_trial.id)
+        ) is not None
+        stored_trial.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        db.commit()
+
+    with session_factory() as db:
+        assert purge_expired_guest_trials(db) == 1
+        db.commit()
+        assert db.scalar(select(CanonicalSource).where(CanonicalSource.owner_kind == "guest")) is None
+        assert db.scalar(select(QualificationAssessment).where(QualificationAssessment.owner_kind == "guest")) is None
+        assert db.scalar(select(JobProfileVersion)) is not None
+
+
+def test_guest_worker_recovers_an_expired_match_lease() -> None:
+    extractor = StubCandidateProfileExtractor()
+    matcher = StubQualificationMatcher()
+    client, session_factory = create_test_client(
+        candidate_extractor=extractor,
+        qualification_matcher=matcher,
+    )
+    _cache_job_profile(session_factory)
+    trial_payload = _ready_guest(client)
+
+    with session_factory() as db:
+        trial = db.scalar(select(GuestTrial).where(GuestTrial.public_id == trial_payload["public_id"]))
+        assert trial is not None
+        operation = begin_cached_match(db, trial, idempotency_key="worker-recovery")
+        operation.status = "matching"
+        operation.lease_owner = "lost-worker"
+        operation.lease_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        db.commit()
+
+    completed = run_available(
+        session_factory,
+        worker_id="recovery-worker",
+        model_id="gpt-5.6-luna",
+        candidate_extractor=extractor,
+        matcher=matcher,
+    )
+
+    assert completed == 1
+    with session_factory() as db:
+        operation = db.scalar(select(GuestMatchOperation))
+        assert operation is not None
+        assert operation.status == "result_ready"
+        assert operation.lease_owner is None
+        assert db.scalar(select(GuestMatchResult)) is not None
 
 
 def test_guest_match_requires_candidate_evidence_and_criteria() -> None:

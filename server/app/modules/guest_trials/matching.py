@@ -97,6 +97,11 @@ def _result_response(result: GuestMatchResult) -> GuestBestMatchResponse:
         unsupported_requirements=list(match.get("unsupported_requirements") or []),
         recommended_resume_updates=list(match.get("recommended_resume_updates") or []),
         result_context="Best matching profile from the cached job catalog",
+        score=match.get("score") if isinstance(match.get("score"), dict) else None,
+        explanation=(
+            match.get("explanation") if isinstance(match.get("explanation"), dict) else None
+        ),
+        policy_reason_codes=list((match.get("score") or {}).get("reason_codes") or []),
     )
 
 

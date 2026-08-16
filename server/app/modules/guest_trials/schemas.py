@@ -83,6 +83,9 @@ class GuestBestMatchResponse(BaseModel):
     unsupported_requirements: list[dict] = Field(default_factory=list)
     recommended_resume_updates: list[str] = Field(default_factory=list)
     result_context: str = "Best usable match from this guest search"
+    score: dict | None = None
+    explanation: dict | None = None
+    policy_reason_codes: list[str] = Field(default_factory=list)
 
 
 class GuestMatchStatusResponse(BaseModel):

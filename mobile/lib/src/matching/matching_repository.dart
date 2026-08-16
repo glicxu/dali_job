@@ -33,6 +33,78 @@ class MatchingRepository {
         .toList();
   });
 
+  Future<CandidateProfileV2?> getCandidateProfile(int resumeProfileId) =>
+      session.authorized((token) async {
+        final json = await api.getNullable(
+          'resumes/$resumeProfileId/candidate-profile',
+          accessToken: token,
+        );
+        return json == null ? null : CandidateProfileV2.fromJson(json);
+      });
+
+  Future<CandidateProfileV2> confirmCareerProfile({
+    required CandidateProfileV2 profile,
+    required String careerProfileId,
+  }) => session.authorized(
+    (token) async => CandidateProfileV2.fromJson(
+      await api.put(
+        'candidate-profiles/${profile.id}/primary-career-profile',
+        accessToken: token,
+        body: {
+          'expected_revision': profile.selectionRevision,
+          'primary_career_profile_id': careerProfileId,
+        },
+      ),
+    ),
+  );
+
+  Future<PreferenceRevision?> getPreferences() =>
+      session.authorized((token) async {
+        final json = await api.getNullable(
+          'users/me/matching-preferences',
+          accessToken: token,
+        );
+        return json == null ? null : PreferenceRevision.fromJson(json);
+      });
+
+  Future<PreferenceRevision> putPreferences({
+    required int expectedRevision,
+    required Map<String, dynamic> preferences,
+  }) => session.authorized(
+    (token) async => PreferenceRevision.fromJson(
+      await api.put(
+        'users/me/matching-preferences',
+        accessToken: token,
+        body: {
+          'expected_revision': expectedRevision,
+          'preferences': preferences,
+        },
+      ),
+    ),
+  );
+
+  Future<EligibilityRevision?> getEligibility() =>
+      session.authorized((token) async {
+        final json = await api.getNullable(
+          'users/me/eligibility-facts',
+          accessToken: token,
+        );
+        return json == null ? null : EligibilityRevision.fromJson(json);
+      });
+
+  Future<EligibilityRevision> putEligibility({
+    required int expectedRevision,
+    required Map<String, dynamic> facts,
+  }) => session.authorized(
+    (token) async => EligibilityRevision.fromJson(
+      await api.put(
+        'users/me/eligibility-facts',
+        accessToken: token,
+        body: {'expected_revision': expectedRevision, 'facts': facts},
+      ),
+    ),
+  );
+
   Future<ResumeProfile> createResumeProfile({
     required String title,
     required String headline,
@@ -175,6 +247,14 @@ class MatchingRepository {
       session.authorized((token) {
         return api.post(
           'automation/schedules/${schedule.id}/run-now',
+          accessToken: token,
+        );
+      });
+
+  Future<Map<String, dynamic>> rerunMatchSchedule(int scheduleId) =>
+      session.authorized((token) {
+        return api.post(
+          'automation/schedules/$scheduleId/run-now',
           accessToken: token,
         );
       });

@@ -301,6 +301,42 @@ def create_candidate_profile(
 
 
 @router.get(
+    "/resumes/{resume_profile_id}/candidate-profile",
+    response_model=CandidateProfileView | None,
+)
+def get_latest_candidate_profile_for_resume(
+    resume_profile_id: int,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> CandidateProfileView | None:
+    user, workspace = _require_v2_access(request, db, identity)
+    resume_profile = profile_repository.get_resume_profile_for_identity(db, identity, resume_profile_id)
+    if resume_profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume profile not found.")
+    profile = db.scalar(
+        select(CandidateProfileVersion)
+        .where(
+            CandidateProfileVersion.resume_profile_id == resume_profile_id,
+            CandidateProfileVersion.workspace_id == workspace.id,
+            CandidateProfileVersion.user_id == user.id,
+            CandidateProfileVersion.deleted_at.is_(None),
+        )
+        .order_by(CandidateProfileVersion.created_at.desc())
+        .limit(1)
+    )
+    if profile is None:
+        return None
+    source = db.get(CanonicalSource, profile.canonical_source_id)
+    if source is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Candidate Profile source is unavailable.",
+        )
+    return _candidate_profile_view(db, profile, source)
+
+
+@router.get(
     "/candidate-profiles/{candidate_profile_id}",
     response_model=CandidateProfileView,
 )

@@ -11,6 +11,12 @@ from app.modules.accounts.models import User
 from app.modules.automation.models import NotificationDelivery, NotificationPreference
 from app.modules.jobs.models import JobCache, JobMatchFeedback, JobResumeMatch, UserSavedJob
 from app.modules.matching_v2.scoring import recommendation_for_score
+from app.modules.matching_v2.models import (
+    EligibilityAssessment,
+    MatchResult,
+    PreferenceAssessment,
+    QualificationAssessment,
+)
 from app.modules.profiles.repository import ensure_account_for_identity
 
 
@@ -243,10 +249,33 @@ def put_match_feedback(
 
 def _inbox_statement(user_id: int, workspace_id: int):
     return (
-        select(NotificationDelivery, JobResumeMatch, UserSavedJob, JobCache, JobMatchFeedback)
+        select(
+            NotificationDelivery,
+            JobResumeMatch,
+            UserSavedJob,
+            JobCache,
+            JobMatchFeedback,
+            MatchResult,
+            QualificationAssessment,
+            PreferenceAssessment,
+            EligibilityAssessment,
+        )
         .join(JobResumeMatch, JobResumeMatch.id == NotificationDelivery.job_resume_match_id)
         .join(UserSavedJob, UserSavedJob.id == JobResumeMatch.user_job_id)
         .outerjoin(JobCache, JobCache.id == UserSavedJob.jobs_cache_id)
+        .outerjoin(MatchResult, MatchResult.id == JobResumeMatch.matching_v2_result_id)
+        .outerjoin(
+            QualificationAssessment,
+            QualificationAssessment.id == MatchResult.qualification_assessment_id,
+        )
+        .outerjoin(
+            PreferenceAssessment,
+            PreferenceAssessment.id == MatchResult.preference_assessment_id,
+        )
+        .outerjoin(
+            EligibilityAssessment,
+            EligibilityAssessment.id == MatchResult.eligibility_assessment_id,
+        )
         .outerjoin(
             JobMatchFeedback,
             (JobMatchFeedback.job_resume_match_id == JobResumeMatch.id)
@@ -271,6 +300,10 @@ def _inbox_response(
     user_job: UserSavedJob,
     cache: JobCache | None,
     stored_feedback: JobMatchFeedback | None,
+    v2_result: MatchResult | None,
+    qualification: QualificationAssessment | None,
+    preference: PreferenceAssessment | None,
+    eligibility: EligibilityAssessment | None,
 ) -> dict:
     job_data = match.job_data_snapshot or {}
     feedback = _feedback_response(stored_feedback) if stored_feedback is not None else None
@@ -287,10 +320,38 @@ def _inbox_response(
         "resume_data": match.resume_data_snapshot or {},
         "job_data": job_data,
         "user_feedback": feedback,
+        "matching_v2_result": _v2_result_response(
+            v2_result,
+            qualification=qualification,
+            preference=preference,
+            eligibility=eligibility,
+        ),
         "status": delivery.status,
         "sent_at": delivery.sent_at,
         "read_at": delivery.read_at,
         "created_at": delivery.created_at,
+    }
+
+
+def _v2_result_response(
+    result: MatchResult | None,
+    *,
+    qualification: QualificationAssessment | None,
+    preference: PreferenceAssessment | None,
+    eligibility: EligibilityAssessment | None,
+) -> dict | None:
+    if result is None or qualification is None:
+        return None
+    return {
+        "match_id": result.public_id,
+        "qualification_assessment_id": qualification.public_id,
+        "preference_assessment_id": preference.public_id if preference is not None else None,
+        "eligibility_assessment_id": eligibility.public_id if eligibility is not None else None,
+        "scores": result.score_artifact,
+        "explanation": result.explanation_artifact,
+        "policy": result.policy_versions,
+        "legacy_score": result.legacy_score,
+        "created_at": result.created_at,
     }
 
 

@@ -10,6 +10,7 @@ from app.modules.automation.executor import DatabaseAutomationResultPersister
 from app.modules.automation.models import NotificationDelivery, SearchRun, UsageLedger
 from app.modules.automation.v2_executor import CachedV2AutomationExecutor
 from app.modules.automation.worker import WorkItem, run_one
+from app.modules.auth.dependencies import get_dev_identity
 from app.modules.jobs.models import JobCache, JobResumeMatch
 from app.modules.matching_v2.extraction import CandidateExtractionResult
 from app.modules.matching_v2.models import JobProfileVersion, MatchResult, QualificationAssessment
@@ -21,6 +22,7 @@ from app.modules.matching_v2.repositories import (
     create_or_get_job_profile,
 )
 from app.modules.matching_v2.schemas import QualificationAssessmentResponse
+from app.modules.notifications.service import list_inbox
 from tests.test_automation_worker import NOW, _queued_run
 from tests.test_matching_v2_qualification import _candidate_artifact, _job_artifact
 
@@ -164,6 +166,12 @@ def test_v2_automation_uses_active_profiled_catalog_and_projects_notification() 
         assert db.query(QualificationAssessment).count() == 1
         assert db.query(JobProfileVersion).count() == 1
         assert db.query(NotificationDelivery).count() == 2
+        inbox, _ = list_inbox(db, get_dev_identity(), limit=20, before_id=None)
+        assert len(inbox) == 1
+        presented = inbox[0]["matching_v2_result"]
+        assert presented["match_id"].startswith("match_")
+        assert presented["scores"]["overall_score"] == 95
+        assert presented["explanation"]["strengths"]
         ledger = db.get(UsageLedger, ledger_id)
         assert ledger.state == "consumed"
         repeated_item = WorkItem(

@@ -5,6 +5,78 @@
   color: var(--text-strong);
 }
 
+.v2-match-inbox {
+  margin-top: 28px;
+}
+
+.v2-match-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.v2-match-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.v2-match-score {
+  display: grid;
+  min-width: 150px;
+  gap: 4px;
+  text-align: right;
+}
+
+.v2-match-score strong {
+  font-size: 1.5rem;
+}
+
+.v2-score-components {
+  color: var(--text-muted);
+}
+
+.v2-reason-codes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.v2-evidence-group {
+  border-top: 1px solid var(--border-subtle);
+  padding: 12px 0;
+}
+
+.v2-evidence-group summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.v2-evidence-group li + li {
+  margin-top: 10px;
+}
+
+.v2-evidence-group p {
+  margin: 3px 0 0;
+}
+
+.v2-questions {
+  background: var(--surface-subtle);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+@media (max-width: 640px) {
+  .v2-match-heading {
+    display: grid;
+  }
+
+  .v2-match-score {
+    text-align: left;
+  }
+}
+
 .evaluation-workbench,
 .evaluation-result {
   display: grid;

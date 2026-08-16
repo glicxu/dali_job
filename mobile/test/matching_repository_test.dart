@@ -97,6 +97,7 @@ void main() {
           'items': [
             {
               'match_id': 7,
+              'search_schedule_id': 3,
               'title': 'Backend Engineer',
               'company': 'Example',
               'match_score': 8,
@@ -107,6 +108,43 @@ void main() {
               'created_at': '2026-08-16T12:00:00Z',
               'source_url': null,
               'user_feedback': null,
+              'matching_v2_result': {
+                'match_id': 'match_v2_7',
+                'qualification_assessment_id': 'qa_7',
+                'preference_assessment_id': null,
+                'eligibility_assessment_id': null,
+                'scores': {
+                  'qualification_score': null,
+                  'diagnostic_qualification_score': 72,
+                  'qualification_coverage': 0.65,
+                  'preference_score': null,
+                  'preference_coverage': null,
+                  'preference_state': 'not_configured',
+                  'overall_score': null,
+                  'recommendation': 'needs_more_information',
+                  'gates': <Object>[],
+                  'reason_codes': ['QUALIFICATION_COVERAGE_BELOW_THRESHOLD'],
+                  'questions': ['Can you confirm your systems experience?'],
+                },
+                'explanation': {
+                  'summary': 'More information is needed.',
+                  'strengths': [
+                    {
+                      'key': 'req_1',
+                      'label': 'Python',
+                      'detail': 'Demonstrated in recent work.',
+                      'evidence_refs': ['private_span_1'],
+                    },
+                  ],
+                  'gaps': <Object>[],
+                  'unknowns': <Object>[],
+                  'preference_conflicts': <Object>[],
+                  'questions': <Object>[],
+                },
+                'policy': {'scoring': 'score.v1'},
+                'legacy_score': null,
+                'created_at': '2026-08-16T12:00:00Z',
+              },
             },
           ],
           'next_cursor': null,
@@ -142,9 +180,88 @@ void main() {
 
     expect(matches.single.resumeData['headline'], 'Senior Engineer');
     expect(matches.single.jobData['title'], 'Backend Engineer');
+    expect(matches.single.v2Result?.scores.overallScore, isNull);
+    expect(matches.single.needsMoreInformation, isTrue);
+    expect(
+      matches.single.v2Result?.explanation.strengths.single.label,
+      'Python',
+    );
     expect(feedback.recommendation, 'good_match');
   });
+
+  test(
+    'refreshes nullable preferences and sends revision-controlled updates',
+    () async {
+      var readCount = 0;
+      final client = MockClient((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/mobile/sessions')) {
+          return _json({
+            'access_token': 'access',
+            'refresh_token': 'refresh',
+            'user': {
+              'external_user_id': '42',
+              'email': 'person@example.com',
+              'display_name': 'Person',
+              'role': 'user',
+            },
+          }, 201);
+        }
+        if (path.endsWith('/users/me/matching-preferences') &&
+            request.method == 'GET') {
+          readCount += 1;
+          return readCount == 1
+              ? http.Response(
+                  'null',
+                  200,
+                  headers: {'content-type': 'application/json'},
+                )
+              : _json({'revision': 2, 'preferences': _preferenceFixture()});
+        }
+        if (path.endsWith('/users/me/matching-preferences') &&
+            request.method == 'PUT') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          expect(body['expected_revision'], 0);
+          return _json({
+            'revision': 1,
+            'preferences': body['preferences'] as Map<String, dynamic>,
+          });
+        }
+        return http.Response('not found', 404);
+      });
+      final api = ApiClient(
+        Uri.parse('https://api.example.com/api/v1/'),
+        client,
+      );
+      final session = SessionController(
+        repository: AuthRepository(api),
+        tokenStore: _MemoryTokenStore(),
+        deviceLabel: 'test device',
+      );
+      await session.signIn('person@example.com', 'password123');
+      final repository = MatchingRepository(api, session);
+
+      expect(await repository.getPreferences(), isNull);
+      final saved = await repository.putPreferences(
+        expectedRevision: 0,
+        preferences: _preferenceFixture(),
+      );
+      expect(saved.revision, 1);
+      expect((await repository.getPreferences())?.revision, 2);
+    },
+  );
 }
+
+Map<String, dynamic> _preferenceFixture() => {
+  'desired_roles': <Object>[],
+  'locations': null,
+  'workplace_types': <Object>[],
+  'compensation': null,
+  'employment_types': null,
+  'desired_skills': <Object>[],
+  'avoided_industries': <Object>[],
+  'hard_constraints': <Object>[],
+};
 
 http.Response _json(Map<String, dynamic> value, [int status = 200]) =>
     http.Response(

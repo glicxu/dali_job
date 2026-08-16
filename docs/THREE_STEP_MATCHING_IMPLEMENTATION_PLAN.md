@@ -512,6 +512,18 @@ Deferred from the first 8A push:
 
 **Outcome:** Clients present V2 evidence and uncertainty accurately without reproducing business logic.
 
+**Implementation status (2026-08-16): completed in code.** The owned match-inbox contract now includes
+its associated V2 Match Result while retaining the legacy projection. Flutter and web use the same
+nullable score, component coverage, recommendation, policy reason-code, question, strength, gap,
+unknown, and preference-conflict fields. The clients never calculate scores or gates and do not turn
+raw evidence identifiers into links because the inbox contract does not authorize source excerpts.
+
+Flutter now supports optional career-profile confirmation, preference and eligibility editing with
+revision-conflict refresh, V2 guest and authenticated match presentation, legacy result fallback, and
+cached-catalog reruns through the owning schedule. The web match page presents the same V2 inbox
+contract after the mobile model stabilized. Candidate career confirmation remains optional before the
+first supported match.
+
 Work:
 
 - Add V2 API models to the Dart matching repository, including nullable component scores, coverage, recommendation, policy reason codes, questions, strengths, gaps, unknowns, and preference conflicts.

@@ -1,4 +1,5 @@
 import { ResumeJobMatchForm } from "../../components/ResumeJobMatchForm";
+import { V2MatchInbox } from "../../components/V2MatchInbox";
 import { PageHeader } from "../../components/ui";
 import { ScanSearch } from "lucide-react";
 
@@ -12,6 +13,7 @@ export default function MatchPage() {
         icon={ScanSearch}
       />
       <ResumeJobMatchForm />
+      <V2MatchInbox />
     </section>
   );
 }

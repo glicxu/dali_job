@@ -335,7 +335,9 @@ class _GuestTrialScreenState extends State<GuestTrialScreen> {
                   CircleAvatar(
                     radius: 25,
                     child: Text(
-                      result['match_score'] == null
+                      _v2Score(result)?['overall_score'] != null
+                          ? '${_v2Score(result)!['overall_score']}/100'
+                          : result['match_score'] == null
                           ? 'More\ninfo'
                           : '${result['match_score']}/10',
                       textAlign: TextAlign.center,
@@ -360,9 +362,27 @@ class _GuestTrialScreenState extends State<GuestTrialScreen> {
               ),
               const SizedBox(height: 16),
               Text(result['summary']?.toString() ?? ''),
+              if (_v2Score(result) case final score?) ...[
+                const SizedBox(height: 8),
+                Text(
+                  score['overall_score'] == null
+                      ? 'More information needed · ${_guestLabel(score['recommendation'])}'
+                      : '${_guestLabel(score['recommendation'])} · '
+                            'Qualification ${score['qualification_score'] ?? 'not scored'} · '
+                            'Coverage ${(((score['qualification_coverage'] as num?) ?? 0) * 100).round()}%',
+                ),
+                _chips('Questions to confirm', score['questions']),
+              ],
               const SizedBox(height: 12),
               _chips('Matched skills', result['matched_skills']),
               _chips('Important gaps', result['missing_skills']),
+              if (_v2Explanation(result) case final explanation?) ...[
+                _chips('Unknowns', _explanationLabels(explanation['unknowns'])),
+                _chips(
+                  'Preference conflicts',
+                  _explanationLabels(explanation['preference_conflicts']),
+                ),
+              ],
               if ((result['job_description']?.toString().trim() ?? '')
                   .isNotEmpty)
                 ExpansionTile(
@@ -412,6 +432,29 @@ class _GuestTrialScreenState extends State<GuestTrialScreen> {
       ),
     ],
   );
+
+  Map<String, dynamic>? _v2Score(Map<String, dynamic> result) {
+    final value = result['score'];
+    return value is Map ? Map<String, dynamic>.from(value) : null;
+  }
+
+  Map<String, dynamic>? _v2Explanation(Map<String, dynamic> result) {
+    final value = result['explanation'];
+    return value is Map ? Map<String, dynamic>.from(value) : null;
+  }
+
+  List<String> _explanationLabels(Object? value) => value is List
+      ? value
+            .whereType<Map>()
+            .map((item) => item['label']?.toString() ?? '')
+            .where((item) => item.isNotEmpty)
+            .toList()
+      : const [];
+
+  String _guestLabel(Object? value) {
+    final text = value?.toString().replaceAll('_', ' ') ?? '';
+    return text.isEmpty ? '' : '${text[0].toUpperCase()}${text.substring(1)}';
+  }
 
   Widget _chips(String title, Object? values) {
     final items = _items(values);

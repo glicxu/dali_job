@@ -375,6 +375,67 @@ export type CurrentUser = {
   tutorial_completed: boolean;
 };
 
+export type V2ExplanationItem = {
+  key: string;
+  label: string;
+  detail: string;
+  evidence_refs: string[];
+};
+
+export type V2MatchResult = {
+  match_id: string;
+  qualification_assessment_id: string;
+  preference_assessment_id: string | null;
+  eligibility_assessment_id: string | null;
+  scores: {
+    qualification_score: number | null;
+    diagnostic_qualification_score: number | null;
+    qualification_coverage: number;
+    preference_score: number | null;
+    preference_coverage: number | null;
+    preference_state: "configured" | "incomplete" | "not_configured";
+    overall_score: number | null;
+    recommendation:
+      | "strong_match"
+      | "good_match"
+      | "consider"
+      | "stretch"
+      | "unlikely_fit"
+      | "does_not_match_preferences"
+      | "needs_more_information";
+    reason_codes: string[];
+    questions: string[];
+  };
+  explanation: {
+    summary: string;
+    strengths: V2ExplanationItem[];
+    gaps: V2ExplanationItem[];
+    unknowns: V2ExplanationItem[];
+    preference_conflicts: V2ExplanationItem[];
+    questions: string[];
+  };
+  policy: Record<string, unknown>;
+  legacy_score: number | null;
+  created_at: string;
+};
+
+export type MatchInboxItem = {
+  match_id: number;
+  title: string;
+  company: string;
+  match_score: number | null;
+  match_data: Record<string, unknown>;
+  resume_data: Record<string, unknown>;
+  job_data: Record<string, unknown>;
+  status: string;
+  created_at: string;
+  matching_v2_result: V2MatchResult | null;
+};
+
+export function listMatchInbox(): Promise<{ items: MatchInboxItem[]; next_cursor: number | null }> {
+  return requestJson<{ items: MatchInboxItem[]; next_cursor: number | null }>("/match-inbox");
+}
+
 export type EvaluationJobSnapshot = {
   public_id: string;
   benchmark_release: string;

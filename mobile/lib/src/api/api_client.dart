@@ -23,6 +23,27 @@ class ApiClient {
     return _decode(response);
   }
 
+  Future<Map<String, dynamic>?> getNullable(
+    String path, {
+    String? accessToken,
+    String? authorization,
+  }) async {
+    final response = await httpClient.get(
+      baseUrl.resolve(path),
+      headers: _headers(accessToken, authorization: authorization),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _throwResponse(response);
+    }
+    if (response.body.isEmpty) return null;
+    final decoded = jsonDecode(response.body);
+    if (decoded == null) return null;
+    if (decoded is! Map<String, dynamic>) {
+      throw const ApiException('The server returned an invalid response.');
+    }
+    return decoded;
+  }
+
   Future<Map<String, dynamic>> post(
     String path, {
     Map<String, dynamic>? body,

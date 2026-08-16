@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../matching/matching_models.dart';
 import '../../matching/matching_repository.dart';
+import '../../api/api_exception.dart';
+import 'matching_preferences_screen.dart';
 
 class CandidateProfilesScreen extends StatefulWidget {
   const CandidateProfilesScreen({super.key, required this.repository});
@@ -60,9 +62,26 @@ class _CandidateProfilesScreenState extends State<CandidateProfilesScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           children: [
-            Text(
-              'Candidate profiles',
-              style: Theme.of(context).textTheme.headlineSmall,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Candidate profiles',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Match preferences and eligibility',
+                  icon: const Icon(Icons.tune),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => MatchingPreferencesScreen(
+                        repository: widget.repository,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 6),
             Text(
@@ -92,7 +111,10 @@ class _CandidateProfilesScreenState extends State<CandidateProfilesScreen> {
                   ),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => CandidateProfileDetails(profile: profile),
+                      builder: (_) => CandidateProfileDetails(
+                        profile: profile,
+                        repository: widget.repository,
+                      ),
                     ),
                   ),
                 ),
@@ -104,13 +126,78 @@ class _CandidateProfilesScreenState extends State<CandidateProfilesScreen> {
   );
 }
 
-class CandidateProfileDetails extends StatelessWidget {
-  const CandidateProfileDetails({super.key, required this.profile});
+class CandidateProfileDetails extends StatefulWidget {
+  const CandidateProfileDetails({
+    super.key,
+    required this.profile,
+    required this.repository,
+  });
 
   final ResumeProfile profile;
+  final MatchingRepository repository;
+
+  @override
+  State<CandidateProfileDetails> createState() =>
+      _CandidateProfileDetailsState();
+}
+
+class _CandidateProfileDetailsState extends State<CandidateProfileDetails> {
+  CandidateProfileV2? _candidate;
+  bool _loadingCareer = true;
+  bool _savingCareer = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCareer();
+  }
+
+  Future<void> _loadCareer() async {
+    try {
+      final candidate = await widget.repository.getCandidateProfile(
+        widget.profile.id,
+      );
+      if (mounted) setState(() => _candidate = candidate);
+    } on ApiException {
+      if (mounted) setState(() => _candidate = null);
+    } finally {
+      if (mounted) setState(() => _loadingCareer = false);
+    }
+  }
+
+  Future<void> _confirmCareer(String careerProfileId) async {
+    final current = _candidate;
+    if (current == null) return;
+    setState(() => _savingCareer = true);
+    try {
+      final updated = await widget.repository.confirmCareerProfile(
+        profile: current,
+        careerProfileId: careerProfileId,
+      );
+      if (mounted) setState(() => _candidate = updated);
+    } on ApiException catch (error) {
+      if (error.statusCode == 409) {
+        await _loadCareer();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'This profile changed elsewhere. Refreshed the latest selection; please retry.',
+              ),
+            ),
+          );
+        }
+      } else {
+        rethrow;
+      }
+    } finally {
+      if (mounted) setState(() => _savingCareer = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final profile = widget.profile;
     final data = profile.resumeData;
     final headline = _text(data['headline']);
     final summary = _text(data['summary']);
@@ -159,6 +246,13 @@ class CandidateProfileDetails extends StatelessWidget {
           ],
           if (summary != null) ...[const SizedBox(height: 12), Text(summary)],
           const SizedBox(height: 20),
+          _CareerProfileCard(
+            candidate: _candidate,
+            loading: _loadingCareer,
+            saving: _savingCareer,
+            onConfirm: _confirmCareer,
+          ),
+          const SizedBox(height: 12),
           for (final section in sections)
             if (section.$3.isNotEmpty)
               _ProfileSection(
@@ -171,6 +265,95 @@ class CandidateProfileDetails extends StatelessWidget {
     );
   }
 }
+
+class _CareerProfileCard extends StatelessWidget {
+  const _CareerProfileCard({
+    required this.candidate,
+    required this.loading,
+    required this.saving,
+    required this.onConfirm,
+  });
+
+  final CandidateProfileV2? candidate;
+  final bool loading;
+  final bool saving;
+  final Future<void> Function(String) onConfirm;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: LinearProgressIndicator(),
+        ),
+      );
+    }
+    if (candidate == null) {
+      return const Card(
+        child: ListTile(
+          leading: Icon(Icons.auto_awesome_outlined),
+          title: Text('Career level and track not generated yet'),
+          subtitle: Text(
+            'Your first supported match can generate this profile automatically.',
+          ),
+        ),
+      );
+    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Career level and track',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Optional: confirm the profile DaliJob should use as the primary matching context.',
+            ),
+            const SizedBox(height: 10),
+            RadioGroup<String>(
+              groupValue: candidate!.primaryCareerProfileId,
+              onChanged: saving
+                  ? (_) {}
+                  : (value) {
+                      if (value != null) onConfirm(value);
+                    },
+              child: Column(
+                children: [
+                  for (final career in candidate!.careerProfiles)
+                    RadioListTile<String>(
+                      key: Key('career_profile_${career.id}'),
+                      contentPadding: EdgeInsets.zero,
+                      value: career.id,
+                      enabled: !saving,
+                      title: Text(
+                        '${_display(career.roleFamily)} · ${_display(career.level)}',
+                      ),
+                      subtitle: Text(
+                        '${_display(career.track)} track · ${(career.confidence * 100).round()}% confidence',
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _display(String value) => value
+    .split('_')
+    .map(
+      (part) =>
+          part.isEmpty ? part : '${part[0].toUpperCase()}${part.substring(1)}',
+    )
+    .join(' ');
 
 class _ProfileSection extends StatelessWidget {
   const _ProfileSection({

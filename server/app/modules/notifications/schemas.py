@@ -4,6 +4,8 @@ from datetime import datetime, time
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.modules.matching_v2.api_schemas import MatchResultView
+
 
 class NotificationPreferenceUpdateRequest(BaseModel):
     email_enabled: bool = True
@@ -56,11 +58,12 @@ class MatchInboxItemResponse(BaseModel):
     title: str
     company: str
     source_url: str | None = None
-    match_score: int = Field(..., ge=0, le=10)
+    match_score: int | None = Field(default=None, ge=0, le=10)
     match_data: dict
     resume_data: dict
     job_data: dict
     user_feedback: MatchFeedbackResponse | None = None
+    matching_v2_result: MatchResultView | None = None
     status: str
     sent_at: datetime | None = None
     read_at: datetime | None = None

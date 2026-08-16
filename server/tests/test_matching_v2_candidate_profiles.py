@@ -196,6 +196,10 @@ def test_candidate_profile_api_creates_caches_reads_and_revises_selection() -> N
     assert fetched.status_code == 200
     assert fetched.json()["candidate_profile_id"] == candidate_profile_id
 
+    latest_for_resume = client.get(f"/api/v1/resumes/{resume_id}/candidate-profile")
+    assert latest_for_resume.status_code == 200
+    assert latest_for_resume.json()["candidate_profile_id"] == candidate_profile_id
+
     unchanged = client.post(
         f"/api/v1/candidate-profiles/{candidate_profile_id}/regenerate"
     )

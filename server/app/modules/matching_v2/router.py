@@ -316,11 +316,13 @@ def get_latest_candidate_profile_for_resume(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume profile not found.")
     profile = db.scalar(
         select(CandidateProfileVersion)
+        .join(CanonicalSource, CandidateProfileVersion.canonical_source_id == CanonicalSource.id)
         .where(
             CandidateProfileVersion.resume_profile_id == resume_profile_id,
-            CandidateProfileVersion.workspace_id == workspace.id,
-            CandidateProfileVersion.user_id == user.id,
             CandidateProfileVersion.deleted_at.is_(None),
+            CanonicalSource.workspace_id == workspace.id,
+            CanonicalSource.user_id == user.id,
+            CanonicalSource.deleted_at.is_(None),
         )
         .order_by(CandidateProfileVersion.created_at.desc())
         .limit(1)

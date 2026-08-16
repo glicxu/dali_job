@@ -17,7 +17,7 @@ from app.modules.job_search.service import JobSearchProvider
 from app.modules.jobs import repository as job_repository
 from app.modules.jobs.schemas import IndeedJobSearchResult, JobDescriptionData
 from app.modules.jobs.service import JobDescriptionParser, OpenAIJobDescriptionParser
-from app.modules.jobs.models import JobResumeMatch
+from app.modules.jobs.models import JobCache, JobResumeMatch
 from app.modules.notifications.service import (
     create_email_delivery_if_enabled,
     create_in_app_delivery,
@@ -38,6 +38,8 @@ class ExecutedCandidate(BaseModel):
     match_data: dict
     model_name: str | None = None
     provider_execution_reference: str | None = None
+    cached_job_id: int | None = None
+    matching_v2_result_id: int | None = None
 
 
 class ProviderAutomatedSearchExecutor:
@@ -169,8 +171,12 @@ class DatabaseAutomationResultPersister:
             if candidate.source_url in seen_urls:
                 continue
             seen_urls.add(candidate.source_url)
-            existing_cache = job_repository.get_cached_job_by_source_url(db, candidate.source_url)
-            cached_job = job_repository.get_or_create_cache_job(
+            existing_cache = (
+                db.get(JobCache, candidate.cached_job_id)
+                if candidate.cached_job_id is not None
+                else job_repository.get_cached_job_by_source_url(db, candidate.source_url)
+            )
+            cached_job = existing_cache or job_repository.get_or_create_cache_job(
                 db,
                 source_url=candidate.source_url,
                 raw_description_text=candidate.raw_description_text,
@@ -197,6 +203,7 @@ class DatabaseAutomationResultPersister:
                     JobResumeMatch.user_id == item.user_id,
                     JobResumeMatch.user_job_id == user_job.id,
                     JobResumeMatch.resume_profile_id == item.resume_profile_id,
+                    JobResumeMatch.matching_v2_result_id == candidate.matching_v2_result_id,
                     JobResumeMatch.resume_snapshot_hash == resume_hash,
                     JobResumeMatch.job_snapshot_hash == job_hash,
                     JobResumeMatch.deleted_at.is_(None),
@@ -212,6 +219,7 @@ class DatabaseAutomationResultPersister:
                     identity,
                     user_job_id=user_job.id,
                     jobs_cache_id=cached_job.id,
+                    matching_v2_result_id=candidate.matching_v2_result_id,
                     resume_profile_id=item.resume_profile_id,
                     resume_source="resume_profile",
                     match_origin="automated_search",

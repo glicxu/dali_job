@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -36,6 +36,13 @@ def default_job_data() -> dict:
 
 class JobCache(Base):
     __tablename__ = "jobs_cache"
+    __table_args__ = (
+        CheckConstraint(
+            "lifecycle_state IN ('active', 'expired', 'closed')",
+            name="ck_jobs_cache_lifecycle_state",
+        ),
+        Index("ix_jobs_cache_lifecycle_expiry", "lifecycle_state", "expires_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False, default="")
@@ -44,6 +51,11 @@ class JobCache(Base):
     source_url_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True, unique=True)
     raw_description_text: Mapped[str] = mapped_column(Text, nullable=False)
     job_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    lifecycle_state: Mapped[str] = mapped_column(String(20), nullable=False, default="active", index=True)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expiration_reason: Mapped[str | None] = mapped_column(String(80), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -156,6 +168,12 @@ class JobResumeMatch(Base):
     jobs_cache_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("jobs_cache.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    matching_v2_result_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("matching_match_results.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )

@@ -98,6 +98,7 @@ def test_matching_v2_public_flags_default_off() -> None:
     assert runtime.matching_v2.internal_super_enabled is False
     assert runtime.matching_v2.guest_enabled is False
     assert runtime.matching_v2.automation_enabled is False
+    assert runtime.job_cache_ttl_days == 30
     assert runtime.matching_v2.web_enabled is False
     assert runtime.matching_v2.mobile_enabled is False
     assert runtime.matching_v2.evaluation_enabled is False

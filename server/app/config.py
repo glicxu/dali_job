@@ -36,6 +36,7 @@ DEFAULT_MOBILE_REFRESH_TOKEN_SECONDS = 60 * 60 * 24 * 30
 DEFAULT_EMAIL_ACTION_TTL_SECONDS = 60 * 60
 DEFAULT_LOG_MAX_BYTES = 10 * 1024 * 1024
 DEFAULT_LOG_BACKUP_COUNT = 5
+DEFAULT_JOB_CACHE_TTL_DAYS = 30
 CONFIG_ENV_VAR = "DALIJOB_CONFIG"
 SERVER_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 PRODUCTION_ENV_NAMES = {"prod", "production"}
@@ -94,6 +95,7 @@ class RuntimeConfig:
     log_max_bytes: int
     log_backup_count: int
     audit_retention_days: int
+    job_cache_ttl_days: int
     tier_entitlements: EntitlementCatalog
     matching_v2: MatchingV2FeatureFlags
 
@@ -405,6 +407,11 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         DEFAULT_LOG_BACKUP_COUNT,
     )
     audit_retention_days = _coerce_int(read_config_value("audit", "retention_days", "365"), 365)
+    job_cache_ttl_days = _coerce_int(
+        os.getenv("DALIJOB_JOB_CACHE_TTL_DAYS", "").strip()
+        or read_config_value("job_catalog", "cache_ttl_days", str(DEFAULT_JOB_CACHE_TTL_DAYS)),
+        DEFAULT_JOB_CACHE_TTL_DAYS,
+    )
     tier_entitlements = load_entitlement_catalog()
     matching_v2 = MatchingV2FeatureFlags(
         shadow_enabled=_coerce_bool(
@@ -492,6 +499,7 @@ def load_runtime_config(config_path: Optional[str] = None) -> RuntimeConfig:
         log_max_bytes=max(log_max_bytes, 1024),
         log_backup_count=max(log_backup_count, 1),
         audit_retention_days=max(audit_retention_days, 1),
+        job_cache_ttl_days=max(job_cache_ttl_days, 1),
         tier_entitlements=tier_entitlements,
         matching_v2=matching_v2,
     )

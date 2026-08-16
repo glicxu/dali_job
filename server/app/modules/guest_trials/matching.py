@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.modules.guest_trials.models import (
@@ -331,6 +331,8 @@ def select_cached_job_profile(
                 JobProfileVersion.deleted_at.is_(None),
                 JobProfileVersion.trial_eligible.is_(True),
                 JobCache.deleted_at.is_(None),
+                JobCache.lifecycle_state == "active",
+                or_(JobCache.expires_at.is_(None), JobCache.expires_at > utc_now()),
                 JobCache.raw_description_text != "",
             )
             .order_by(JobProfileVersion.created_at.desc(), JobProfileVersion.id.desc())

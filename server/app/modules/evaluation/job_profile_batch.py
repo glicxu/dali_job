@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.evaluation.models import EvaluationJobSnapshot
 from app.modules.jobs.models import JobCache
+from app.modules.jobs.repository import mark_cache_job_seen
 from app.modules.matching_v2.canonical import (
     CANONICALIZATION_VERSION,
     EvidenceSpan,
@@ -85,6 +86,7 @@ def extract_and_persist_job_profile(
     sync_policy_registry(db)
     profile = find_cached_job_profile(db, source=source, model_id=model_id)
     if profile is not None:
+        mark_cache_job_seen(prepared.cached_job)
         profile.trial_eligible = True
         profile.quality_tier = "curated_evaluation"
         return {
@@ -113,6 +115,7 @@ def extract_and_persist_job_profile(
     )
     profile.trial_eligible = True
     profile.quality_tier = "curated_evaluation"
+    mark_cache_job_seen(prepared.cached_job)
     return {
         "status": "created",
         "job_profile_id": profile.public_id,

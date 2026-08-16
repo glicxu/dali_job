@@ -185,7 +185,13 @@ def run_search_schedule_now(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Search schedule not found.")
     try:
         return SearchRunResponse.model_validate(
-            schedules.run_schedule_now(db, identity, schedule, _catalog(request))
+            schedules.run_schedule_now(
+                db,
+                identity,
+                schedule,
+                _catalog(request),
+                matching_v2_enabled=request.app.state.runtime.matching_v2.automation_enabled,
+            )
         )
     except (schedules.ScheduleValidationError, SubscriptionUnavailable) as exc:
         _raise_schedule_error(exc)

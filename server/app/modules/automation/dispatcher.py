@@ -38,6 +38,7 @@ def dispatch_due_schedules(
     *,
     now: datetime | None = None,
     limit: int = 100,
+    matching_v2_enabled: bool = False,
 ) -> DispatchSummary:
     if limit < 1 or limit > 500:
         raise ValueError("limit must be between 1 and 500")
@@ -128,8 +129,8 @@ def dispatch_due_schedules(
                 "max_results": 10,
                 "scheduled_for": scheduled_for.isoformat(),
             },
-            provider="apify+openai",
-            prompt_version="resume-job-match-v1",
+            provider="openai" if matching_v2_enabled else "apify+openai",
+            prompt_version="qualification-match.v3" if matching_v2_enabled else "resume-job-match-v1",
             progress_message="Waiting for automation worker",
         )
         db.add(operation)
@@ -141,7 +142,7 @@ def dispatch_due_schedules(
             managed_operation_id=operation.id,
             status="queued",
             scheduled_for=scheduled_for,
-            provider="apify+openai",
+            provider="openai" if matching_v2_enabled else "apify+openai",
         )
         db.add(run)
         db.flush()
@@ -161,6 +162,7 @@ def dispatch_schedule_now(
     schedule: SearchSchedule,
     *,
     now: datetime | None = None,
+    matching_v2_enabled: bool = False,
 ) -> SearchRun:
     """Queue an immediate one-off run without moving the recurring schedule."""
     current = _utc(now or datetime.now(timezone.utc))
@@ -204,8 +206,8 @@ def dispatch_schedule_now(
             "scheduled_for": scheduled_for.isoformat(),
             "trigger": "super_run_now",
         },
-        provider="apify+openai",
-        prompt_version="resume-job-match-v1",
+        provider="openai" if matching_v2_enabled else "apify+openai",
+        prompt_version="qualification-match.v3" if matching_v2_enabled else "resume-job-match-v1",
         progress_message="Waiting for automation worker",
     )
     db.add(operation)
@@ -217,7 +219,7 @@ def dispatch_schedule_now(
         managed_operation_id=operation.id,
         status="queued",
         scheduled_for=scheduled_for,
-        provider="apify+openai",
+        provider="openai" if matching_v2_enabled else "apify+openai",
     )
     db.add(run)
     db.flush()
@@ -265,7 +267,12 @@ def main(argv: list[str] | None = None) -> int:
 
     runtime = load_runtime_config(args.config)
     with DbMan.session_scope() as db:
-        summary = dispatch_due_schedules(db, runtime.tier_entitlements, limit=args.limit)
+        summary = dispatch_due_schedules(
+            db,
+            runtime.tier_entitlements,
+            limit=args.limit,
+            matching_v2_enabled=runtime.matching_v2.automation_enabled,
+        )
     print(
         json.dumps(
             {

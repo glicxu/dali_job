@@ -14,7 +14,10 @@ from DaliCommonLib.dali_db_man import DbMan
 from app.config import load_runtime_config
 from app.core.logging import configure_logging
 from app.modules.automation.executor import DatabaseAutomationResultPersister, build_default_executor
+from app.modules.automation.v2_executor import CachedV2AutomationExecutor
 from app.modules.automation.worker import DEFAULT_LEASE_SECONDS, run_available
+from app.modules.matching_v2.extraction import OpenAICandidateProfileExtractor
+from app.modules.matching_v2.qualification import OpenAIQualificationMatcher
 
 
 LOGGER = logging.getLogger(__name__)
@@ -45,7 +48,17 @@ def main(argv: list[str] | None = None) -> int:
         expire_on_commit=False,
         future=True,
     )
-    executor = build_default_executor(runtime)
+    executor = (
+        CachedV2AutomationExecutor(
+            session_factory=factory,
+            candidate_extractor=OpenAICandidateProfileExtractor(model=runtime.openai_model),
+            matcher=OpenAIQualificationMatcher(model=runtime.openai_model),
+            model_id=runtime.openai_model,
+            legacy_adapter_enabled=runtime.matching_v2.legacy_adapter_enabled,
+        )
+        if runtime.matching_v2.automation_enabled
+        else build_default_executor(runtime)
+    )
     persister = DatabaseAutomationResultPersister()
     stopping = Event()
 

@@ -451,14 +451,20 @@ Dependencies: Phase 7. This is a release-hardening gate before Phase 8, not a ne
 
 ### Phase 8: Scheduled Matching, Inbox, And Digest
 
+**Phase 8A first-push status:** Implemented behind `matching_v2.automation_enabled` as of 2026-08-16;
+deployment and flag enablement remain separate release steps.
+
 **Outcome:** Existing weekly entitlements can execute V2 and deliver one result per successful search.
 
 Work:
 
-- Adapt `automation/executor.py` to call the V2 orchestrator behind `matching_v2_automation_enabled`.
+- Adapt automation execution to use the V2 cached-catalog pipeline behind
+  `matching_v2.automation_enabled`; it performs no external job query.
 - Remove `run_matching` behavior from external import/search handlers. Those handlers end after cache
   ingestion and enqueue Job Profile extraction; matching is a separate consumer of completed profiles.
-- Preserve Free/Starter/Plus weekly provider-search limits of 1/3/5 and unlimited internal-super access subject to operational limits.
+- Preserve Free/Starter/Plus weekly matching limits of 1/3/5 and unlimited internal-super access
+  subject to operational limits. The legacy ledger name remains `provider_search` during this additive
+  migration, but an 8A run represents one scheduled catalog match.
 - Skip previously seen jobs and unchanged Candidate Profile/Job Profile pairs before qualification calls.
 - Persist provisional results in the private inbox under “Needs more information.”
 - Update daily digest templates for V2 recommendation labels and nullable scores.
@@ -466,15 +472,41 @@ Work:
 
 Acceptance criteria:
 
-- Failed or unusable provider searches consume no quota.
+- Failed Candidate Profile or Qualification provider calls consume no quota.
 - Every automated match references an active cached job and a persisted Job Profile; no raw-description
   payload is accepted by the matching operation.
-- A usable provider response consumes one search unit even when downstream work must retry.
+- A completed scheduled catalog evaluation consumes one weekly matching unit; a persistence retry keeps
+  the same reservation and artifacts.
 - Each successful search contributes at most one new digest item.
 - Duplicate suppression occurs before a repeated qualification call or notification.
 - Reruns preserve old and new immutable result histories.
 
 Dependencies: Phases 6–7; can be enabled independently from the guest flag.
+
+Implemented in the 8A first push:
+
+- Cached jobs have an explicit `active`, `expired`, or `closed` lifecycle, `last_seen_at`, `expires_at`,
+  and an expiration reason. The initial configurable TTL is 30 days.
+- A bounded, lock-safe expiration command marks due jobs expired without deleting source text, Job
+  Profiles, or historical Match Results. Seeing the source again reactivates the same cached job and
+  extends its TTL.
+- Scheduled V2 matching reads only active, unexpired cached jobs with an accepted immutable Job Profile.
+- Candidate Profile creation/reuse, Matching Intent derivation, Job Family Pre-Match, Qualification,
+  preference/eligibility evaluation, and scoring execute as independent persisted artifacts.
+- Duplicate suppression uses the immutable V2 Match Result linkage before another notification is
+  created. At most one new scored result is projected into the existing inbox and daily-email outbox.
+- The compatibility projection stores the originating V2 Match Result ID; it does not invoke the legacy
+  raw-text matcher.
+
+Deferred from the first 8A push:
+
+- Company-site crawling, source-specific scraping adapters, and an automatic Job Profile extraction
+  queue. The first push consumes the existing manually curated, accepted catalog.
+- Direct V2 inbox/digest rows for provisional results with null scores. These results remain persisted in
+  V2 but are not projected into the legacy non-null-score inbox yet.
+- Payment-provider validation; existing administrative entitlements remain the source for weekly limits.
+- The SRE reporting agent. Initial health metrics and alerts will be specified as a separate operational
+  workstream before autonomous remediation is considered.
 
 ### Phase 9: Mobile And Web Presentation
 

@@ -318,6 +318,8 @@ def run_schedule_now(
     identity: AuthenticatedIdentity,
     schedule: SearchSchedule,
     catalog: EntitlementCatalog,
+    *,
+    matching_v2_enabled: bool = False,
 ) -> SearchRun:
     # Identity ownership has already been established by get_schedule. Keep
     # dispatching in the durable automation queue so the normal worker,
@@ -328,7 +330,12 @@ def run_schedule_now(
     if user.id != schedule.user_id:
         raise ScheduleValidationError("schedule_not_found", "Search schedule not found.")
     try:
-        return dispatch_schedule_now(db, catalog, schedule)
+        return dispatch_schedule_now(
+            db,
+            catalog,
+            schedule,
+            matching_v2_enabled=matching_v2_enabled,
+        )
     except PermissionError as exc:
         raise ScheduleValidationError("super_account_required", str(exc)) from exc
 

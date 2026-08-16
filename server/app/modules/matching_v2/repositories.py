@@ -471,6 +471,8 @@ def get_job_profile_by_public_id(db: Session, *, public_id: str) -> JobProfileVe
         CanonicalSource.owner_kind == "shared",
         CanonicalSource.source_type == "job",
         JobCache.deleted_at.is_(None),
+        JobCache.lifecycle_state == "active",
+        (JobCache.expires_at.is_(None) | (JobCache.expires_at > func.now())),
         JobCache.raw_description_text != "",
     ))
 

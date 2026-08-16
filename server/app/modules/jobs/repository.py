@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from hashlib import sha256
 import json
+from datetime import timedelta
 from typing import Literal
 
 from sqlalchemy import desc, func, select
@@ -18,6 +19,7 @@ from app.modules.profiles.repository import ensure_account_for_identity
 
 CacheWriteSource = Literal["source_extraction", "provider_normalization"]
 TRUSTED_CACHE_WRITE_SOURCES = {"source_extraction", "provider_normalization"}
+DEFAULT_CACHE_TTL_DAYS = 30
 
 
 def normalize_source_url(source_url: str | None) -> str | None:
@@ -228,6 +230,22 @@ def _reactivate_cache_job(job_cache: JobCache) -> None:
         job_cache.deleted_at = None
 
 
+def mark_cache_job_seen(
+    job_cache: JobCache,
+    *,
+    seen_at=None,
+    ttl_days: int = DEFAULT_CACHE_TTL_DAYS,
+) -> None:
+    if ttl_days < 1:
+        raise ValueError("Job cache TTL must be at least one day.")
+    current = seen_at or utc_now()
+    job_cache.lifecycle_state = "active"
+    job_cache.last_seen_at = current
+    job_cache.expires_at = current + timedelta(days=ttl_days)
+    job_cache.expired_at = None
+    job_cache.expiration_reason = None
+
+
 def _active_or_deleted_cached_job(db: Session, source_url: str | None) -> JobCache | None:
     return get_cached_job_by_source_url(db, source_url, include_deleted=True)
 
@@ -241,6 +259,7 @@ def _reread_cache_job_after_unique_conflict(
     job_data: JobDescriptionData | None = None,
     title: str = "",
     company: str = "",
+    ttl_days: int = DEFAULT_CACHE_TTL_DAYS,
 ) -> JobCache:
     cached_job = _active_or_deleted_cached_job(db, source_url)
     if cached_job is None:
@@ -253,6 +272,7 @@ def _reread_cache_job_after_unique_conflict(
         job_data=job_data,
         title=title,
         company=company,
+        ttl_days=ttl_days,
     )
 
 
@@ -298,6 +318,7 @@ def _create_cache_job(
     job_data: JobDescriptionData | None = None,
     title: str = "",
     company: str = "",
+    ttl_days: int = DEFAULT_CACHE_TTL_DAYS,
 ) -> JobCache:
     stored_job_data = job_data.model_dump() if job_data is not None else None
     job_cache = JobCache(
@@ -308,6 +329,7 @@ def _create_cache_job(
         raw_description_text=raw_description_text,
         job_data=stored_job_data,
     )
+    mark_cache_job_seen(job_cache, ttl_days=ttl_days)
     db.add(job_cache)
     db.flush()
     db.refresh(job_cache)
@@ -322,8 +344,11 @@ def _fill_cache_job(
     job_data: JobDescriptionData | None = None,
     title: str = "",
     company: str = "",
+    ttl_days: int = DEFAULT_CACHE_TTL_DAYS,
 ) -> JobCache:
     changed = False
+    mark_cache_job_seen(job_cache, ttl_days=ttl_days)
+    changed = True
     if raw_description_text and not job_cache.raw_description_text:
         job_cache.raw_description_text = raw_description_text
         changed = True
@@ -356,6 +381,7 @@ def get_or_create_cache_job(
     company: str = "",
     reuse_cached_url: bool = True,
     cache_write_source: CacheWriteSource,
+    ttl_days: int = DEFAULT_CACHE_TTL_DAYS,
 ) -> JobCache:
     if cache_write_source not in TRUSTED_CACHE_WRITE_SOURCES:
         raise ValueError("Shared job cache writes require a trusted source path.")
@@ -369,6 +395,7 @@ def get_or_create_cache_job(
                 job_data=job_data,
                 title=title,
                 company=company,
+                ttl_days=ttl_days,
             )
         deleted_cached_job = _active_or_deleted_cached_job(db, source_url)
         if deleted_cached_job is not None and deleted_cached_job.deleted_at is not None:
@@ -380,6 +407,7 @@ def get_or_create_cache_job(
                 job_data=job_data,
                 title=title,
                 company=company,
+                ttl_days=ttl_days,
             )
     try:
         with db.begin_nested():
@@ -390,6 +418,7 @@ def get_or_create_cache_job(
                 job_data=job_data,
                 title=title,
                 company=company,
+                ttl_days=ttl_days,
             )
     except IntegrityError as exc:
         return _reread_cache_job_after_unique_conflict(
@@ -400,6 +429,7 @@ def get_or_create_cache_job(
             job_data=job_data,
             title=title,
             company=company,
+            ttl_days=ttl_days,
         )
 
 
@@ -776,6 +806,7 @@ def create_job_resume_match(
     *,
     user_job_id: int,
     jobs_cache_id: int | None,
+    matching_v2_result_id: int | None = None,
     resume_profile_id: int | None = None,
     resume_document_id: int | None = None,
     resume_source: str,
@@ -807,6 +838,7 @@ def create_job_resume_match(
         user_id=user.id,
         user_job_id=user_job_id,
         jobs_cache_id=jobs_cache_id,
+        matching_v2_result_id=matching_v2_result_id,
         resume_profile_id=resume_profile_id,
         resume_document_id=resume_document_id,
         resume_source=resume_source,

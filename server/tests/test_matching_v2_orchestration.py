@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
+from threading import Event
+import time
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
@@ -10,18 +13,32 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.session import get_db_session
 from app.main import create_app
-from app.modules.matching_v2.models import MatchingOperation, MatchingOperationStage
+from app.modules.matching_v2.models import (
+    CandidateProfileVersion,
+    CanonicalSource,
+    MatchingOperation,
+    MatchingOperationStage,
+)
+from app.modules.matching_v2.orchestration import create_or_get_operation
 from app.modules.matching_v2.pre_match import create_matching_intent
 from app.modules.matching_v2.router import get_qualification_matcher
+from app.modules.matching_v2.repositories import ArtifactOwner
+from app.modules.matching_v2.worker import retry_delay_seconds, run_available
 from test_matching_v2_qualification import StubQualificationMatcher, _foundation
 
 
-def _client() -> tuple[TestClient, sessionmaker, StubQualificationMatcher, str, str, str]:
+def _client(
+    *, sqlite_path: Path | None = None,
+) -> tuple[TestClient, sessionmaker, StubQualificationMatcher, str, str, str]:
+    engine_options = {
+        "connect_args": {"check_same_thread": False},
+        "future": True,
+    }
+    if sqlite_path is None:
+        engine_options["poolclass"] = StaticPool
     engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-        future=True,
+        f"sqlite:///{sqlite_path.as_posix()}" if sqlite_path is not None else "sqlite://",
+        **engine_options,
     )
     Base.metadata.create_all(bind=engine)
     factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
@@ -178,3 +195,89 @@ def test_matching_intent_api_revises_without_mutating_history() -> None:
     assert revised.status_code == 200, revised.text
     assert revised.json()["revision"] == 2
     assert historical.json()["target_level"] == "senior"
+
+
+def test_immediate_operation_times_out_to_poll_and_can_be_cancelled(monkeypatch, tmp_path) -> None:
+    client, factory, matcher, candidate_id, job_id, intent_id = _client(
+        sqlite_path=tmp_path / "orchestration.db"
+    )
+    started = Event()
+    release = Event()
+    original_assess = matcher.assess
+
+    def wait_for_release(value):
+        started.set()
+        release.wait(5)
+        return original_assess(value)
+
+    matcher.assess = wait_for_release
+    monkeypatch.setattr(
+        "app.modules.matching_v2.orchestration_router.IMMEDIATE_RESPONSE_SECONDS",
+        0.01,
+    )
+
+    response = client.post("/api/v1/matches", json=_payload(candidate_id, job_id, intent_id))
+    assert response.status_code == 202
+    assert started.wait(2)
+
+    cancelled = client.post(
+        f"/api/v1/matching-operations/{response.json()['operation_id']}/cancel"
+    )
+    release.set()
+
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "cancelled"
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        with factory() as db:
+            if db.scalar(select(MatchingOperation)).status == "cancelled":
+                break
+        time.sleep(0.01)
+    with factory() as db:
+        assert db.scalar(select(MatchingOperation)).status == "cancelled"
+
+
+def test_durable_worker_picks_up_pending_matching_operation() -> None:
+    client, factory, matcher, candidate_id, job_id, intent_id = _client()
+    payload = _payload(candidate_id, job_id, intent_id)
+    request_payload = {
+        key: value for key, value in payload.items() if key not in {"mode", "idempotency_key"}
+    }
+    with factory.begin() as db:
+        profile = db.scalar(
+            select(CandidateProfileVersion).where(CandidateProfileVersion.public_id == candidate_id)
+        )
+        source = db.get(CanonicalSource, profile.canonical_source_id)
+        operation, _ = create_or_get_operation(
+            db,
+            owner=ArtifactOwner.authenticated(
+                workspace_id=source.workspace_id,
+                user_id=source.user_id,
+            ),
+            idempotency_key="durable-worker-0001",
+            request_hash="sha256:" + ("a" * 64),
+            request_payload=request_payload,
+            mode="asynchronous",
+        )
+        operation_id = operation.id
+
+    processed = run_available(
+        factory,
+        app=client.app,
+        worker_id="test-worker",
+        matcher=matcher,
+        candidate_extractor=None,
+        job_extractor=None,
+    )
+
+    assert processed == 1
+    with factory() as db:
+        assert db.get(MatchingOperation, operation_id).status == "completed"
+
+
+def test_retry_delay_is_bounded_exponential_with_jitter() -> None:
+    delays = [retry_delay_seconds(42, attempt) for attempt in range(1, 10)]
+
+    assert 5 <= delays[0] <= 6.25
+    assert 10 <= delays[1] <= 12.5
+    assert all(delay <= 375 for delay in delays)

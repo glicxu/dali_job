@@ -15,6 +15,7 @@ from app.modules.matching_v2.extraction import (
 )
 from app.modules.matching_v2.models import CanonicalSource, MatchingOperation, SourceSpan
 from app.modules.matching_v2.orchestration import (
+    OperationCancelled,
     OperationLeaseUnavailable,
     begin_stage,
     claim_operation,
@@ -37,8 +38,9 @@ def execute_extraction_operation(
     *,
     candidate_extractor: CandidateProfileExtractor | None = None,
     job_extractor: JobProfileExtractor | None = None,
+    lease_owner: str | None = None,
 ) -> None:
-    lease_owner = f"{socket.gethostname()}:{uuid.uuid4().hex[:12]}"
+    lease_owner = lease_owner or f"{socket.gethostname()}:{uuid.uuid4().hex[:12]}"
     try:
         claim_operation(db, operation, lease_owner=lease_owner)
     except OperationLeaseUnavailable:
@@ -112,6 +114,9 @@ def execute_extraction_operation(
             policy_versions=policies,
         )
         complete_operation(db, operation)
+    except OperationCancelled:
+        db.rollback()
+        return
     except Exception:
         db.rollback()
         operation = db.get(MatchingOperation, operation.id)

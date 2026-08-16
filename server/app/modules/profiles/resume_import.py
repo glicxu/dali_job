@@ -133,9 +133,18 @@ PHONE_RE = re.compile(
     r"(?<!\w)(?:\+?1[\s.\-()]*)?(?:\(?\d{3}\)?[\s.\-()]*)\d{3}[\s.\-]*\d{4}(?!\w)"
 )
 URL_RE = re.compile(r"\b(?:https?://|www\.)\S+\b", re.IGNORECASE)
-SOCIAL_RE = re.compile(r"\b(?:linkedin|github|portfolio|website)\b", re.IGNORECASE)
+SOCIAL_LABEL_RE = re.compile(
+    r"\b(?:linkedin|github|portfolio|website)\b\s*(?::|\||-)\s*\S+",
+    re.IGNORECASE,
+)
 LOCATION_LABEL_RE = re.compile(r"\b(?:address|location|based in|located in)\b", re.IGNORECASE)
 CITY_STATE_RE = re.compile(r"^[A-Za-z .'-]+,\s*[A-Z]{2}(?:\s+\d{5}(?:-\d{4})?)?$")
+STREET_ADDRESS_RE = re.compile(
+    r"\b\d{1,6}\s+(?:[NSEW]\.?\s+)?(?:[A-Za-z0-9.'-]+\s+){0,7}"
+    r"(?:street|st|avenue|ave|road|rd|boulevard|blvd|lane|ln|drive|dr|court|ct|"
+    r"circle|cir|way|parkway|pkwy|highway|hwy|place|pl)\.?\b",
+    re.IGNORECASE,
+)
 SECTION_HEADING_RE = re.compile(
     r"^(?:summary|profile|experience|work experience|employment|education|skills|projects|certifications|awards|publications|languages|volunteer)\b",
     re.IGNORECASE,
@@ -157,11 +166,8 @@ def redact_resume_personal_info(text: str) -> str:
     cleaned = clean_resume_text(text)
     lines = cleaned.splitlines()
     redacted: list[str] = []
-    found_header_contact = any(
-        EMAIL_RE.search(line) or PHONE_RE.search(line) or URL_RE.search(line) or SOCIAL_RE.search(line)
-        for line in lines[:8]
-    )
     removed_probable_name = False
+    seen_section_heading = False
 
     for index, line in enumerate(lines):
         stripped = line.strip()
@@ -174,18 +180,18 @@ def redact_resume_personal_info(text: str) -> str:
             EMAIL_RE.search(stripped)
             or PHONE_RE.search(stripped)
             or URL_RE.search(stripped)
-            or SOCIAL_RE.search(stripped)
+            or SOCIAL_LABEL_RE.search(stripped)
             or LOCATION_LABEL_RE.search(stripped)
+            or STREET_ADDRESS_RE.search(stripped)
         )
         has_header_location = in_header and bool(CITY_STATE_RE.match(stripped))
         likely_name = (
-            found_header_contact
-            and in_header
+            in_header
+            and not seen_section_heading
             and not removed_probable_name
             and not has_direct_pii
             and not SECTION_HEADING_RE.match(stripped)
-            and len(stripped.split()) <= 4
-            and not any(char.isdigit() for char in stripped)
+            and _looks_like_probable_name(stripped)
         )
 
         if has_direct_pii or has_header_location or likely_name:
@@ -193,8 +199,60 @@ def redact_resume_personal_info(text: str) -> str:
             continue
 
         redacted.append(line)
+        seen_section_heading = seen_section_heading or bool(SECTION_HEADING_RE.match(stripped))
 
-    return clean_resume_text("\n".join(redacted))
+    result = clean_resume_text("\n".join(redacted))
+    assert_resume_privacy_safe(result)
+    return result
+
+
+def resume_privacy_risks(text: str) -> tuple[str, ...]:
+    """Return strong residual PII signals that must not be sent to a model."""
+    risks: list[str] = []
+    checks = (
+        ("email", EMAIL_RE),
+        ("phone", PHONE_RE),
+        ("url", URL_RE),
+        ("street_address", STREET_ADDRESS_RE),
+    )
+    for code, pattern in checks:
+        if pattern.search(text):
+            risks.append(code)
+    return tuple(risks)
+
+
+def assert_resume_privacy_safe(text: str) -> None:
+    risks = resume_privacy_risks(text)
+    if risks:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "RESUME_PRIVACY_REVIEW_REQUIRED",
+                "message": "The resume still contains personal contact or residential information.",
+                "risk_types": list(risks),
+            },
+        )
+
+
+def _looks_like_probable_name(value: str) -> bool:
+    words = value.split()
+    if not 2 <= len(words) <= 4 or any(char.isdigit() for char in value):
+        return False
+    professional_terms = {
+        "analyst", "architect", "cloud", "consultant", "data", "developer", "director",
+        "engineer", "engineering", "hardware", "junior", "leader", "learning", "machine",
+        "manager", "platform", "principal", "product", "program", "research", "researcher",
+        "science", "scientist", "security", "senior", "software", "specialist", "staff",
+        "student", "systems", "technical", "technology", "university",
+    }
+    normalized_words = {word.strip(".,'-").casefold() for word in words}
+    if normalized_words & professional_terms:
+        return False
+    name_tokens = [word.strip(".,'-") for word in words if word.casefold() not in {"de", "la", "van", "von"}]
+    return bool(name_tokens) and all(
+        (token[:1].isupper() and token[1:].islower()) or token.isupper()
+        for token in name_tokens
+    )
 
 
 def validate_pdf_signature(content: bytes) -> None:
@@ -221,7 +279,7 @@ def extract_pdf_text(content: bytes) -> str:
         pages: list[str] = []
         extracted_chars = 0
         for page in reader.pages:
-            page_text = page.extract_text() or ""
+            page_text = _extract_pdf_page_text(page)
             extracted_chars += len(page_text)
             if extracted_chars > MAX_PDF_EXTRACTED_CHARS:
                 raise HTTPException(status_code=400, detail="PDF extracted text exceeds the processing limit.")
@@ -231,10 +289,34 @@ def extract_pdf_text(content: bytes) -> str:
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Could not safely read the uploaded PDF.") from exc
 
+    if len(pages) > 1 and any(not page.strip() for page in pages):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "PDF_EXTRACTION_QUALITY_FAILED",
+                "message": "One or more PDF pages contained no selectable text. Upload a DOCX or text-based PDF.",
+            },
+        )
     text = redact_resume_personal_info("\n\n".join(page for page in pages if page.strip()))
     if not text:
         raise HTTPException(status_code=400, detail="No selectable text was found in the PDF.")
     return text
+
+
+def _extract_pdf_page_text(page: object) -> str:
+    """Prefer layout-aware extraction, retaining the richer deterministic result."""
+    try:
+        layout_text = page.extract_text(extraction_mode="layout") or ""  # type: ignore[attr-defined]
+    except TypeError:
+        return page.extract_text() or ""  # type: ignore[attr-defined]
+    plain_text = page.extract_text() or ""  # type: ignore[attr-defined]
+    return max(
+        (plain_text, layout_text),
+        key=lambda value: (
+            len(re.sub(r"\s+", "", value)),
+            len([line for line in value.splitlines() if line.strip()]),
+        ),
+    )
 
 
 def extract_docx_text(content: bytes) -> str:

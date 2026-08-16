@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from calendar import monthrange
+from datetime import date
 from copy import deepcopy
-from typing import Any, Literal, Sequence
+import re
+from typing import Annotated, Any, Literal, Sequence
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 CareerLevel = Literal[
     "unknown",
@@ -69,11 +72,44 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+_PARTIAL_DATE_RE = re.compile(r"^\d{4}(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\d|3[01]))?)?$")
+
+
+def _validate_candidate_date(value: str) -> str:
+    if not _PARTIAL_DATE_RE.fullmatch(value):
+        raise ValueError("Candidate dates must use YYYY, YYYY-MM, or YYYY-MM-DD.")
+    if len(value) == 10:
+        try:
+            date.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError("Candidate date is not a valid calendar date.") from exc
+    return value
+
+
+CandidateDate = Annotated[
+    str,
+    Field(max_length=10, pattern=r"^\d{4}(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\d|3[01]))?)?$"),
+    AfterValidator(_validate_candidate_date),
+] | None
+
+
+def _date_lower_bound(value: str) -> tuple[int, int, int]:
+    parts = [int(part) for part in value.split("-")]
+    return (parts[0], parts[1] if len(parts) > 1 else 1, parts[2] if len(parts) > 2 else 1)
+
+
+def _date_upper_bound(value: str) -> tuple[int, int, int]:
+    parts = [int(part) for part in value.split("-")]
+    month = parts[1] if len(parts) > 1 else 12
+    day = parts[2] if len(parts) > 2 else monthrange(parts[0], month)[1]
+    return (parts[0], month, day)
+
+
 class CandidateSkillResponse(StrictModel):
     observed_name: str = Field(min_length=1, max_length=200)
     canonical_name: str | None = Field(max_length=200)
     evidence_strength: EvidenceStrength
-    last_used: str | None = Field(max_length=10)
+    last_used: CandidateDate
     months_experience: int | None = Field(ge=0, le=1_200)
     evidence_refs: list[str] = Field(min_length=1, max_length=10)
 
@@ -81,12 +117,23 @@ class CandidateSkillResponse(StrictModel):
 class CandidateExperienceResponse(StrictModel):
     organization: str | None = Field(max_length=300)
     title: str = Field(min_length=1, max_length=300)
-    start_date: str | None = Field(max_length=10)
-    end_date: str | None = Field(max_length=10)
+    start_date: CandidateDate
+    end_date: CandidateDate
     is_current: bool
     context: EvidenceContext
     highlights: list[str] = Field(max_length=20)
     evidence_refs: list[str] = Field(min_length=1, max_length=10)
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> CandidateExperienceResponse:
+        if (
+            not self.is_current
+            and self.start_date
+            and self.end_date
+            and _date_lower_bound(self.start_date) > _date_upper_bound(self.end_date)
+        ):
+            raise ValueError("Experience start_date must not exceed end_date.")
+        return self
 
 
 class CandidateProjectResponse(StrictModel):
@@ -101,24 +148,65 @@ class CandidateEducationResponse(StrictModel):
     institution: str | None = Field(max_length=300)
     credential: str = Field(min_length=1, max_length=300)
     field: str | None = Field(max_length=300)
-    start_date: str | None = Field(max_length=10)
-    end_date: str | None = Field(max_length=10)
+    start_date: CandidateDate
+    end_date: CandidateDate
     completed: bool | None
     evidence_refs: list[str] = Field(min_length=1, max_length=10)
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> CandidateEducationResponse:
+        if (
+            self.start_date
+            and self.end_date
+            and _date_lower_bound(self.start_date) > _date_upper_bound(self.end_date)
+        ):
+            raise ValueError("Education start_date must not exceed end_date.")
+        return self
 
 
 class CandidateCertificationResponse(StrictModel):
     name: str = Field(min_length=1, max_length=300)
     issuer: str | None = Field(max_length=300)
-    issued_date: str | None = Field(max_length=10)
-    expiration_date: str | None = Field(max_length=10)
+    issued_date: CandidateDate
+    expiration_date: CandidateDate
     evidence_refs: list[str] = Field(min_length=1, max_length=10)
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> CandidateCertificationResponse:
+        if (
+            self.issued_date
+            and self.expiration_date
+            and _date_lower_bound(self.issued_date) > _date_upper_bound(self.expiration_date)
+        ):
+            raise ValueError("Certification issued_date must not exceed expiration_date.")
+        return self
 
 
 class CandidatePublicationResponse(StrictModel):
     title: str = Field(min_length=1, max_length=500)
     venue: str | None = Field(max_length=300)
-    publication_date: str | None = Field(max_length=10)
+    publication_date: CandidateDate
+    evidence_refs: list[str] = Field(min_length=1, max_length=10)
+
+
+class CandidateAwardResponse(StrictModel):
+    name: str = Field(min_length=1, max_length=500)
+    issuer: str | None = Field(max_length=300)
+    award_date: CandidateDate
+    evidence_refs: list[str] = Field(min_length=1, max_length=10)
+
+
+class CandidatePatentResponse(StrictModel):
+    title: str = Field(min_length=1, max_length=500)
+    identifier: str | None = Field(max_length=200)
+    status: Literal["granted", "pending", "unknown"]
+    patent_date: CandidateDate
+    evidence_refs: list[str] = Field(min_length=1, max_length=10)
+
+
+class CandidateLanguageResponse(StrictModel):
+    name: str = Field(min_length=1, max_length=200)
+    proficiency: Literal["native", "fluent", "professional", "conversational", "basic", "unknown"]
     evidence_refs: list[str] = Field(min_length=1, max_length=10)
 
 
@@ -160,6 +248,9 @@ class CandidateExtractionResponse(StrictModel):
     education: list[CandidateEducationResponse] = Field(max_length=30)
     certifications: list[CandidateCertificationResponse] = Field(max_length=30)
     publications: list[CandidatePublicationResponse] = Field(max_length=30)
+    awards: list[CandidateAwardResponse] = Field(max_length=30)
+    patents: list[CandidatePatentResponse] = Field(max_length=30)
+    languages: list[CandidateLanguageResponse] = Field(max_length=30)
     career_profiles: list[CandidateCareerProfileResponse] = Field(min_length=1, max_length=8)
     recommended_primary_career_profile_ref: str = Field(
         min_length=1,
@@ -423,7 +514,7 @@ def strict_response_format(
 def candidate_response_format(allowed_evidence_refs: Sequence[str]) -> dict[str, Any]:
     return strict_response_format(
         CandidateExtractionResponse,
-        name="dalijob_candidate_extract_v1",
+        name="dalijob_candidate_extract_v3",
         enum_restrictions={"evidence_refs": allowed_evidence_refs},
     )
 

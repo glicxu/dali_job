@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -38,6 +39,9 @@ def _artifact(evidence_ref: str, *, confidence: float = 0.86, level: str = "entr
             "education": [],
             "certifications": [],
             "publications": [],
+            "awards": [],
+            "patents": [],
+            "languages": [],
             "career_profiles": [
                 {
                     "local_ref": "career_software_engineering",
@@ -104,6 +108,33 @@ def test_span_builder_bounds_long_paragraphs_without_changing_excerpts() -> None
     assert all(span.excerpt == span.excerpt.strip() for span in spans)
 
 
+def test_span_builder_recovers_combined_pdf_heading_and_ignores_acronym() -> None:
+    canonical = canonicalize_text(
+        "CONTACT EXPERIENCE\nExample role\nEMR\nBuilt a research pipeline\nSCHOOL PROJECTS\nProject one"
+    )
+
+    spans = build_evidence_spans(canonical, source_prefix="resume")
+
+    assert [span.section for span in spans] == [
+        "experience",
+        "experience",
+        "projects",
+        "projects",
+    ]
+
+
+def test_span_builder_maps_known_extended_resume_headings() -> None:
+    canonical = canonicalize_text(
+        "HONORS AND AWARDS\nFirst place\nPATENTS\nSystem patent\nSELECTED PUBLICATIONS\nPaper title"
+    )
+
+    spans = build_evidence_spans(canonical, source_prefix="resume")
+
+    assert [span.section for span in spans] == [
+        "awards", "awards", "patents", "patents", "publications", "publications"
+    ]
+
+
 def test_model_span_selection_prioritizes_qualification_sections() -> None:
     spans = [
         EvidenceSpan("r:general:1", "general", 0, 10, "g" * 10),
@@ -124,6 +155,45 @@ def test_low_confidence_candidate_level_becomes_unknown() -> None:
 
     assert validated.career_profiles[0].level == "unknown"
     assert validated.career_profiles[0].confidence == 0.69
+
+
+def test_candidate_publication_title_must_be_present_in_cited_evidence() -> None:
+    payload = _artifact("resume:publications:1").model_dump(mode="json")
+    payload["publications"] = [{
+        "title": "Invented Research Publication",
+        "venue": None,
+        "publication_date": None,
+        "evidence_refs": ["resume:publications:1"],
+    }]
+
+    with pytest.raises(ValueError, match="publication title"):
+        validate_candidate_extraction(
+            CandidateExtractionResponse.model_validate(payload),
+            {"resume:publications:1"},
+            evidence_by_ref={"resume:publications:1": "Conducted research on distributed systems."},
+        )
+
+
+def test_current_experience_end_date_is_cleared_deterministically() -> None:
+    payload = _artifact("resume:experience:1").model_dump(mode="json")
+    payload["experience"] = [{
+        "organization": "Example Co",
+        "title": "Engineer",
+        "start_date": "2022",
+        "end_date": "2024",
+        "is_current": True,
+        "context": "professional",
+        "highlights": [],
+        "evidence_refs": ["resume:experience:1"],
+    }]
+
+    validated = validate_candidate_extraction(
+        CandidateExtractionResponse.model_validate(payload),
+        {"resume:experience:1"},
+    )
+
+    assert validated.experience[0].end_date is None
+    assert "CURRENT_EXPERIENCE_END_DATE_CLEARED" in validated.quality.warnings
 
 
 def test_candidate_profile_api_creates_caches_reads_and_revises_selection() -> None:

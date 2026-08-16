@@ -334,7 +334,7 @@ Every run should record:
   "benchmark_release": "matching-benchmark.v1",
   "candidate_fixture_release": "candidate-fixtures.v1",
   "job_fixture_release": "matching-benchmark-jobs.v1",
-  "candidate_prompt_version": "candidate-extract.v1",
+  "candidate_prompt_version": "candidate-extract.v3",
   "job_prompt_version": "job-extract.v1",
   "qualification_prompt_version": "qualification-match.v2",
   "schema_versions": {},
@@ -424,7 +424,8 @@ The candidate view displays the source and extracted artifact together:
 
 - Original uploaded resume rendering when available.
 - Extracted and canonical resume text.
-- Candidate Profile headline, summary, skills, experience, projects, education, certifications, and publications.
+- Candidate Profile headline, summary, skills, experience, projects, education, certifications,
+  publications, awards, patents, and languages.
 - All inferred career profiles with role family, track, level, confidence, and dimension signals.
 - Recommended and effective primary career selections.
 - Extraction warnings, completeness, model, prompt, schema, taxonomy, and source hashes.

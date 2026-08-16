@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from datetime import timezone
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from datetime import datetime, timezone
 import logging
 import socket
+from threading import Event, Thread
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
@@ -36,8 +38,10 @@ from app.modules.matching_v2.pre_match import (
 from app.modules.matching_v2.orchestration import (
     IdempotencyKeyReused,
     OperationLeaseUnavailable,
+    OperationCancelled,
     begin_stage,
     claim_operation,
+    cancel_operation,
     complete_operation,
     complete_stage,
     create_or_get_operation,
@@ -45,6 +49,7 @@ from app.modules.matching_v2.orchestration import (
     first_incomplete_stage,
     get_operation,
     get_operation_for_match,
+    heartbeat_operation,
     list_stages,
     queue_retry,
     recover_interrupted_operation,
@@ -72,6 +77,8 @@ from app.modules.operations.service import session_factory_for
 
 LOGGER = logging.getLogger(__name__)
 router = APIRouter(tags=["matching-v2-orchestration"])
+IMMEDIATE_RESPONSE_SECONDS = 45
+_IMMEDIATE_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="matching-v2-immediate")
 
 
 @router.post("/matches", response_model=MatchingOperationView)
@@ -116,10 +123,15 @@ def create_match(
             operation.id,
         )
     elif created:
-        _execute_operation(db, request, identity, operation, matcher)
+        _execute_immediate(
+            session_factory_for(db),
+            request,
+            operation.id,
+            matcher=matcher,
+        )
+    db.refresh(operation)
     if operation.status != "completed":
         response.status_code = status.HTTP_202_ACCEPTED
-    db.refresh(operation)
     return _operation_view(db, operation, owner)
 
 
@@ -135,6 +147,28 @@ def read_matching_operation(
     operation = get_operation(db, owner=owner, public_id=operation_id)
     if operation is None:
         raise HTTPException(status_code=404, detail="Matching operation not found.")
+    return _operation_view(db, operation, owner)
+
+
+@router.post(
+    "/matching-operations/{operation_id}/cancel",
+    response_model=MatchingOperationView,
+)
+def cancel_matching_operation(
+    operation_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+) -> MatchingOperationView:
+    user, workspace = _require_v2_access(request, db, identity)
+    owner = ArtifactOwner.authenticated(workspace_id=workspace.id, user_id=user.id)
+    operation = get_operation(db, owner=owner, public_id=operation_id)
+    if operation is None:
+        raise HTTPException(status_code=404, detail="Matching operation not found.")
+    try:
+        cancel_operation(db, operation)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _operation_view(db, operation, owner)
 
 
@@ -177,12 +211,11 @@ def retry_matching_operation(
             job_extractor,
         )
     else:
-        _execute_operation(
-            db,
+        _execute_immediate(
+            session_factory_for(db),
             request,
-            identity,
-            operation,
-            matcher,
+            operation.id,
+            matcher=matcher,
             candidate_extractor=candidate_extractor,
             job_extractor=job_extractor,
         )
@@ -259,6 +292,7 @@ def _execute_background(
     operation_id: int,
     candidate_extractor: CandidateProfileExtractor | None = None,
     job_extractor: JobProfileExtractor | None = None,
+    matcher: QualificationMatcher | None = None,
 ) -> None:
     with session_factory() as db:
         operation = db.get(MatchingOperation, operation_id)
@@ -266,6 +300,11 @@ def _execute_background(
             return
         user = db.get(User, operation.user_id)
         if user is None or not user.is_active:
+            operation.status = "terminal_failure"
+            operation.error_code = "OWNER_UNAVAILABLE"
+            operation.error_message = "The operation owner is unavailable."
+            operation.completed_at = datetime.now(timezone.utc)
+            db.commit()
             return
         identity = AuthenticatedIdentity(
             external_user_id=str(user.id),
@@ -273,18 +312,73 @@ def _execute_background(
             display_name=user.display_name,
             timezone=user.timezone,
             provider=user.auth_provider,
-            role=user.role,
+            # The operation was owner-validated before it entered the durable queue.
+            # Worker execution must not depend on the caller's transient return-path flag.
+            role="admin",
         )
-        matcher = get_qualification_matcher(request, identity)
-        _execute_operation(
-            db,
-            request,
-            identity,
-            operation,
-            matcher,
-            candidate_extractor=candidate_extractor,
-            job_extractor=job_extractor,
+        matcher = matcher or get_qualification_matcher(request, identity)
+        lease_owner = f"{socket.gethostname()}:{uuid.uuid4().hex[:12]}"
+        stopping = Event()
+        heartbeat = Thread(
+            target=_heartbeat_loop,
+            args=(session_factory, operation.id, lease_owner, stopping),
+            daemon=True,
+            name=f"matching-heartbeat-{operation.id}",
         )
+        heartbeat.start()
+        try:
+            _execute_operation(
+                db,
+                request,
+                identity,
+                operation,
+                matcher,
+                candidate_extractor=candidate_extractor,
+                job_extractor=job_extractor,
+                lease_owner=lease_owner,
+            )
+        finally:
+            stopping.set()
+            heartbeat.join(timeout=1)
+
+
+def _heartbeat_loop(session_factory, operation_id: int, lease_owner: str, stopping: Event) -> None:
+    while not stopping.wait(30):
+        try:
+            with session_factory() as heartbeat_db:
+                if not heartbeat_operation(
+                    heartbeat_db,
+                    operation_id=operation_id,
+                    lease_owner=lease_owner,
+                ):
+                    return
+        except Exception:
+            LOGGER.exception("matching_operation_heartbeat_failed operation_db_id=%s", operation_id)
+            return
+
+
+def _execute_immediate(
+    session_factory,
+    request: Request,
+    operation_id: int,
+    *,
+    matcher: QualificationMatcher,
+    candidate_extractor: CandidateProfileExtractor | None = None,
+    job_extractor: JobProfileExtractor | None = None,
+) -> None:
+    future = _IMMEDIATE_EXECUTOR.submit(
+        _execute_background,
+        session_factory,
+        request,
+        operation_id,
+        candidate_extractor,
+        job_extractor,
+        matcher,
+    )
+    try:
+        future.result(timeout=IMMEDIATE_RESPONSE_SECONDS)
+    except FutureTimeoutError:
+        LOGGER.info("matching_operation_continues_asynchronously operation_db_id=%s", operation_id)
 
 
 def _execute_operation(
@@ -296,12 +390,14 @@ def _execute_operation(
     *,
     candidate_extractor: CandidateProfileExtractor | None = None,
     job_extractor: JobProfileExtractor | None = None,
+    lease_owner: str | None = None,
 ) -> None:
     if operation.operation_type in {"candidate_profile_extraction", "job_profile_extraction"}:
         from app.modules.matching_v2.extraction_operations import execute_extraction_operation
         execute_extraction_operation(
             db,
             operation,
+            lease_owner=lease_owner,
             candidate_extractor=(
                 candidate_extractor or get_candidate_profile_extractor(request, identity)
                 if operation.operation_type == "candidate_profile_extraction" else None
@@ -312,7 +408,7 @@ def _execute_operation(
             ),
         )
         return
-    lease_owner = f"{socket.gethostname()}:{uuid.uuid4().hex[:12]}"
+    lease_owner = lease_owner or f"{socket.gethostname()}:{uuid.uuid4().hex[:12]}"
     try:
         claim_operation(db, operation, lease_owner=lease_owner)
     except OperationLeaseUnavailable:
@@ -355,6 +451,9 @@ def _execute_operation(
                 _run_qualification_stage(db, request, identity, operation, stage, payload, matcher)
             else:
                 _run_deterministic_stage(db, request, operation, stage, payload, owner)
+        except OperationCancelled:
+            db.rollback()
+            return
         except Exception as exc:
             db.rollback()
             operation = db.get(MatchingOperation, operation.id)

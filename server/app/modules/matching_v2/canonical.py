@@ -4,8 +4,8 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
-CANONICALIZATION_VERSION = "canonical-text.v2"
-SPAN_POLICY_VERSION = "evidence-spans.v1"
+CANONICALIZATION_VERSION = "canonical-text.v3"
+SPAN_POLICY_VERSION = "evidence-spans.v2"
 MAX_SPAN_CHARS = 1_200
 
 _BULLET_RE = re.compile(r"^(?:[-*•▪◦]|\d{1,3}[.)])\s+")
@@ -25,10 +25,19 @@ _KNOWN_SECTIONS = {
     "education": "education",
     "certifications": "certifications",
     "publications": "publications",
+    "selected publications": "publications",
     "awards": "awards",
+    "honors": "awards",
+    "honors and awards": "awards",
+    "ap scores": "awards",
+    "patents": "patents",
     "languages": "languages",
     "volunteer": "volunteer",
     "volunteer experience": "volunteer",
+    "leadership activities": "volunteer",
+    "school projects": "projects",
+    "skills interests": "skills",
+    "skills and interests": "skills",
     "requirements": "requirements",
     "required qualifications": "requirements",
     "minimum qualifications": "requirements",
@@ -157,16 +166,28 @@ def _heading_section(value: str) -> str | None:
     normalized = re.sub(r"\s+", " ", candidate).lower()
     if normalized in _KNOWN_SECTIONS:
         return _KNOWN_SECTIONS[normalized]
+    embedded_known = _embedded_known_section(normalized)
+    if embedded_known is not None:
+        return embedded_known
     looks_like_heading = (
         len(candidate) <= 60
         and len(candidate.split()) <= 7
         and (
             bool(_MARKDOWN_HEADING_RE.match(value))
             or value.endswith(":")
-            or (any(char.isalpha() for char in candidate) and candidate.upper() == candidate)
         )
     )
     return _slug(candidate) if looks_like_heading else None
+
+
+def _embedded_known_section(normalized: str) -> str | None:
+    """Recover a known heading when PDF columns concatenate adjacent headings."""
+    matches = [
+        (len(label.split()), section)
+        for label, section in _KNOWN_SECTIONS.items()
+        if normalized.startswith(f"{label} ") or normalized.endswith(f" {label}")
+    ]
+    return max(matches, default=(0, None))[1]
 
 
 def _bounded_ranges(

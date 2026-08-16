@@ -422,7 +422,10 @@ def validate_qualification_assessment(
 
 def _candidate_non_derived_refs(artifact: dict) -> set[str]:
     refs: set[str] = set()
-    for key in ("skills", "experience", "projects", "education", "certifications", "publications"):
+    for key in (
+        "skills", "experience", "projects", "education", "certifications", "publications",
+        "awards", "patents", "languages",
+    ):
         for item in artifact.get(key, []):
             refs.update(ref for ref in item.get("evidence_refs", []) if isinstance(ref, str))
     return refs
@@ -433,7 +436,10 @@ def _candidate_qualification_profile(artifact: dict) -> dict:
 
     return {
         key: artifact.get(key, [])
-        for key in ("skills", "experience", "projects", "education", "certifications", "publications")
+        for key in (
+            "skills", "experience", "projects", "education", "certifications", "publications",
+            "awards", "patents", "languages",
+        )
     }
 
 

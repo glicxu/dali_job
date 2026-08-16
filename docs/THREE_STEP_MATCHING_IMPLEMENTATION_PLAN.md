@@ -1,6 +1,8 @@
 # Three-Step Matching Implementation Plan
 
-**Status:** Ready for implementation
+**Status:** Active implementation; Phases 0-7.5, 8A, and 9 are implemented in code. Candidate V3
+automated remediation and Phase 6 durability are complete; candidate human adjudication, deployment,
+and later rollout gates remain.
 **Architecture source:** [3-step_matching_v2.md](3-step_matching_v2.md)
 **Audience:** Backend, mobile, web, data/ML, QA, security, and operations
 **Last updated:** August 15, 2026
@@ -166,6 +168,9 @@ Dependencies: Phase 0 schemas and version identifiers.
 
 ### Phase 2: Canonical Sources And Candidate Profile Extraction
 
+**Status:** Core implementation and automated seven-resume V3 replay complete as of 2026-08-16.
+Human factual adjudication remains before the quality gate can pass.
+
 **Outcome:** A ready resume produces a reusable, evidence-linked Candidate Profile.
 
 Work:
@@ -186,6 +191,30 @@ Acceptance criteria:
 - Low-confidence candidate level persists as `unknown`.
 - Corrections create a new immutable version and cannot mutate extracted history.
 - Existing readiness behavior continues to work when V2 flags are disabled.
+
+Candidate quality remediation checkpoint:
+
+- Candidate model input is re-redacted before canonical-source creation, including strong street-address
+  signals and probable header names, and a fail-closed residual PII gate prevents unsafe model input.
+- PDF extraction compares layout-aware and plain extraction per page and rejects partially unreadable
+  multi-page documents instead of silently profiling incomplete text.
+- Candidate dates use `YYYY`, `YYYY-MM`, or `YYYY-MM-DD`, with deterministic calendar, ordering, and
+  current-employment validation.
+- Publication titles must occur in their cited evidence; the prompt also forbids turning descriptive
+  research prose into a publication.
+- Canonicalization `canonical-text.v3` and evidence policy `evidence-spans.v2` recover embedded known
+  headings while refusing arbitrary uppercase acronyms as sections. PDF import chooses the richer of
+  plain and layout-aware extraction using deterministic text and line-count criteria.
+- The strict response contract is versioned as `candidate-extract-response.v3`; it represents awards,
+  patents, and languages, permits an `unknown` primary family when the taxonomy does not fit, and keeps
+  V1/V2 artifacts immutable.
+- Candidate semantic validation `matching-semantic-validator.v2` normalizes a current role's end date
+  to `null`, records a warning, validates chronology, and requires literal support for publication and
+  patent titles.
+- The privacy-safe replay tool reruns stored original PDF/DOCX inputs and writes an aggregate report
+  without raw resume text. The V3 replay persisted 7/7 profiles with 0 residual privacy findings and no
+  schema or semantic failures. Human review is still required to prove source-fact recall, classification
+  accuracy, and the absence of material PDF omissions; see `CANDIDATE_PROFILE_EXTRACTION_EVALUATION.md`.
 
 Dependencies: Phases 0–1.
 
@@ -305,8 +334,8 @@ Dependencies: Phase 4 for end-to-end results; deterministic engines can be devel
 
 ### Phase 6: Orchestration, API, Retry, And Idempotency
 
-**Status:** In progress as of 2026-08-16. The first authenticated orchestration slice is implemented
-locally and remains behind the existing V2 internal/shadow access gate.
+**Status:** Core durability implementation complete as of 2026-08-16 and remains behind the existing
+V2 internal/shadow access gate. Deployment and operational metrics remain.
 
 **Outcome:** V2 runs through one durable operation contract for synchronous and asynchronous callers.
 
@@ -338,16 +367,19 @@ Implementation checkpoint:
 - Legacy raw-text single and bulk matching routes are marked deprecated in OpenAPI and emit standard
   `Deprecation`, `Sunset`, `Warning`, and successor `Link` headers. External list/Indeed import requests
   reject `run_matching=true`; ingestion must complete before Job Profile extraction and V2 matching.
+- Immediate calls execute against a separate session and return the still-running operation as `202`
+  after 45 seconds; the operation continues through the same durable contract.
+- A separately supervised Matching V2 worker claims pending operations, recovers expired leases, and
+  automatically retries retryable stages with bounded exponential backoff and deterministic jitter.
+- Running provider stages renew the operation and stage heartbeat every 30 seconds.
+- Owner-scoped cancellation covers pending, running, and retryable operations. A provider response that
+  returns after cancellation cannot overwrite the cancelled terminal state.
 
 Remaining Phase 6 work:
 
-- Enforce the 45-second immediate-response boundary and return a still-running operation as `202`
-  without waiting for a long provider call.
-- Add durable worker pickup for pending and expired-lease operations instead of relying only on the
-  initial in-process background task or explicit retry.
-- Add cancellation, periodic heartbeat renewal during long provider calls, backoff with jitter, and the
-  remaining latency/provider-usage metrics.
-- Generate and check in the updated OpenAPI artifact after the complete Phase 6 contract stabilizes.
+- Deploy and supervise `scripts/run_matching_v2_worker.py` in us3 before enabling a non-internal return path.
+- Add aggregated latency, retry, stuck-lease, and provider-usage dashboards. The current provider adapters
+  still report usage as unavailable rather than persisting actual token and cost values.
 
 Work:
 

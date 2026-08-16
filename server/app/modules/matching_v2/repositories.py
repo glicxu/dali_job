@@ -201,10 +201,10 @@ def create_or_get_candidate_profile(
     provider_execution_reference: str | None = None,
     resume_profile_id: int | None = None,
     schema_version: str = "candidate-profile.v1",
-    response_schema_version: str = "candidate-extract-response.v1",
-    prompt_version: str = "candidate-extract.v1",
+    response_schema_version: str = "candidate-extract-response.v3",
+    prompt_version: str = "candidate-extract.v3",
     taxonomy_version: str = "matching-taxonomy.v1",
-    semantic_validator_version: str = "matching-semantic-validator.v1",
+    semantic_validator_version: str = "matching-semantic-validator.v2",
 ) -> CandidateProfileVersion:
     if source.source_type != "resume":
         raise ValueError("Candidate Profiles require a canonical resume source.")
@@ -287,10 +287,10 @@ def find_cached_candidate_profile(
     source: CanonicalSource,
     model_id: str,
     schema_version: str = "candidate-profile.v1",
-    response_schema_version: str = "candidate-extract-response.v1",
-    prompt_version: str = "candidate-extract.v1",
+    response_schema_version: str = "candidate-extract-response.v3",
+    prompt_version: str = "candidate-extract.v3",
     taxonomy_version: str = "matching-taxonomy.v1",
-    semantic_validator_version: str = "matching-semantic-validator.v1",
+    semantic_validator_version: str = "matching-semantic-validator.v2",
 ) -> CandidateProfileVersion | None:
     cache_key, _ = candidate_profile_cache_identity(
         source=source,

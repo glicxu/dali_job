@@ -68,6 +68,9 @@ def _candidate_artifact(evidence_ref: str) -> CandidateExtractionResponse:
             "education": [],
             "certifications": [],
             "publications": [],
+            "awards": [],
+            "patents": [],
+            "languages": [],
             "career_profiles": [
                 {
                     "local_ref": "career_software_engineering",

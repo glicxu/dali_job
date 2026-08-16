@@ -37,6 +37,7 @@ from app.modules.matching_v2.api_schemas import (
     MatchingOperationView,
 )
 from app.modules.matching_v2.canonical import CANONICALIZATION_VERSION, build_evidence_spans, canonicalize_text
+from app.modules.profiles.resume_import import redact_resume_personal_info
 from app.modules.matching_v2.extraction import (
     CandidateProfileExtractor,
     JobProfileExtractor,
@@ -827,7 +828,7 @@ def _resume_source_text(db: Session, identity: AuthenticatedIdentity, resume_pro
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="The resume source document does not contain extracted text.",
             )
-        return version.extracted_text, "document-extracted-text.v1", version.id
+        return redact_resume_personal_info(version.extracted_text), "document-extracted-text.v2", version.id
     return _render_resume_data(resume_profile.resume_data), "resume-profile-json.v1", None
 
 

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from app.modules.profiles.models import default_resume_data
-from app.modules.profiles.resume_import import SYSTEM_PROMPT, redact_resume_personal_info
+from app.modules.profiles.resume_import import (
+    SYSTEM_PROMPT,
+    redact_resume_personal_info,
+    resume_privacy_risks,
+)
 from app.modules.profiles.schemas import ResumeData
 
 
@@ -50,6 +54,30 @@ def test_resume_redaction_does_not_change_resume_without_detected_pii() -> None:
     redacted = redact_resume_personal_info(text)
 
     assert redacted == text
+
+
+def test_resume_redaction_removes_name_and_street_address_without_contact_line() -> None:
+    text = """GANG LI
+1234 North Example Avenue, Apt 5
+Seattle, WA 98101
+
+Summary
+Hardware and software engineering leader.
+"""
+
+    redacted = redact_resume_personal_info(text)
+
+    assert "GANG LI" not in redacted
+    assert "1234 North Example Avenue" not in redacted
+    assert "Seattle, WA" not in redacted
+    assert resume_privacy_risks(redacted) == ()
+    assert "Hardware and software engineering leader." in redacted
+
+
+def test_resume_redaction_preserves_github_as_a_professional_skill() -> None:
+    text = "Summary\nBuilt GitHub Actions workflows for production delivery."
+
+    assert redact_resume_personal_info(text) == text
 
 
 def test_resume_parse_prompt_requires_generated_headline_and_summary() -> None:

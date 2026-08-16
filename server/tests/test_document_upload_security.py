@@ -196,3 +196,73 @@ def test_pdf_extracted_text_limit_is_enforced(monkeypatch: pytest.MonkeyPatch) -
 
     assert caught.value.status_code == 400
     assert "processing limit" in str(caught.value.detail)
+
+
+def test_pdf_prefers_layout_extraction_when_it_preserves_more_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakePage:
+        def extract_text(self, *, extraction_mode: str | None = None) -> str:
+            if extraction_mode == "layout":
+                return "Education\nExample University\nExperience\nBuilt systems"
+            return "Experience\nBuilt systems"
+
+    class FakeReader:
+        is_encrypted = False
+        pages = [FakePage()]
+
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+    monkeypatch.setattr(resume_import, "PdfReader", FakeReader)
+
+    text = resume_import.extract_pdf_text(b"%PDF-1.7\n")
+
+    assert "Example University" in text
+
+
+def test_pdf_tie_prefers_extraction_with_more_line_structure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakePage:
+        def extract_text(self, *, extraction_mode: str | None = None) -> str:
+            if extraction_mode == "layout":
+                return "Education Experience\nExample University Example Co"
+            return "Education\nExample University\nExperience\nExample Co"
+
+    class FakeReader:
+        is_encrypted = False
+        pages = [FakePage()]
+
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+    monkeypatch.setattr(resume_import, "PdfReader", FakeReader)
+
+    text = resume_import.extract_pdf_text(b"%PDF-1.7\n")
+
+    assert text.splitlines() == ["Education", "Example University", "Experience", "Example Co"]
+
+
+def test_pdf_rejects_partial_blank_page_extraction(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakePage:
+        def __init__(self, text: str) -> None:
+            self.text = text
+
+        def extract_text(self, *, extraction_mode: str | None = None) -> str:
+            return self.text
+
+    class FakeReader:
+        is_encrypted = False
+        pages = [FakePage("Experience\nBuilt systems"), FakePage("")]
+
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+    monkeypatch.setattr(resume_import, "PdfReader", FakeReader)
+
+    with pytest.raises(HTTPException) as caught:
+        resume_import.extract_pdf_text(b"%PDF-1.7\n")
+
+    assert caught.value.status_code == 422
+    assert caught.value.detail["code"] == "PDF_EXTRACTION_QUALITY_FAILED"

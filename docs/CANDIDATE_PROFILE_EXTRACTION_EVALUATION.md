@@ -6,7 +6,10 @@ Corpus: seven internal test resumes (three PDF, four DOCX)
 
 Model: `gpt-5.6-luna`
 
-Prompt version: `candidate-extract.v1`
+Baseline prompt version: `candidate-extract.v1`
+
+Current replay: `candidate-extract.v3`, `candidate-extract-response.v3`, `canonical-text.v3`,
+`evidence-spans.v2`, and `matching-semantic-validator.v2` on 2026-08-16.
 
 ## Purpose
 
@@ -29,6 +32,57 @@ All seven files produced persisted, schema-valid Candidate Profiles. All 384 evi
 - The average model-reported completeness was **93.1%**, while the provisional human end-to-end profile score averaged **80.6%**. The model's completeness score is not calibrated.
 
 The next optimization should fix document fidelity and privacy gates before comparing candidate prompt revisions.
+
+## V3 Remediation Checkpoint
+
+The seven original files were replayed from protected storage into new immutable canonical sources and
+Candidate Profile versions. The V1 artifacts were retained. The replay report contains aggregate facts,
+version identities, and privacy diagnostics but no raw resume text.
+
+Automated results:
+
+| Check | V1 | V3 | Status |
+|---|---:|---:|---|
+| Profiles persisted | 7/7 | 7/7 | Pass |
+| Residual privacy findings | 3/7 cases failed | 0/7 | Pass automated gate |
+| Schema or semantic failures | 0 | 0 | Pass |
+| Unsupported exact publication observed in C26 | 1 | 0 | Fixed in replay |
+| C26 primary career classification | Incorrect software engineering | `unknown` / research | Fixed conservatively |
+| Average model-reported completeness | 0.931 | 0.863 | Better calibrated in aggregate; human comparison pending |
+
+Implemented changes:
+
+- Fail-closed residual email, phone, URL, and street-address detection now follows redaction, and likely
+  header names are removed even when the header has no separate contact line.
+- Candidate-profile creation re-redacts stored document text before creating the canonical model source,
+  which also protects documents imported before the improved redactor.
+- PDF parsing compares layout-aware and plain text extraction and retains the richer per-page result.
+  A multi-page PDF with an unreadable page is rejected for user correction instead of silently accepted.
+- Candidate date fields are schema-constrained and deterministically checked for calendar validity,
+  chronological ordering, and current-employment consistency.
+- Exact publication titles require literal normalized support in their cited evidence.
+- Awards, patents, and languages are first-class structured facts with evidence references. Patent titles,
+  like publication titles, require literal normalized support.
+- The prompt requires conservative date precision, explicit publication evidence, completeness reductions
+  for missing or ambiguous facts, and `unknown` rather than a forced adjacent career family.
+- Section recovery recognizes known embedded headings and no longer treats arbitrary uppercase acronyms
+  such as `EMR` as headings.
+
+V3 fact-count snapshot:
+
+| Case | Skills | Experience | Projects | Education | Publications | Awards | Patents | Languages | Primary family / track / level |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| C23 | 34 | 6 | 8 | 2 | 0 | 0 | 0 | 3 | software engineering / IC / mid |
+| C24 | 12 | 6 | 6 | 2 | 0 | 0 | 3 | 0 | software engineering / management / staff |
+| C25 | 21 | 2 | 5 | 2 | 0 | 0 | 0 | 0 | data science / IC / student-or-intern |
+| C26 | 7 | 4 | 2 | 2 | 0 | 7 | 0 | 0 | unknown / research / student-or-intern |
+| C27 | 15 | 2 | 5 | 3 | 10 | 2 | 6 | 0 | software engineering / management / principal |
+| C28 | 9 | 7 | 0 | 2 | 2 | 5 | 0 | 2 | data science / research / student-or-intern |
+| C29 | 14 | 2 | 9 | 1 | 0 | 1 | 0 | 0 | software engineering / IC / student-or-intern |
+
+This closes the identified automated implementation holes, not the human evaluation gate. A tester must
+compare each V3 source/profile pair with its original file before asserting zero material omissions,
+accepted classifications, or per-case completeness calibration.
 
 ## Scoring Method
 
@@ -146,4 +200,7 @@ These thresholds are development gates, not production performance claims. The c
 
 ## Conclusion
 
-The current Candidate Profile extractor is structurally healthy and often produces useful profiles, especially from DOCX input. The most urgent defects are not purely prompt problems: PDF fact loss and incomplete PII redaction affect what the model sees. Fix those gates first, then optimize the candidate prompt and schema against frozen, privacy-safe canonical inputs.
+V3 passes the repeatable automated replay gate for all seven development resumes and fixes the known
+privacy, date-normalization, unsupported-publication, heading, schema-coverage, and forced-family defects.
+It is ready for human QA in the Candidate Profile lab. The corpus is still too small and not yet
+adjudicated, so V3 is not yet a production-quality claim.

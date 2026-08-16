@@ -5976,6 +5976,48 @@
         }
       }
     },
+    "/api/v1/matching-operations/{operation_id}/cancel": {
+      "post": {
+        "tags": [
+          "matching-v2-orchestration"
+        ],
+        "summary": "Cancel Matching Operation",
+        "operationId": "cancel_matching_operation_api_v1_matching_operations__operation_id__cancel_post",
+        "parameters": [
+          {
+            "name": "operation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Operation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchingOperationView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/matching-operations/{operation_id}/retry": {
       "post": {
         "tags": [
@@ -10398,6 +10440,59 @@
         "type": "object",
         "title": "BulkSavedJobMatchResponse"
       },
+      "CandidateAwardResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "issuer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issuer"
+          },
+          "award_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10,
+                "pattern": "^\\d{4}(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\\d|3[01]))?)?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Award Date"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Evidence Refs"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "issuer",
+          "award_date",
+          "evidence_refs"
+        ],
+        "title": "CandidateAwardResponse"
+      },
       "CandidateCareerProfileResponse": {
         "properties": {
           "local_ref": {
@@ -10614,7 +10709,8 @@
             "anyOf": [
               {
                 "type": "string",
-                "maxLength": 10
+                "maxLength": 10,
+                "pattern": "^\\d{4}(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\\d|3[01]))?)?$"
               },
               {
                 "type": "null"
@@ -10626,7 +10722,8 @@
             "anyOf": [
               {
                 "type": "string",
-                "maxLength": 10
+                "maxLength": 10,
+                "pattern": "^\\d{4}(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\\d|3[01]))?)?$"
               },
               {
                 "type": "null"
@@ -10735,7 +10832,8 @@
             "anyOf": [
               {
                 "type": "string",
-                "maxLength": 10
+                "maxLength": 10,
+                "pattern": "^\\d{4}(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\\d|3[01]))?)?$"
               },
               {
                 "type": "null"
@@ -10747,7 +10845,8 @@
             "anyOf": [
               {
                 "type": "string",
-                "maxLength": 10
+                "maxLength": 10,
+                "pattern": "^\\d{4}(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\\d|3[01]))?)?$"
               },
               {
                 "type": "null"
@@ -10882,7 +10981,8 @@
             "anyOf": [
               {
                 "type": "string",
-                "maxLength": 10
+                "maxLength": 10,
+                "pattern": "^\\d{4}(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\\d|3[01]))?)?$"
               },
               {
                 "type": "null"
@@ -10894,7 +10994,8 @@
             "anyOf": [
               {
                 "type": "string",
-                "maxLength": 10
+                "maxLength": 10,
+                "pattern": "^\\d{4}(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\\d|3[01]))?)?$"
               },
               {
                 "type": "null"
@@ -11000,6 +11101,30 @@
             "maxItems": 30,
             "title": "Publications"
           },
+          "awards": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateAwardResponse"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "title": "Awards"
+          },
+          "patents": {
+            "items": {
+              "$ref": "#/components/schemas/CandidatePatentResponse"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "title": "Patents"
+          },
+          "languages": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateLanguageResponse"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "title": "Languages"
+          },
           "career_profiles": {
             "items": {
               "$ref": "#/components/schemas/CandidateCareerProfileResponse"
@@ -11032,6 +11157,9 @@
           "education",
           "certifications",
           "publications",
+          "awards",
+          "patents",
+          "languages",
           "career_profiles",
           "recommended_primary_career_profile_ref",
           "derived",
@@ -11089,6 +11217,108 @@
           "loaded"
         ],
         "title": "CandidateFixtureCatalogItem"
+      },
+      "CandidateLanguageResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "proficiency": {
+            "type": "string",
+            "enum": [
+              "native",
+              "fluent",
+              "professional",
+              "conversational",
+              "basic",
+              "unknown"
+            ],
+            "title": "Proficiency"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Evidence Refs"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "proficiency",
+          "evidence_refs"
+        ],
+        "title": "CandidateLanguageResponse"
+      },
+      "CandidatePatentResponse": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "identifier": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identifier"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "granted",
+              "pending",
+              "unknown"
+            ],
+            "title": "Status"
+          },
+          "patent_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10,
+                "pattern": "^\\d{4}(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\\d|3[01]))?)?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patent Date"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Evidence Refs"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "identifier",
+          "status",
+          "patent_date",
+          "evidence_refs"
+        ],
+        "title": "CandidatePatentResponse"
       },
       "CandidateProfileEvaluationView": {
         "properties": {
@@ -11316,7 +11546,8 @@
             "anyOf": [
               {
                 "type": "string",
-                "maxLength": 10
+                "maxLength": 10,
+                "pattern": "^\\d{4}(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\\d|3[01]))?)?$"
               },
               {
                 "type": "null"
@@ -11376,7 +11607,8 @@
             "anyOf": [
               {
                 "type": "string",
-                "maxLength": 10
+                "maxLength": 10,
+                "pattern": "^\\d{4}(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\\d|3[01]))?)?$"
               },
               {
                 "type": "null"

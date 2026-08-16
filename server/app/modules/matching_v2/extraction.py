@@ -177,7 +177,11 @@ class OpenAICandidateProfileExtractor:
             )
         try:
             artifact = CandidateExtractionResponse.model_validate(json.loads(content))
-            artifact = validate_candidate_extraction(artifact, {span.span_id for span in selected})
+            artifact = validate_candidate_extraction(
+                artifact,
+                {span.span_id for span in selected},
+                evidence_by_ref={span.span_id: span.excerpt for span in selected},
+            )
         except (json.JSONDecodeError, ValidationError, ValueError) as exc:
             record_validation_error(stage="candidate_profile", model=self._model, error=exc)
             raise HTTPException(
@@ -581,17 +585,53 @@ def validate_job_extraction(
 def validate_candidate_extraction(
     artifact: CandidateExtractionResponse,
     allowed_evidence_refs: set[str],
+    *,
+    evidence_by_ref: dict[str, str] | None = None,
 ) -> CandidateExtractionResponse:
     unknown = _collect_refs(artifact.model_dump(mode="json")) - allowed_evidence_refs
     if unknown:
         raise ValueError(f"Unknown candidate evidence references: {sorted(unknown)}")
+
+    if evidence_by_ref is not None:
+        for publication in artifact.publications:
+            evidence = " ".join(evidence_by_ref[ref] for ref in publication.evidence_refs)
+            if _evidence_text(publication.title) not in _evidence_text(evidence):
+                raise ValueError("Candidate publication title is not explicitly supported by its evidence.")
+        for patent in artifact.patents:
+            evidence = " ".join(evidence_by_ref[ref] for ref in patent.evidence_refs)
+            if _evidence_text(patent.title) not in _evidence_text(evidence):
+                raise ValueError("Candidate patent title is not explicitly supported by its evidence.")
+
+    normalization_warnings: list[str] = []
+    normalized_experience = []
+    for experience in artifact.experience:
+        if experience.is_current and experience.end_date is not None:
+            experience = experience.model_copy(update={"end_date": None})
+            normalization_warnings.append("CURRENT_EXPERIENCE_END_DATE_CLEARED")
+        normalized_experience.append(experience)
 
     normalized_profiles = []
     for profile in artifact.career_profiles:
         if profile.confidence < 0.70 and profile.level != "unknown":
             profile = profile.model_copy(update={"level": "unknown"})
         normalized_profiles.append(profile)
-    return artifact.model_copy(update={"career_profiles": normalized_profiles})
+    quality = artifact.quality
+    if normalization_warnings:
+        quality = quality.model_copy(update={
+            "warnings": list(dict.fromkeys([
+                *quality.warnings,
+                *normalization_warnings,
+            ]))[:20]
+        })
+    return artifact.model_copy(update={
+        "experience": normalized_experience,
+        "career_profiles": normalized_profiles,
+        "quality": quality,
+    })
+
+
+def _evidence_text(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", value.casefold()).strip()
 
 
 def _collect_refs(value: object) -> set[str]:

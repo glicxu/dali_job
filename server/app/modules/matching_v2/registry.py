@@ -166,7 +166,7 @@ DEFAULT_REGISTRY = ImmutableRegistry()
 # database; rebuilding them from legacy models can change their hashes when a
 # shared nested model evolves.
 for model, version in (
-    (CandidateExtractionResponse, "candidate-extract-response.v1"),
+    (CandidateExtractionResponse, "candidate-extract-response.v3"),
     (JobExtractionProviderResponse, "job-extract-response.v3"),
     (QualificationAssessmentResponse, "qualification-assessment-response.v2"),
 ):
@@ -180,7 +180,7 @@ for model, version in (
 
 for version, content in (
     (
-        "candidate-extract.v1",
+        "candidate-extract.v3",
         {
             "system": CANDIDATE_EXTRACTION_SYSTEM_PROMPT,
             "user_template": "json-envelope.allowed_source_spans.v1",

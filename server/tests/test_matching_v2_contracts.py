@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 import pytest
@@ -32,6 +33,9 @@ def _candidate_payload() -> dict[str, Any]:
         "education": [],
         "certifications": [],
         "publications": [],
+        "awards": [],
+        "patents": [],
+        "languages": [],
         "career_profiles": [
             {
                 "local_ref": "career_software_engineering",
@@ -62,7 +66,7 @@ def _candidate_payload() -> dict[str, Any]:
 
 
 def _assert_strict_objects(value: Any) -> None:
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         if value.get("type") == "object":
             assert value.get("additionalProperties") is False
             properties = value.get("properties", {})
@@ -77,7 +81,7 @@ def _assert_strict_objects(value: Any) -> None:
 @pytest.mark.parametrize(
     "version",
     [
-        "candidate-extract-response.v1",
+        "candidate-extract-response.v3",
         "job-extract-response.v3",
         "qualification-assessment-response.v2",
     ],
@@ -102,6 +106,38 @@ def test_candidate_primary_reference_must_resolve() -> None:
 
     with pytest.raises(ValidationError, match="must reference a returned profile"):
         CandidateExtractionResponse.model_validate(payload)
+
+
+@pytest.mark.parametrize("invalid_date", ["2024-00", "2024-13", "2024-02-30", "2020-2024", "Spring 24"])
+def test_candidate_schema_rejects_malformed_dates(invalid_date: str) -> None:
+    payload = _candidate_payload()
+    payload["skills"] = [{
+        "observed_name": "Python",
+        "canonical_name": "Python",
+        "evidence_strength": "demonstrated",
+        "last_used": invalid_date,
+        "months_experience": 12,
+        "evidence_refs": ["resume_01:project:0001"],
+    }]
+
+    with pytest.raises(ValidationError):
+        CandidateExtractionResponse.model_validate(payload)
+
+
+def test_candidate_schema_allows_compatible_partial_date_precision() -> None:
+    payload = _candidate_payload()
+    payload["experience"] = [{
+        "organization": "Example Co",
+        "title": "Engineer",
+        "start_date": "2024-12",
+        "end_date": "2024",
+        "is_current": False,
+        "context": "professional",
+        "highlights": [],
+        "evidence_refs": ["resume_01:project:0001"],
+    }]
+
+    assert CandidateExtractionResponse.model_validate(payload).experience[0].end_date == "2024"
 
 
 def test_qualification_schema_rejects_recommendation() -> None:
@@ -193,7 +229,7 @@ def test_only_software_ic_has_an_approved_public_policy() -> None:
 
 def test_foundation_registry_contains_versioned_contract_inputs() -> None:
     expected = {
-        ("prompt", "candidate-extract.v1"),
+        ("prompt", "candidate-extract.v3"),
         ("prompt", "job-extract.v1"),
         ("prompt", "job-extract.v2"),
         ("prompt", "job-extract.v3"),

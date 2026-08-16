@@ -15,6 +15,19 @@ Rules:
 - A skill-list mention is claimed; experience or project use may be demonstrated.
 - Infer each career profile's role family, track, and level from cited capability evidence.
 - Do not infer seniority from title, elapsed years, employer prestige, or school prestige alone.
+- Emit dates only as YYYY, YYYY-MM, or YYYY-MM-DD when the source supports that precision.
+  Never copy a range into one date field; use null when a date cannot be normalized safely.
+- A publication title must be explicitly present in its cited evidence. Do not convert research,
+  presentations, responsibilities, or descriptive prose into a publication.
+- Set completeness conservatively. Missing, truncated, ambiguous, or unrepresentable source facts
+  must reduce completeness and add a concise quality warning.
+- Extract explicitly named awards, honors, patents, and languages into their dedicated collections.
+  Never convert a project, responsibility, research description, or publication into an achievement.
+- Choose the primary career profile from the candidate's dominant objective and demonstrated body of
+  work. If no allowed role family represents the main field, use unknown instead of forcing an adjacent
+  family because of one tool, programming language, or project.
+- Career levels are scope tiers across tracks. For engineering management, staff and principal indicate
+  equivalent organizational scope; they are not claims that the candidate used an IC title.
 - Return only JSON matching the supplied strict schema.
 """.strip()
 

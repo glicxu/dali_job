@@ -29,6 +29,10 @@ class OperationLeaseUnavailable(RuntimeError):
     pass
 
 
+class OperationCancelled(RuntimeError):
+    pass
+
+
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -165,6 +169,43 @@ def claim_operation(
     db.commit()
 
 
+def heartbeat_operation(
+    db: Session,
+    *,
+    operation_id: int,
+    lease_owner: str,
+    lease_seconds: int = 120,
+) -> bool:
+    now = utc_now()
+    operation = db.scalar(
+        select(MatchingOperation).where(MatchingOperation.id == operation_id).with_for_update()
+    )
+    if operation is None or operation.status != "running" or operation.lease_owner != lease_owner:
+        return False
+    operation.heartbeat_at = now
+    operation.lease_expires_at = now + timedelta(seconds=lease_seconds)
+    stage = first_incomplete_stage(db, operation.id)
+    if stage is not None and stage.status == "running":
+        stage.heartbeat_at = now
+    db.commit()
+    return True
+
+
+def cancel_operation(db: Session, operation: MatchingOperation) -> None:
+    if operation.status in {"completed", "terminal_failure", "cancelled"}:
+        raise ValueError("Only pending, running, or retryable matching operations can be cancelled.")
+    now = utc_now()
+    operation.status = "cancelled"
+    operation.current_stage = None
+    operation.lease_owner = None
+    operation.lease_expires_at = None
+    operation.heartbeat_at = now
+    operation.error_code = "OPERATION_CANCELLED"
+    operation.error_message = "The matching operation was cancelled."
+    operation.completed_at = now
+    db.commit()
+
+
 def begin_stage(
     db: Session,
     operation: MatchingOperation,
@@ -204,6 +245,9 @@ def complete_stage(
     provider_usage: dict | None = None,
     policy_versions: dict | None = None,
 ) -> None:
+    db.refresh(operation)
+    if operation.status == "cancelled":
+        raise OperationCancelled("Matching operation was cancelled.")
     now = utc_now()
     stage.status = "completed"
     stage.output_artifact_id = output_artifact_id
@@ -225,6 +269,9 @@ def fail_stage(
     error_code: str,
     error_message: str,
 ) -> None:
+    db.refresh(operation)
+    if operation.status == "cancelled":
+        raise OperationCancelled("Matching operation was cancelled.")
     now = utc_now()
     retryable = stage.attempt_count < stage.max_attempts
     stage.status = "retryable_failure" if retryable else "terminal_failure"
@@ -291,11 +338,14 @@ def recover_interrupted_operation(db: Session, operation: MatchingOperation) -> 
     stage.status = "retryable_failure"
     stage.error_code = "PROCESS_INTERRUPTED"
     stage.error_message = "Processing stopped before this stage completed."
+    stage.heartbeat_at = now
+    stage.completed_at = now
     operation.status = "retryable_failure"
     operation.error_code = stage.error_code
     operation.error_message = stage.error_message
     operation.lease_owner = None
     operation.lease_expires_at = None
+    operation.heartbeat_at = now
     db.commit()
     return True
 

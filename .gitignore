@@ -22,4 +22,10 @@ release/
 security-reports/
 *.log
 .local/
+.tools/
 server/storage/
+
+# Mobile release packaging artifacts
+*.ipa
+*.xcarchive/
+*.dSYM/

@@ -40,3 +40,17 @@ secure-storage key and are never sent as account bearer tokens.
 flutter analyze
 flutter test
 ```
+
+## App Store build
+
+Build numbers use the local build hour in `yyyyMMddHH` format by default:
+
+```sh
+scripts/build_ios_app_store.sh
+```
+
+Override when needed:
+
+```sh
+BUILD_NUMBER=2026081617 scripts/build_ios_app_store.sh
+```

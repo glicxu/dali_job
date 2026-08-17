@@ -443,6 +443,39 @@ def test_admin_can_capture_and_inspect_a_repeatable_three_stage_run(caplog) -> N
     )
     assert [item["overall_score"] for item in job_stage_reloaded.json()["reviews"]] == [92]
 
+    pre_match = client.post("/api/v1/internal/evaluation/pre-match", json={
+        "job_snapshot_id": captured.json()["public_id"],
+        "resume_profile_id": resume.json()["id"],
+    })
+    assert pre_match.status_code == 200, pre_match.text
+    pre_match_body = pre_match.json()
+    assert pre_match_body["cache_status"] == "miss"
+    assert pre_match_body["matching_intent"] == {
+        "target_role_text": "Software Engineering",
+        "role_family": "software_engineering",
+        "track": "individual_contributor",
+        "target_level": "entry",
+        "source": "resume_derived",
+    }
+    assert pre_match_body["candidate_target"]["level"] == "entry"
+    assert pre_match_body["job_target"]["target_level"] == "senior"
+    assert pre_match_body["pre_match"]["family_compatibility"] == "exact"
+    assert pre_match_body["pre_match"]["track_compatibility"] == "exact"
+    assert pre_match_body["pre_match"]["level_compatibility"] == "multi_level_stretch"
+    assert pre_match_body["pre_match"]["proceed_to_detailed_match"] is True
+    assert pre_match_body["pre_match"]["policy_version"] == "job-family-pre-match.v1"
+
+    repeated_pre_match = client.post("/api/v1/internal/evaluation/pre-match", json={
+        "job_snapshot_id": captured.json()["public_id"],
+        "resume_profile_id": resume.json()["id"],
+    })
+    assert repeated_pre_match.status_code == 200, repeated_pre_match.text
+    assert repeated_pre_match.json()["cache_status"] == "hit"
+    assert (
+        repeated_pre_match.json()["pre_match"]["job_family_pre_match_id"]
+        == pre_match_body["pre_match"]["job_family_pre_match_id"]
+    )
+
     run = client.post("/api/v1/internal/evaluation/runs", json={
         "job_snapshot_id": captured.json()["public_id"],
         "resume_profile_id": resume.json()["id"],

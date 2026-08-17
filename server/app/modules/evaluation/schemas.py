@@ -122,6 +122,23 @@ class EvaluationRunCreateRequest(BaseModel):
     candidate_fixture_release: str = Field(default="candidate-fixtures.local.v1", min_length=1, max_length=100)
 
 
+class EvaluationPreMatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    job_snapshot_id: str = Field(min_length=1, max_length=64)
+    resume_profile_id: int = Field(gt=0)
+
+
+class EvaluationPreMatchView(BaseModel):
+    candidate_profile_id: str
+    job_profile_id: str
+    matching_intent: dict[str, Any]
+    candidate_target: dict[str, Any]
+    job_target: dict[str, Any]
+    pre_match: dict[str, Any]
+    cache_status: Literal["hit", "miss"]
+
+
 class EvidenceSpanView(BaseModel):
     span_id: str
     section: str

@@ -564,12 +564,26 @@ def validate_job_extraction(
                 "source_refs": list(dict.fromkeys([*prior.source_refs, *requirement.source_refs])),
             }
         )
+    warnings = list(artifact.cleanup.warnings)
+    if source_spans:
+        qualification_refs = _qualification_section_refs(source_spans)
+        if qualification_refs:
+            filtered_requirements = [
+                requirement
+                for requirement in requirements
+                if qualification_refs.intersection(requirement.source_refs)
+            ]
+            removed_count = len(requirements) - len(filtered_requirements)
+            if removed_count:
+                warnings.append(
+                    f"NON_QUALIFICATION_REQUIREMENTS_REMOVED:{removed_count}"
+                )
+            requirements = filtered_requirements
     artifact = artifact.model_copy(update={"requirements": requirements})
     if source_spans:
         _validate_section_coverage(artifact, source_spans)
         _validate_requirement_section_ownership(artifact, source_spans)
         _validate_employment_type(artifact, source_spans)
-    warnings = list(artifact.cleanup.warnings)
     if location_warning:
         warnings.append(location_warning)
     if omitted_span_count:
@@ -722,16 +736,20 @@ def _validate_section_coverage(artifact: JobExtractionResponse, spans: list[Evid
 def _validate_requirement_section_ownership(
     artifact: JobExtractionResponse, spans: list[EvidenceSpan]
 ) -> None:
-    qualification_refs = {
-        span.span_id for span in spans
-        if span.section in {"requirements", "preferred_requirements"}
-        and _normalized_statement(span.excerpt).strip(":") not in _SECTION_HEADINGS
-    }
+    qualification_refs = _qualification_section_refs(spans)
     if not qualification_refs:
         return
     for requirement in artifact.requirements:
         if not qualification_refs.intersection(requirement.source_refs):
             raise ValueError("Requirement is not owned by a qualification section.")
+
+
+def _qualification_section_refs(spans: list[EvidenceSpan]) -> set[str]:
+    return {
+        span.span_id for span in spans
+        if span.section in {"requirements", "preferred_requirements"}
+        and _normalized_statement(span.excerpt).strip(":") not in _SECTION_HEADINGS
+    }
 
 
 def _validate_employment_type(artifact: JobExtractionResponse, spans: list[EvidenceSpan]) -> None:

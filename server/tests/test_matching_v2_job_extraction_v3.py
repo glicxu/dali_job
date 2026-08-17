@@ -99,7 +99,7 @@ def test_employment_type_accepts_explicit_machine_readable_source_value() -> Non
     assert validated.employment_type == "full_time"
 
 
-def test_requirement_cannot_leak_from_summary_when_qualification_sections_exist() -> None:
+def test_requirement_from_summary_is_removed_when_qualification_sections_exist() -> None:
     artifact = _artifact()
     leaked = artifact.requirements[0].model_copy(update={
         "local_ref": "innovation",
@@ -112,7 +112,9 @@ def test_requirement_cannot_leak_from_summary_when_qualification_sections_exist(
         EvidenceSpan("job:summary:1", "summary", 0, 20, "We value innovation"),
         EvidenceSpan("job:requirements:1", "requirements", 21, 40, "Python or Java"),
     ]
-    with pytest.raises(ValueError, match="not owned by a qualification section"):
-        validate_job_extraction(
-            artifact, {span.span_id for span in spans}, source_spans=spans
-        )
+    validated = validate_job_extraction(
+        artifact, {span.span_id for span in spans}, source_spans=spans
+    )
+
+    assert [item.local_ref for item in validated.requirements] == ["languages"]
+    assert "NON_QUALIFICATION_REQUIREMENTS_REMOVED:1" in validated.cleanup.warnings

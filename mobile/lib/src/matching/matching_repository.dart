@@ -1,4 +1,5 @@
 import '../api/api_client.dart';
+import '../api/api_exception.dart';
 import '../auth/session_controller.dart';
 import 'matching_models.dart';
 
@@ -331,22 +332,43 @@ class MatchingRepository {
         ),
       );
 
+  Future<Map<String, dynamic>> runPreMatchEvaluation({
+    required int resumeProfileId,
+    required String jobSnapshotId,
+  }) => session.authorized(
+    (token) => api.post(
+      'internal/evaluation/pre-match',
+      accessToken: token,
+      body: {
+        'resume_profile_id': resumeProfileId,
+        'job_snapshot_id': jobSnapshotId,
+      },
+    ),
+  );
+
   Future<Map<String, dynamic>> submitArtifactReview({
     required String stage,
     required String artifactId,
     required int score,
     required String rationale,
-  }) => session.authorized(
-    (token) => api.post(
-      'internal/evaluation/${stage == 'candidate_profile' ? 'candidate-profiles' : 'job-profiles'}/$artifactId/reviews',
-      accessToken: token,
-      body: {
-        'overall_score': score,
-        'confidence': 1.0,
-        'rationale': rationale.trim(),
-      },
-    ),
-  );
+  }) => session
+      .authorized(
+        (token) => api.post(
+          'internal/evaluation/${stage == 'candidate_profile' ? 'candidate-profiles' : 'job-profiles'}/$artifactId/reviews',
+          accessToken: token,
+          body: {
+            'overall_score': score,
+            'confidence': 1.0,
+            'rationale': rationale.trim(),
+          },
+        ),
+      )
+      .timeout(
+        const Duration(seconds: 20),
+        onTimeout: () => throw const ApiException(
+          'Review submission timed out. Check the connection and try again.',
+        ),
+      );
 
   Future<Map<String, dynamic>> startTesterEvaluation({
     required int resumeProfileId,

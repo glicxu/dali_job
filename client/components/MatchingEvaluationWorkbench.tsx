@@ -475,7 +475,68 @@ function SourcePanel({ title, text, spans, selectedEvidence }: { title: string; 
 }
 
 function JsonPanel({ title, value }: { title: string; value: Record<string, unknown> }) {
-  return <section className="profile-card"><SectionHeader title={title} description="The exact persisted structured artifact." /><pre className="text-preview large-preview">{JSON.stringify(value, null, 2)}</pre></section>;
+  return <section className="profile-card evaluation-profile-panel">
+    <SectionHeader title={title} description="The persisted artifact, organized for review." />
+    <StructuredProfile value={value} />
+    <details className="evaluation-raw-profile">
+      <summary>View raw JSON</summary>
+      <pre className="text-preview large-preview">{JSON.stringify(value, null, 2)}</pre>
+    </details>
+  </section>;
+}
+
+function StructuredProfile({ value }: { value: Record<string, unknown> }) {
+  const entries = Object.entries(value);
+  if (!entries.length) return <p className="evaluation-empty-value">No profile data</p>;
+  return <div className="evaluation-structured-profile">{entries.map(([key, item]) => (
+    <ProfileField key={key} name={key} value={item} depth={0} />
+  ))}</div>;
+}
+
+function ProfileField({ name, value, depth }: { name: string; value: unknown; depth: number }) {
+  const label = humanizeFieldName(name);
+  if (value === null || value === undefined || value === "") {
+    return <div className="evaluation-profile-field"><span className="evaluation-profile-label">{label}</span><span className="evaluation-empty-value">Not provided</span></div>;
+  }
+  if (Array.isArray(value)) {
+    if (!value.length) return <div className="evaluation-profile-field"><span className="evaluation-profile-label">{label}</span><span className="evaluation-empty-value">None</span></div>;
+    if (value.every(isPrimitive)) {
+      return <div className="evaluation-profile-field evaluation-profile-field-wide"><span className="evaluation-profile-label">{label}</span><div className="evaluation-value-tags">{value.map((item, index) => <span key={`${String(item)}-${index}`}>{formatPrimitive(item)}</span>)}</div></div>;
+    }
+    return <section className="evaluation-profile-group"><h4>{label}<span>{value.length}</span></h4><div className="evaluation-profile-items">{value.map((item, index) => (
+      <article key={index} className="evaluation-profile-item">
+        {isRecord(item) ? Object.entries(item).map(([key, nested]) => <ProfileField key={key} name={key} value={nested} depth={depth + 1} />) : <ProfileField name={`Item ${index + 1}`} value={item} depth={depth + 1} />}
+      </article>
+    ))}</div></section>;
+  }
+  if (isRecord(value)) {
+    return <section className={`evaluation-profile-group ${depth ? "nested" : ""}`}><h4>{label}</h4><div className="evaluation-profile-object">{Object.entries(value).map(([key, nested]) => (
+      <ProfileField key={key} name={key} value={nested} depth={depth + 1} />
+    ))}</div></section>;
+  }
+  return <div className="evaluation-profile-field"><span className="evaluation-profile-label">{label}</span><span>{formatPrimitive(value)}</span></div>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isPrimitive(value: unknown): value is string | number | boolean | null | undefined {
+  return value === null || value === undefined || ["string", "number", "boolean"].includes(typeof value);
+}
+
+function humanizeFieldName(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/^./, (character) => character.toUpperCase());
+}
+
+function formatPrimitive(value: unknown) {
+  if (value === null || value === undefined || value === "") return "Not provided";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "number" && value >= 0 && value <= 1 && !Number.isInteger(value)) return `${Math.round(value * 100)}%`;
+  return String(value).replaceAll("_", " ");
 }
 
 function AssessmentCard({ item, annotations, saving, onSelectEvidence, onAnnotate }: { item: EvaluationRequirementAssessment; annotations: EvaluationAnnotation[]; saving: boolean; onSelectEvidence: (value: string) => void; onAnnotate: (payload: AnnotationPayload) => Promise<void> }) {

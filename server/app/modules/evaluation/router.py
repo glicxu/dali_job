@@ -40,6 +40,8 @@ from app.modules.evaluation.schemas import (
     EvaluationComparisonView,
     DisagreementQueueView,
     EvaluationMetricsView,
+    EvaluationPreMatchRequest,
+    EvaluationPreMatchView,
     EvaluationRunCreateRequest,
     EvaluationRunDetail,
     EvaluationRunListResponse,
@@ -66,14 +68,23 @@ from app.modules.matching_v2.api_schemas import (
 from app.modules.matching_v2.extraction import CandidateProfileExtractor, JobProfileExtractor
 from app.modules.matching_v2.diagnostics import begin_matching_prompt_trace, end_matching_prompt_trace
 from app.modules.matching_v2.models import (
+    CandidateCareerProfile,
+    CandidateCareerSelection,
     CandidateProfileVersion,
     CanonicalSource,
+    JobFamilyPreMatch,
     JobProfileVersion,
+    MatchingIntent,
     QualificationAssessment,
     RequirementAssessment,
     SourceSpan,
 )
 from app.modules.matching_v2.qualification import QualificationMatcher
+from app.modules.matching_v2.pre_match import (
+    create_matching_intent,
+    create_or_get_job_family_pre_match,
+)
+from app.modules.matching_v2.repositories import ArtifactOwner
 from app.modules.matching_v2.scoring import recommendation_for_score
 from app.modules.matching_v2.router import (
     _candidate_profile_view,
@@ -365,6 +376,176 @@ def evaluate_job_profile(
     if source is None:
         raise HTTPException(status_code=409, detail="Job Profile source is unavailable.")
     return _job_evaluation_view(db, workspace.id, snapshot, profile, source)
+
+
+@router.post("/pre-match", response_model=EvaluationPreMatchView)
+def evaluate_pre_match(
+    payload: EvaluationPreMatchRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    identity: AuthenticatedIdentity = Depends(get_current_identity),
+    candidate_extractor: CandidateProfileExtractor = Depends(get_candidate_profile_extractor),
+    job_extractor: JobProfileExtractor = Depends(get_job_profile_extractor),
+) -> EvaluationPreMatchView:
+    """Run only the deterministic Job Family Pre-Match for two tester fixtures."""
+
+    user, workspace = _require_evaluation_access(request, db, identity)
+    resume = profile_repository.get_resume_profile_for_identity(
+        db, identity, payload.resume_profile_id
+    )
+    if resume is None:
+        raise HTTPException(status_code=404, detail="Resume profile not found.")
+    snapshot = repository.get_snapshot(
+        db, public_id=payload.job_snapshot_id, workspace_id=workspace.id
+    )
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="Evaluation job snapshot not found.")
+    if snapshot.review_status != "accepted":
+        raise HTTPException(status_code=409, detail="The job snapshot must be accepted before pre-match.")
+
+    candidate_view = create_candidate_profile(
+        payload.resume_profile_id,
+        request,
+        Response(),
+        BackgroundTasks(),
+        db,
+        identity,
+        candidate_extractor,
+    )
+    job_view = create_job_profile(
+        snapshot.user_saved_job_id,
+        request,
+        Response(),
+        BackgroundTasks(),
+        db,
+        identity,
+        job_extractor,
+    )
+    if not isinstance(candidate_view, CandidateProfileView) or not isinstance(job_view, JobProfileView):
+        raise HTTPException(status_code=409, detail="Pre-match inputs did not complete synchronously.")
+    candidate = db.scalar(select(CandidateProfileVersion).where(
+        CandidateProfileVersion.public_id == candidate_view.candidate_profile_id
+    ))
+    job = db.scalar(select(JobProfileVersion).where(
+        JobProfileVersion.public_id == job_view.job_profile_id
+    ))
+    if candidate is None or job is None:
+        raise HTTPException(status_code=409, detail="Pre-match inputs were not persisted.")
+
+    selection = db.scalar(
+        select(CandidateCareerSelection)
+        .where(CandidateCareerSelection.candidate_profile_version_id == candidate.id)
+        .order_by(CandidateCareerSelection.revision.desc())
+        .limit(1)
+    )
+    selected = (
+        db.get(CandidateCareerProfile, selection.candidate_career_profile_id)
+        if selection is not None and selection.candidate_career_profile_id is not None
+        else None
+    )
+    if selected is None:
+        selected = db.scalar(
+            select(CandidateCareerProfile)
+            .where(CandidateCareerProfile.candidate_profile_version_id == candidate.id)
+            .order_by(CandidateCareerProfile.id)
+            .limit(1)
+        )
+
+    target_roles = [
+        str(item).strip()
+        for item in (resume.resume_data or {}).get("target_roles", [])
+        if str(item).strip()
+    ]
+    target_role_text = (
+        target_roles[0]
+        if target_roles
+        else (selected.role_family.replace("_", " ").title() if selected is not None else "Unknown role")
+    )
+    intent_fields = {
+        "target_role_text": target_role_text,
+        "job_family": selected.role_family if selected is not None else "unknown",
+        "track": selected.track if selected is not None else "unknown",
+        "target_level": (
+            selected.level if selected is not None and selected.level != "unknown" else None
+        ),
+        "selected_candidate_career_profile_id": (
+            selected.career_profile_id if selected is not None else None
+        ),
+        "source": "resume_derived",
+    }
+    owner = ArtifactOwner.authenticated(workspace_id=workspace.id, user_id=user.id)
+    intent = db.scalar(
+        select(MatchingIntent)
+        .where(
+            MatchingIntent.workspace_id == workspace.id,
+            MatchingIntent.user_id == user.id,
+            MatchingIntent.candidate_profile_version_id == candidate.id,
+            MatchingIntent.target_role_text == intent_fields["target_role_text"],
+            MatchingIntent.job_family == intent_fields["job_family"],
+            MatchingIntent.track == intent_fields["track"],
+            MatchingIntent.target_level == intent_fields["target_level"],
+            MatchingIntent.selected_candidate_career_profile_id == (
+                selected.id if selected is not None else None
+            ),
+        )
+        .order_by(MatchingIntent.id.desc())
+        .limit(1)
+    )
+    if intent is None:
+        intent = create_matching_intent(
+            db,
+            owner=owner,
+            candidate_profile=candidate,
+            expected_revision=0,
+            **intent_fields,
+        )
+    cached = db.scalar(
+        select(JobFamilyPreMatch).where(
+            JobFamilyPreMatch.candidate_profile_version_id == candidate.id,
+            JobFamilyPreMatch.matching_intent_id == intent.id,
+            JobFamilyPreMatch.job_profile_version_id == job.id,
+        )
+    )
+    pre_match = create_or_get_job_family_pre_match(
+        db,
+        owner=owner,
+        candidate_profile=candidate,
+        intent=intent,
+        job_profile=job,
+    )
+    job_target = dict(job.artifact.get("career_context") or {})
+    return EvaluationPreMatchView(
+        candidate_profile_id=candidate.public_id,
+        job_profile_id=job.public_id,
+        matching_intent={
+            "target_role_text": intent.target_role_text,
+            "role_family": intent.job_family,
+            "track": intent.track,
+            "target_level": intent.target_level,
+            "source": intent.source,
+        },
+        candidate_target={
+            "career_profile_id": selected.career_profile_id if selected is not None else None,
+            "role_family": selected.role_family if selected is not None else "unknown",
+            "track": selected.track if selected is not None else "unknown",
+            "level": selected.level if selected is not None else "unknown",
+            "confidence": selected.confidence if selected is not None else 0,
+        },
+        job_target=job_target,
+        pre_match={
+            "job_family_pre_match_id": pre_match.public_id,
+            "selected_candidate_career_profile_id": (
+                selected.career_profile_id if selected is not None else None
+            ),
+            "family_compatibility": pre_match.family_compatibility,
+            "track_compatibility": pre_match.track_compatibility,
+            "level_compatibility": pre_match.level_compatibility,
+            "proceed_to_detailed_match": pre_match.proceed_to_detailed_match,
+            "reason_codes": pre_match.reason_codes,
+            "policy_version": pre_match.policy_version,
+        },
+        cache_status="hit" if cached is not None else "miss",
+    )
 
 
 @router.post(

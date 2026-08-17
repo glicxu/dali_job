@@ -145,6 +145,120 @@
   overflow: auto;
 }
 
+.evaluation-profile-panel {
+  min-width: 0;
+}
+
+.evaluation-structured-profile,
+.evaluation-profile-items,
+.evaluation-profile-object {
+  display: grid;
+  gap: 10px;
+}
+
+.evaluation-structured-profile {
+  max-height: 620px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.evaluation-profile-field {
+  display: grid;
+  gap: 3px;
+  grid-template-columns: minmax(110px, 0.8fr) minmax(0, 1.2fr);
+  margin: 0;
+}
+
+.evaluation-profile-label {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.evaluation-profile-field > span:last-child {
+  overflow-wrap: anywhere;
+}
+
+.evaluation-profile-field-wide {
+  grid-template-columns: 1fr;
+}
+
+.evaluation-profile-group {
+  border-top: 1px solid var(--border-default);
+  padding-top: 12px;
+}
+
+.evaluation-profile-group:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.evaluation-profile-group h4 {
+  align-items: center;
+  display: flex;
+  font-size: 0.9rem;
+  gap: 7px;
+  margin: 0 0 9px;
+}
+
+.evaluation-profile-group h4 span {
+  background: var(--surface-subtle);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  padding: 2px 7px;
+}
+
+.evaluation-profile-group.nested {
+  border: 0;
+  padding: 3px 0 0;
+}
+
+.evaluation-profile-item {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-default);
+  border-radius: 9px;
+  display: grid;
+  gap: 8px;
+  padding: 11px;
+}
+
+.evaluation-value-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.evaluation-value-tags span {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  padding: 4px 8px;
+}
+
+.evaluation-empty-value {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.evaluation-raw-profile {
+  border-top: 1px solid var(--border-default);
+  margin-top: 14px;
+  padding-top: 10px;
+}
+
+.evaluation-raw-profile summary {
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.evaluation-raw-profile pre {
+  margin-bottom: 0;
+}
+
 .evaluation-spans article,
 .evaluation-assessment {
   border: 1px solid var(--border-default);

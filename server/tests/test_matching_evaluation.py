@@ -482,7 +482,10 @@ def test_admin_can_capture_and_inspect_a_repeatable_three_stage_run(caplog) -> N
     })
     assert run.status_code == 200, run.text
     body = run.json()
-    assert body["run_metadata"]["score_generated"] is False
+    assert body["run_metadata"]["score_generated"] is True
+    assert body["score"] == body["run_metadata"]["score"]
+    assert body["score"]["scoring_policy_version"] == "score.v1"
+    assert isinstance(body["score"]["diagnostic_qualification_score"], int)
     assert body["manifest"]["evaluation_run_id"] == body["public_id"]
     assert body["manifest"]["candidate_fixture_release"] == "candidate-fixtures.local.v1"
     assert all(metric["passed"] for metric in body["metrics"]["contract_metrics"])

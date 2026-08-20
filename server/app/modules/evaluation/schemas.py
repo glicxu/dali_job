@@ -356,6 +356,7 @@ class EvaluationRunDetail(EvaluationRunSummary):
     job_source: EvaluationSourceView
     job_profile: JobProfileView
     qualification: QualificationAssessmentView
+    score: dict[str, Any] | None
     manifest: EvaluationRunManifestView
     annotations: list[EvaluationAnnotationView]
     match_review: EvaluationMatchReviewSummaryView

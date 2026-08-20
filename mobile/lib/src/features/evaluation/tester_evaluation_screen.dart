@@ -1,15 +1,24 @@
 import 'dart:convert';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../matching/matching_repository.dart';
 
 enum _LabSection { candidate, job, preMatch, matching }
 
+typedef TesterResumePicker =
+    Future<({String name, List<int> bytes})?> Function();
+
 class TesterEvaluationScreen extends StatefulWidget {
-  const TesterEvaluationScreen({super.key, required this.repository});
+  const TesterEvaluationScreen({
+    super.key,
+    required this.repository,
+    this.pickResume,
+  });
 
   final MatchingRepository repository;
+  final TesterResumePicker? pickResume;
 
   @override
   State<TesterEvaluationScreen> createState() => _TesterEvaluationScreenState();
@@ -162,29 +171,44 @@ class _TesterEvaluationScreenState extends State<TesterEvaluationScreen> {
           'Step 1: compare the resume source with its extracted Candidate Profile.',
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<int>(
-          key: const Key('tester_candidate_profile'),
-          isExpanded: true,
-          initialValue: _candidateProfileId,
-          decoration: const InputDecoration(labelText: 'Candidate resume'),
-          items: candidates
-              .map(
-                (item) => DropdownMenuItem<int>(
-                  value: item['resume_profile_id'] as int,
-                  child: Text(
-                    _candidateLabel(item),
-                    overflow: TextOverflow.ellipsis,
+        OutlinedButton.icon(
+          key: const Key('load_resume_into_tester_lab'),
+          onPressed: _busy ? null : _loadResume,
+          icon: const Icon(Icons.upload_file),
+          label: Text(_busy ? 'Loading resume…' : 'Load resume into test lab'),
+        ),
+        const Padding(
+          padding: EdgeInsets.only(top: 6, bottom: 12),
+          child: Text(
+            'PDF, DOCX, or TXT. The resume is added to your private profile library and selected below.',
+          ),
+        ),
+        KeyedSubtree(
+          key: ValueKey('candidate_resume_$_candidateProfileId'),
+          child: DropdownButtonFormField<int>(
+            key: const Key('tester_candidate_profile'),
+            isExpanded: true,
+            initialValue: _candidateProfileId,
+            decoration: const InputDecoration(labelText: 'Candidate resume'),
+            items: candidates
+                .map(
+                  (item) => DropdownMenuItem<int>(
+                    value: item['resume_profile_id'] as int,
+                    child: Text(
+                      _candidateLabel(item),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-              )
-              .toList(),
-          onChanged: _busy
-              ? null
-              : (value) => setState(() {
-                  _candidateProfileId = value;
-                  _candidateEvaluation = null;
-                  _candidateReviewStatus = null;
-                }),
+                )
+                .toList(),
+            onChanged: _busy
+                ? null
+                : (value) => setState(() {
+                    _candidateProfileId = value;
+                    _candidateEvaluation = null;
+                    _candidateReviewStatus = null;
+                  }),
+          ),
         ),
         const SizedBox(height: 12),
         FilledButton.icon(
@@ -354,6 +378,8 @@ class _TesterEvaluationScreenState extends State<TesterEvaluationScreen> {
         ),
         if (_matchRun != null) ...[
           const SizedBox(height: 18),
+          _systemMatchScoreCard(_matchRun!),
+          const SizedBox(height: 12),
           Text(
             '${_matchRun!['job_company'] ?? ''} · ${_matchRun!['job_title'] ?? ''}',
             style: Theme.of(context).textTheme.titleLarge,
@@ -479,6 +505,10 @@ class _TesterEvaluationScreenState extends State<TesterEvaluationScreen> {
 
   Widget _preMatchDecision(Map<String, dynamic> result) {
     final decision = Map<String, dynamic>.from(result['pre_match'] as Map);
+    final candidate = Map<String, dynamic>.from(
+      result['candidate_target'] as Map,
+    );
+    final job = Map<String, dynamic>.from(result['job_target'] as Map);
     final proceed = decision['proceed_to_detailed_match'] == true;
     return Card(
       key: const Key('pre_match_decision'),
@@ -501,16 +531,162 @@ class _TesterEvaluationScreenState extends State<TesterEvaluationScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Family: ${_humanize('${decision['family_compatibility']}')} · '
-              'Track: ${_humanize('${decision['track_compatibility']}')} · '
-              'Level: ${_humanize('${decision['level_compatibility']}')}',
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const SizedBox(width: 92),
+                Expanded(
+                  child: Text(
+                    'Candidate',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Job',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 4),
+            const Divider(),
+            _targetComparisonRow(
+              label: 'Job family',
+              candidateValue: candidate['role_family'],
+              jobValue: job['primary_role_family'],
+              compatibility: decision['family_compatibility'],
+            ),
+            _targetComparisonRow(
+              label: 'Track',
+              candidateValue: candidate['track'],
+              jobValue: job['track'],
+              compatibility: decision['track_compatibility'],
+            ),
+            _targetComparisonRow(
+              label: 'Level',
+              candidateValue: candidate['level'],
+              jobValue: job['target_level'],
+              compatibility: decision['level_compatibility'],
+            ),
+            const SizedBox(height: 8),
             Text('Cache: ${_humanize('${result['cache_status']}')}'),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _targetComparisonRow({
+    required String label,
+    required Object? candidateValue,
+    required Object? jobValue,
+    required Object? compatibility,
+  }) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 7),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 92,
+          child: Text(label, style: Theme.of(context).textTheme.labelMedium),
+        ),
+        Expanded(child: Text(_humanize('$candidateValue'))),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_humanize('$jobValue')),
+              const SizedBox(height: 2),
+              Text(
+                _humanize('$compatibility'),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _systemMatchScoreCard(Map<String, dynamic> run) {
+    final rawScore = run['score'];
+    final score = rawScore is Map
+        ? Map<String, dynamic>.from(rawScore)
+        : const <String, dynamic>{};
+    final overall = score['overall_score'] as num?;
+    final qualification = score['qualification_score'] as num?;
+    final diagnostic = score['diagnostic_qualification_score'] as num?;
+    final displayed = overall ?? qualification ?? diagnostic;
+    final isDiagnostic =
+        overall == null && qualification == null && diagnostic != null;
+    final recommendation = score['recommendation'];
+    final coverage = score['qualification_coverage'] as num?;
+    return Card(
+      key: const Key('detailed_match_score'),
+      color: Theme.of(context).colorScheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: displayed == null
+            ? const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Match score unavailable'),
+                  SizedBox(height: 4),
+                  Text('The scoring policy needs more information.'),
+                ],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${displayed.round()}',
+                        style: Theme.of(context).textTheme.displaySmall
+                            ?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onPrimaryContainer,
+                            ),
+                      ),
+                      Text(
+                        isDiagnostic ? 'Diagnostic / 100' : 'Match score / 100',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (recommendation != null)
+                          Text(
+                            _humanize('$recommendation'),
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        if (coverage != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            '${(coverage * 100).round()}% qualification coverage',
+                          ),
+                        ],
+                        if (isDiagnostic) ...[
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Not an official score because assessed coverage is below the scoring threshold.',
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }
@@ -597,6 +773,37 @@ class _TesterEvaluationScreenState extends State<TesterEvaluationScreen> {
     );
     if (mounted) setState(() => _candidateEvaluation = result);
   });
+
+  Future<void> _loadResume() async {
+    final selected = await (widget.pickResume ?? _pickTesterResume)();
+    if (selected == null || !mounted) return;
+    if (selected.bytes.isEmpty) {
+      setState(() => _error = 'The selected resume could not be read.');
+      return;
+    }
+    final error = await _guard(() async {
+      final profile = await widget.repository.uploadAndApplyResume(
+        fileName: selected.name,
+        bytes: selected.bytes,
+      );
+      final data = await widget.repository.loadTesterFixtures();
+      final jobs = data.jobs
+          .where((item) => item['review_status'] == 'accepted')
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _catalog = data.catalog;
+        _candidates = data.candidates;
+        _jobs = jobs;
+        _candidateProfileId = profile.id;
+        _candidateEvaluation = null;
+        _preMatchEvaluation = null;
+        _matchRun = null;
+        _candidateReviewStatus = null;
+      });
+    });
+    if (error == null) _showSaved('Resume loaded and selected for testing.');
+  }
 
   Future<void> _loadJobEvaluation() => _guard(() async {
     final result = await widget.repository.loadJobProfileEvaluation(
@@ -710,6 +917,15 @@ class _TesterEvaluationScreenState extends State<TesterEvaluationScreen> {
   }
 }
 
+Future<({String name, List<int> bytes})?> _pickTesterResume() async {
+  final file = await FilePicker.pickFile(
+    type: FileType.custom,
+    allowedExtensions: const ['pdf', 'docx', 'txt'],
+  );
+  if (file == null) return null;
+  return (name: file.name, bytes: await file.readAsBytes());
+}
+
 String _candidateLabel(Map<String, dynamic> item) {
   final group = item['fixture_group'] as String? ?? 'account';
   final prefix = switch (group) {
@@ -731,7 +947,7 @@ class _JsonPanel extends StatelessWidget {
     tilePadding: EdgeInsets.zero,
     title: Text(title),
     children: [
-      _StructuredProfile(value: value),
+      _StructuredProfile(title: title, value: value),
       ExpansionTile(
         tilePadding: EdgeInsets.zero,
         title: const Text('View raw data'),
@@ -753,14 +969,17 @@ class _JsonPanel extends StatelessWidget {
 }
 
 class _StructuredProfile extends StatelessWidget {
-  const _StructuredProfile({required this.value});
+  const _StructuredProfile({required this.title, required this.value});
 
+  final String title;
   final Object? value;
 
   @override
   Widget build(BuildContext context) {
     if (value is Map) {
-      final entries = (value as Map).entries.toList();
+      final entries = (value as Map).entries
+          .map((entry) => MapEntry(entry.key.toString(), entry.value))
+          .toList();
       if (entries.isEmpty) {
         return const Align(
           alignment: Alignment.centerLeft,
@@ -769,16 +988,174 @@ class _StructuredProfile extends StatelessWidget {
       }
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: entries
-            .map(
-              (entry) =>
-                  _ProfileField(name: entry.key.toString(), value: entry.value),
-            )
-            .toList(),
+        children: _majorProfileSections(
+          title,
+          entries,
+        ).map((section) => _ProfileMajorSection(section: section)).toList(),
       );
     }
     return _ProfileValue(value: value);
   }
+}
+
+class _ProfileSectionData {
+  const _ProfileSectionData({
+    required this.label,
+    required this.entries,
+    this.initiallyExpanded = false,
+  });
+
+  final String label;
+  final List<MapEntry<String, Object?>> entries;
+  final bool initiallyExpanded;
+}
+
+class _ProfileMajorSection extends StatelessWidget {
+  const _ProfileMajorSection({required this.section});
+
+  final _ProfileSectionData section;
+
+  @override
+  Widget build(BuildContext context) {
+    final singleValue = section.entries.length == 1
+        ? section.entries.single.value
+        : null;
+    final flattenSingleValue =
+        section.entries.length == 1 && !_isSimple(singleValue);
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 5),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        key: ValueKey(
+          'profile_section_${section.label.toLowerCase().replaceAll(' ', '_')}',
+        ),
+        initiallyExpanded: section.initiallyExpanded,
+        title: Text(section.label),
+        subtitle: Text(_profileSectionCount(section.entries)),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        children: [
+          if (flattenSingleValue)
+            _ProfileValue(value: singleValue)
+          else
+            for (final entry in section.entries)
+              _ProfileField(name: entry.key, value: entry.value),
+        ],
+      ),
+    );
+  }
+}
+
+List<_ProfileSectionData> _majorProfileSections(
+  String title,
+  List<MapEntry<String, Object?>> entries,
+) {
+  final remaining = <String, Object?>{
+    for (final entry in entries) entry.key: entry.value,
+  };
+  final sections = <_ProfileSectionData>[];
+
+  void add(String label, List<String> keys, {bool initiallyExpanded = false}) {
+    final selected = <MapEntry<String, Object?>>[];
+    for (final key in keys) {
+      if (remaining.containsKey(key)) {
+        selected.add(MapEntry(key, remaining.remove(key)));
+      }
+    }
+    if (selected.isNotEmpty) {
+      sections.add(
+        _ProfileSectionData(
+          label: label,
+          entries: selected,
+          initiallyExpanded: initiallyExpanded,
+        ),
+      );
+    }
+  }
+
+  final normalizedTitle = title.toLowerCase();
+  if (normalizedTitle.contains('candidate')) {
+    add('Overview', const [
+      'candidate_profile_id',
+      'resume_id',
+      'resume_profile_id',
+      'source_id',
+      'schema_version',
+      'extractor_version',
+      'prompt_version',
+      'content_hash',
+      'generated_at',
+      'derived',
+      'quality',
+    ], initiallyExpanded: true);
+    add('Career direction', const [
+      'career_profiles',
+      'recommended_primary_career_profile_ref',
+      'primary_career_profile_id',
+    ]);
+    add('Skills', const ['skills']);
+    add('Experience and projects', const ['experience', 'projects']);
+    add('Education and credentials', const ['education', 'certifications']);
+    add('Additional accomplishments', const [
+      'publications',
+      'awards',
+      'patents',
+      'languages',
+    ]);
+  } else if (normalizedTitle.contains('job')) {
+    add('Overview', const [
+      'job_profile_id',
+      'job_snapshot_id',
+      'source_id',
+      'schema_version',
+      'extractor_version',
+      'prompt_version',
+      'content_hash',
+      'generated_at',
+      'title',
+      'company',
+      'summary',
+      'quality',
+    ], initiallyExpanded: true);
+    add('Role and work context', const [
+      'career_context',
+      'location',
+      'locations',
+      'workplace_type',
+      'employment_type',
+      'compensation',
+    ]);
+    add('Requirements', const ['requirements']);
+    add('Responsibilities', const ['responsibilities']);
+    add('Constraints and application', const [
+      'hard_constraints',
+      'application_constraints',
+      'benefits',
+    ]);
+  } else {
+    final simpleKeys = remaining.entries
+        .where((entry) => _isSimple(entry.value))
+        .map((entry) => entry.key)
+        .toList();
+    add('Overview', simpleKeys, initiallyExpanded: true);
+  }
+
+  final remainingSimpleKeys = remaining.entries
+      .where((entry) => _isSimple(entry.value))
+      .map((entry) => entry.key)
+      .toList();
+  add('Additional details', remainingSimpleKeys);
+  for (final entry in remaining.entries.toList()) {
+    add(_humanize(entry.key), [entry.key]);
+  }
+  return sections;
+}
+
+String _profileSectionCount(List<MapEntry<String, Object?>> entries) {
+  if (entries.length == 1 && entries.single.value is List) {
+    final count = (entries.single.value as List).length;
+    return '$count ${count == 1 ? 'item' : 'items'}';
+  }
+  return '${entries.length} ${entries.length == 1 ? 'field' : 'fields'}';
 }
 
 class _ProfileField extends StatelessWidget {

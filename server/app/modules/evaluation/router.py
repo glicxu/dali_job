@@ -84,6 +84,7 @@ from app.modules.matching_v2.pre_match import (
     create_matching_intent,
     create_or_get_job_family_pre_match,
 )
+from app.modules.matching_v2.phase5 import create_or_get_match_result
 from app.modules.matching_v2.repositories import ArtifactOwner
 from app.modules.matching_v2.scoring import recommendation_for_score
 from app.modules.matching_v2.router import (
@@ -700,6 +701,15 @@ def start_evaluation_run(
     ))
     if candidate is None or job_profile is None or qualification is None:
         raise HTTPException(status_code=409, detail="Evaluation artifacts were not persisted.")
+    match_result = create_or_get_match_result(
+        db,
+        owner=ArtifactOwner.authenticated(workspace_id=workspace.id, user_id=user.id),
+        qualification_public_id=qualification.public_id,
+        preference_revision=None,
+        eligibility_revision=None,
+        legacy_adapter_enabled=False,
+    )
+    score_artifact = cast(dict[str, object], match_result.score_artifact)
     run = repository.create_run(
         db,
         workspace_id=workspace.id,
@@ -711,7 +721,9 @@ def start_evaluation_run(
         qualification_assessment_id=qualification.id,
         run_metadata={
             "pipeline": "matching-v2-three-stage",
-            "score_generated": False,
+            "score_generated": True,
+            "match_result_id": match_result.public_id,
+            "score": score_artifact,
             "stage_execution": {
                 "candidate_profile": {
                     "latency_ms": candidate_latency_ms,
@@ -1151,6 +1163,7 @@ def _run_detail(
         job_source=_source_view(db, job_source),
         job_profile=_job_profile_view(db, job_profile, job_source),
         qualification=_qualification_assessment_view(db, qualification),
+        score=cast(dict[str, object] | None, run.run_metadata.get("score")),
         manifest=cast(dict, run.manifest),
         annotations=[
             _annotation_view(db, item)

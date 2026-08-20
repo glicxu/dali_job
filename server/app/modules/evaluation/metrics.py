@@ -117,9 +117,9 @@ def calculate_run_metrics(db: Session, run: EvaluationRun) -> EvaluationMetricsV
             details=missing_manifest,
         ),
         ContractMetricView(
-            name="no_phase5_score",
-            passed=not score_paths_present and run.run_metadata.get("score_generated") is False,
-            numerator=int(not score_paths_present and run.run_metadata.get("score_generated") is False),
+            name="score_separated_from_stage_artifacts",
+            passed=not score_paths_present and run.run_metadata.get("score_generated") is True,
+            numerator=int(not score_paths_present and run.run_metadata.get("score_generated") is True),
             denominator=1,
             details=[] if not score_paths_present else ["score-like key found in a generated artifact"],
         ),
